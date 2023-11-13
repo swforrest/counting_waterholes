@@ -5,6 +5,7 @@ import os.path as path
 import scipy.cluster
 import scipy.spatial
 import argparse
+from dotenv import load_dotenv
 from datetime import datetime
 
 """
@@ -23,11 +24,20 @@ outfileName = args.output if args.output != "BoatsClassified_<DATETIME>.csv" els
 
 days = []
 
+# read paths in from .env
+load_dotenv()
 
-python_path = "C:\\Users\\mcclymaw\\AppData\\Local\\Programs\\Python\\Python310\\python.exe"
-yolo_path = "C:\\Users\\mcclymaw\\yolov5"
-data_path = "C:\\Users\\mcclymaw\\yolov5\\NNdata"
-classification_path = "C:\\Users\\mcclymaw\\yolov5\\runs\\detect\\exp"
+python_path = os.getenv("PYTHON_PATH")
+yolo_path = os.getenv("YOLO_PATH")
+data_path = os.getenv("DATA_PATH")
+classification_path = os.getenv("CLASSIFICATION_PATH")
+weights_path = os.getenv("YOLO_WEIGHTS")
+
+# if any are None, exit
+if None in [python_path, yolo_path, data_path, classification_path, weights_path]:
+    print("One or more paths are not set in .env. Exiting...")
+    exit(1)
+
 
 # get date from filename for each image
 # NOTE: could just do as a set comprehension
@@ -70,13 +80,14 @@ for day in days:
 
         # Actually run the yolov5 classifier on a single image from a single day
         detect_path = path.join(yolo_path, "detect.py")
-        weights_path = path.join(yolo_path, "best.pt")
+        # turn weights path into a path object
+        weights_path = path.join(os.getcwd(), weights_path)
         os.system(
             f"{python_path} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights_path} --source {data_path}")
 
         # Extract this file's classifications from the yolov5 directory
-        for classificationFile in os.listdir(f"{classification_path}\\labels"):
-            with open(f"{classification_path}\\labels\\{classificationFile}", 'r') as f:
+        for classificationFile in os.listdir(os.path.join(classification_path, "labels")):
+            with open(os.path.join(classification_path, "labels", classificationFile)) as f:
 
                 fileSplit = classificationFile.split(".txt")[0].split("_")
 
@@ -177,10 +188,24 @@ for day in days:
                 os.remove(os.path.join(path, file))
             if del_folder: 
                 os.rmdir(path)
-        remove(classification_path)
-        remove("classifier")
-        remove("tempPNG")
-        remove(data_path, False)
+        print("Cleaning Temp Directories")
+        try:
+            remove(classification_path)
+        except:
+            print("Classification path could not be removed")
+        try:
+            remove("classifier")
+        except:
+            print("Classifier could not be removed")
+        try:
+            remove("tempPNG")
+        except:
+            print("tempPNG path could not be removed")
+        try:
+            remove(data_path, False)
+        except:
+            print("data path could not be removed")
+
 
     # Once all images for that day have been classified, we cluster again for boats that are overlapping between images
     finalBoats = []

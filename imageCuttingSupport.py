@@ -205,7 +205,7 @@ def segment_image(image, json_file, size, overlap_size, metadata_components):
             croppedImage = cropImage.crop((left, top, right, bottom))
 
             # Save image
-            path = os.path.join(os.getcwd(), "SegmentedImages", image.split("\\")[1][0:-4])
+            path = os.path.join(os.getcwd(), "SegmentedImages", os.path.basename(image).split(".")[0])
             croppedImage.save(path + "_" + str(i) + "_" + str(j) + ".png", quality=100, compress_level=0)
 
             # Write all of these classifications to a master set containing each time a classification appears in a
@@ -309,9 +309,11 @@ def segment_image_for_classification(image, data_path, size, overlap_size):
             croppedImage = cropImage.crop((left, top, right, bottom))
 
             # Save image
-            savePath = os.path.join(data_path, image.split("\\")[-1][0:-4])
-            croppedImage.save(savePath
-                              + "_" + str(i) + "_" + str(j) + ".png", quality=100, compress_level=0)
+            # make sure data_path exists
+            if not os.path.exists(data_path):
+                os.makedirs(data_path)
+            savePath = os.path.join(data_path, os.path.basename(image).split('.')[0])
+            croppedImage.save(savePath + "_" + str(i) + "_" + str(j) + ".png", quality=100, compress_level=0)
 
         print(str("Progress: " + str(int(float(i / ((height / overlap_size) - 5)) * 100)) +
                   "%"))
