@@ -12,6 +12,11 @@ from datetime import datetime
 Usage: python NNclassifier.py -d <.tif directory> -o <output file name>
 """
 
+def remove(path, del_folder=True):
+    for file in os.listdir(path):
+        os.remove(os.path.join(path, file))
+    if del_folder: 
+        os.rmdir(path)
 
 # Parse command line arguments
 parser = argparse.ArgumentParser()
@@ -60,30 +65,33 @@ for day in days:
     for file in files:
         # Initialise temp directories
         if os.path.isdir("classifier"):
-            os.rmdir("classifier")
+            remove("classifier")
         os.mkdir("classifier")
         if os.path.isdir("tempPNG"):
-            os.rmdir("tempPNG")
+            remove("tempPNG")
         os.mkdir("tempPNG")
 
         statClassifications = []
+        statSizes = []
         statConfidences = []
         statClasses = []
 
         movingClassifications = []
+        movingSizes = []
         movingConfidences = []
         movingClasses = []
 
-        ics.create_padded_png(f"{tifDir}", "tempPNG", file)
-        png_path = path.join(os.getcwd(), "tempPNG", f"{file[0:-4]}.png")
-        ics.segment_image_for_classification(png_path, data_path, 416, 104)
+        # ics.create_padded_png(f"{tifDir}", "tempPNG", file)
+        # png_path = path.join(os.getcwd(), "tempPNG", f"{file[0:-4]}.png")
+        # ics.segment_image_for_classification(png_path, data_path, 416, 104)
 
         # Actually run the yolov5 classifier on a single image from a single day
         detect_path = path.join(yolo_path, "detect.py")
         # turn weights path into a path object
         weights_path = path.join(os.getcwd(), weights_path)
-        os.system(
-            f"{python_path} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights_path} --source {data_path}")
+
+        #os.system(
+        #    f"{python_path} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights_path} --source {data_path}")
 
         # Extract this file's classifications from the yolov5 directory
         # latest classifications are classification_path/exp{num}
@@ -109,10 +117,12 @@ for day in days:
                         # IF NEEDED CODE FOR TANKERS GOES IN HERE
                         if int(classType) == 0:
                             statClassifications.append([float(xMid) * 416 + across, float(yMid) * 416 + down])
+                            statSizes.append([float(xWid), float(yWid)])
                             statConfidences.append(float(conf))
                             statClasses.append(int(classType))
                         elif int(classType) == 1:
                             movingClassifications.append([float(xMid) * 416 + across, float(yMid) * 416 + down])
+                            movingSizes.append([float(xWid), float(yWid)])
                             movingConfidences.append(float(conf))
                             movingClasses.append(int(classType))
 
@@ -123,12 +133,18 @@ for day in days:
             statDistanceCutoff = 6
             statClustering = scipy.cluster.hierarchy.linkage(statDistances, 'average')
             statClusters = scipy.cluster.hierarchy.fcluster(statClustering, statDistanceCutoff, criterion='distance')
-            statPointsWithConf = np.c_[statClassifications, statConfidences, statClusters, statClasses]
+            statPointsWithConf = np.c_[statClassifications, statConfidences, statClusters, statClasses, statSizes]
+            # NOTE: this is where we could grab out the per-image stats?
 
+            # clusters are labelled 1, 2, ... n
             for i in range(1, max(statClusters) + 1):
                 thisBoat = [line for line in statPointsWithConf if int(line[3]) == i]
                 thisBoatMean = np.mean(thisBoat, axis=0)
+                # class label has turned back into float for some reason, round it
                 thisBoatMean[4] = round(thisBoatMean[4])
+
+                # using maximum confidence as the cluster confidence
+                # NOTE: this could be changed to avg, or something else
                 maxVals = np.max(thisBoat, axis=0)
                 thisBoatMean[2] = maxVals[2]
                 leftPad, rightPad, topPad, bottomPad = ics.get_required_padding(
@@ -157,7 +173,7 @@ for day in days:
             movingClustering = scipy.cluster.hierarchy.linkage(movingDistances, 'average')
             movingClusters = scipy.cluster.hierarchy.fcluster(movingClustering, movingDistanceCutoff,
                                                               criterion='distance')
-            movingPointsWithConf = np.c_[movingClassifications, movingConfidences, movingClusters, movingClasses]
+            movingPointsWithConf = np.c_[movingClassifications, movingConfidences, movingClusters, movingClasses, movingSizes]
 
             for i in range(1, max(movingClusters) + 1):
                 thisBoat = [line for line in movingPointsWithConf if int(line[3]) == i]
@@ -188,28 +204,24 @@ for day in days:
         # rmdir: classifier
         # rmdir: tempPNG
         # rm: data_path contents
-        def remove(path, del_folder=True):
-            for file in os.listdir(path):
-                os.remove(os.path.join(path, file))
-            if del_folder: 
-                os.rmdir(path)
-        # print("Cleaning Temp Directories")
-        # try:
-        #     remove(classification_path)
-        # except:
-        #     print("Classification path could not be removed")
-        # try:
-        #     remove("classifier")
-        # except:
-        #     print("Classifier could not be removed")
-        # try:
-        #     remove("tempPNG")
-        # except:
-        #     print("tempPNG path could not be removed")
-        # try:
-        #     remove(data_path, False)
-        # except:
-        #     print("data path could not be removed")
+        if os.getenv("REMOVE_RUNS") == 1:
+            print("Cleaning Temp Directories")
+            try:
+                remove(classification_path)
+            except:
+                print("Classification path could not be removed")
+            try:
+                remove("classifier")
+            except:
+                print("Classifier could not be removed")
+            try:
+                remove("tempPNG")
+            except:
+                print("tempPNG path could not be removed")
+            try:
+                remove(data_path, False)
+            except:
+                print("data path could not be removed")
 
 
     # Once all images for that day have been classified, we cluster again for boats that are overlapping between images
@@ -221,12 +233,13 @@ for day in days:
         statConfidences = statClassifications[:, 2]
         statClusters = statClassifications[:, 3]
         statClasses = statClassifications[:, 4]
+        statSizes = statClassifications[:, [5, 6]]
         statClassifications = statClassifications[:, [0, 1]]
         statDistances = scipy.spatial.distance.pdist(statClassifications, metric='euclidean')
         statDistanceCutoff = 0.00025
         statClustering = scipy.cluster.hierarchy.linkage(statDistances, 'average')
         statClusters = scipy.cluster.hierarchy.fcluster(statClustering, statDistanceCutoff, criterion='distance')
-        statPointsWithConf = np.c_[statClassifications, statConfidences, statClusters, statClasses]
+        statPointsWithConf = np.c_[statClassifications, statConfidences, statClusters, statClasses, statSizes]
 
         for i in range(1, max(statClusters) + 1):
             thisBoat = [line for line in statPointsWithConf if int(line[3]) == i]
@@ -249,12 +262,13 @@ for day in days:
         movingConfidences = movingClassifications[:, 2]
         movingClusters = movingClassifications[:, 3]
         movingClasses = movingClassifications[:, 4]
+        movingSizes = movingClassifications[:, [5, 6]]
         movingClassifications = movingClassifications[:, [0, 1]]
         movingDistances = scipy.spatial.distance.pdist(movingClassifications, metric='euclidean')
         movingDistanceCutoff = 0.0003
         movingClustering = scipy.cluster.hierarchy.linkage(movingDistances, 'average')
         movingClusters = scipy.cluster.hierarchy.fcluster(movingClustering, movingDistanceCutoff, criterion='distance')
-        movingPointsWithConf = np.c_[movingClassifications, movingConfidences, movingClusters, movingClasses]
+        movingPointsWithConf = np.c_[movingClassifications, movingConfidences, movingClusters, movingClasses, movingSizes]
 
         for i in range(1, max(movingClusters) + 1):
             thisBoat = [line for line in movingPointsWithConf if int(line[3]) == i]
@@ -276,9 +290,9 @@ for day in days:
     # Create output csv if it doesn't exist
     if not os.path.isfile(f"{outfileName}.csv"):
         with open(f"{outfileName}.csv", "a+") as outFile:
-            outFile.writelines("date,class,latitude,longitude,confidence\n")
+            outFile.writelines("date,class,latitude,longitude,confidence,w,h\n")
 
     # Write the data for that day to a csv
     with open(f"{outfileName}.csv", "a+") as outFile:
         for boat in finalBoats:
-            outFile.writelines(f"{day},{boat[4]},{boat[1]},{boat[0]},{boat[2]}\n")
+            outFile.writelines(f"{day},{boat[4]},{boat[1]},{boat[0]},{boat[2]},{boat[5]},{boat[6]}\n")
