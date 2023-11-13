@@ -459,10 +459,6 @@ def coord2latlong(x, y):
 
 def get_date_from_filename(filename):
     """
-    Converts global coordinates to latitude/longitude coordinates
-    :param x: The x coordinate in a pair of global coordinates.
-    :param y: The y coordinate in a pair of global coordinates.
-    :return: (long, lat) - A tuple containing the longitude and latitude at the provided global coordinates.
     """
     str_date = filename.split("_")[0]
     year = str_date[0:4]
