@@ -5,8 +5,11 @@ import PIL
 import pyproj
 import random
 
+
 from PIL import Image
 from osgeo import gdal
+
+gdal.UseExceptions()
 
 class Classification(object):
     """
@@ -202,18 +205,14 @@ def segment_image(image, json_file, size, overlap_size, metadata_components):
             croppedImage = cropImage.crop((left, top, right, bottom))
 
             # Save image
-            path = "{0}\\SegmentedImages\\{1}"
-            croppedImage.save(path.format(os.getcwd(), image.split("\\")[1][0:-4])
-                              + "_" + str(i) + "_" + str(j) + ".png", quality=100, compress_level=0)
-
-
+            path = os.path.join(os.getcwd(), "SegmentedImages", image.split("\\")[1][0:-4])
+            croppedImage.save(path + "_" + str(i) + "_" + str(j) + ".png", quality=100, compress_level=0)
 
             # Write all of these classifications to a master set containing each time a classification appears in a
             # smaller/segmented image.
+            im_name = os.path.basename(image).split(".")[0] + "_" + str(i) + "_" + str(j) + ".txt"
 
-            im_name = "{0}".format(image.split("\\")[1][0:-4]) + "_" + str(i) + "_" + str(j) + ".txt"
-
-            path = os.getcwd() + "\\IMGtxts\\" + im_name
+            path = os.path.join(os.getcwd(), "IMGtxts", im_name)
             outfile = open(path, 'a+')
 
             if len(subsetClassifications) > 0:
@@ -310,7 +309,8 @@ def segment_image_for_classification(image, data_path, size, overlap_size):
             croppedImage = cropImage.crop((left, top, right, bottom))
 
             # Save image
-            croppedImage.save(data_path + "\\" + image.split("\\")[-1][0:-4]
+            savePath = os.path.join(data_path, image.split("\\")[-1][0:-4])
+            croppedImage.save(savePath
                               + "_" + str(i) + "_" + str(j) + ".png", quality=100, compress_level=0)
 
         print(str("Progress: " + str(int(float(i / ((height / overlap_size) - 5)) * 100)) +
@@ -326,19 +326,20 @@ def create_padded_png(raw_dir, output_dir, file_name):
     operation on the image/file.
     :return: None.
     """
-    rawImageDirectory = f"{os.getcwd()}\\{raw_dir}"
+    rawImageDirectory = os.path.join(os.getcwd(), raw_dir)
     PNGpath = output_dir
 
     # Set the options for the gdal.Translate() call
     opsString2 = "-ot UInt16 -of png -b 3 -b 2 -b 1 -scale_1 0 2048 0 65535 -scale_2 0 2048 0 65535 -scale_3 0 2048 0 " \
                  "65535"
     # Translate original from tif into png
-    gdal.Translate("{0}\\colorCorrected{1}".format(PNGpath, file_name[0:-4] + ".png"),
-                   "{0}\\{1}".format(rawImageDirectory, file_name),
+    gdal.Translate(os.path.join(PNGpath,f"colorCorrected{file_name.split('.')[0]}.png"),
+                   os.path.join(rawImageDirectory, file_name),
                    options=opsString2)
 
     # Open the new color corrected PNG we have just made.
-    colourImage = PIL.Image.open("{0}\\colorCorrected{1}".format(PNGpath, file_name[0:-4] + ".png"))
+    colorImagePath = os.path.join(PNGpath, f"colorCorrected{file_name.split('.')[0]}.png")
+    colourImage = PIL.Image.open(colorImagePath)
 
     # Get new width and height in preparation of paddingthe image
     width, height = colourImage.size
@@ -362,7 +363,8 @@ def create_padded_png(raw_dir, output_dir, file_name):
     im_new = add_margin(colourImage, pad + leftPad, pad + rightPad, pad + topPad, pad + bottomPad, (0, 0, 0))
 
     # Save the padded image which is now ready for classification
-    im_new.save("{0}\\{1}".format(PNGpath, file_name[0:-4] + ".png"), quality=100, compress_level=0)
+    savePath = os.path.join(PNGpath, file_name.split('.')[0]+ ".png")
+    im_new.save(savePath, quality=100, compress_level=0)
 
     # Close loose file descriptors
     colourImage.close()
@@ -371,7 +373,7 @@ def create_padded_png(raw_dir, output_dir, file_name):
     # Cleanup any images that aren't the image that is used for classification
     for filename in os.listdir(PNGpath):
         if filename[0:5] == "color":
-            os.remove(PNGpath + "\\" + filename)
+            os.remove(os.path.join(PNGpath, filename))
 
 def create_unpadded_png(raw_dir, output_dir, file_name):
     """
@@ -382,15 +384,15 @@ def create_unpadded_png(raw_dir, output_dir, file_name):
     operation on the image/file.
     :return: None.
     """
-    rawImageDirectory = f"{os.getcwd()}\\{raw_dir}"
+    rawImageDirectory = os.path.join(os.getcwd(), raw_dir)
     PNGpath = output_dir
 
     # Set the options for the gdal.Translate() call
     opsString2 = "-ot UInt16 -of png -b 3 -b 2 -b 1 -scale_1 0 2048 0 65535 -scale_2 0 2048 0 65535 -scale_3 0 2048 0 " \
                  "65535"
     # Translate original from tif into png
-    gdal.Translate("{0}\\{1}".format(PNGpath, file_name[0:-4] + ".png"),
-                   "{0}\\{1}".format(rawImageDirectory, file_name),
+    gdal.Translate(os.path.join(PNGpath, file_name.split('.')[0] + ".png"),
+                   os.path.join(rawImageDirectory, file_name),
                    options=opsString2)
 
 def get_required_padding(filepath):

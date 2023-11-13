@@ -1,30 +1,46 @@
 import imageCuttingSupport as ics
 import numpy as np
 import os
+import os.path as path
 import scipy.cluster
 import scipy.spatial
+import argparse
+from datetime import datetime
 
-current_directory = os.getcwd()
+"""
+Usage: python NNclassifier.py -d <.tif directory> -o <output file name>
+"""
+
+
+# Parse command line arguments
+parser = argparse.ArgumentParser()
+parser.add_argument("-d", "--directory", help="Directory containing .tif files to be classified", required=True)
+parser.add_argument("-o", "--output", help="Output file name", required=False, default="BoatsClassified_<DATETIME>.csv")
+args = parser.parse_args()
+
+tifDir = args.directory
+outfileName = args.output if args.output != "BoatsClassified_<DATETIME>.csv" else f"BoatsClassified_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
 days = []
 
-tifDir = input("What is the name of the directory where the .tif files are stored: ")
-outfileName = input("What is the desired name of the output .csv file (do not include .csv as part of the name): ")
 
 python_path = "C:\\Users\\mcclymaw\\AppData\\Local\\Programs\\Python\\Python310\\python.exe"
 yolo_path = "C:\\Users\\mcclymaw\\yolov5"
 data_path = "C:\\Users\\mcclymaw\\yolov5\\NNdata"
 classification_path = "C:\\Users\\mcclymaw\\yolov5\\runs\\detect\\exp"
 
-for image in os.listdir(f"{current_directory}\\{tifDir}"):
+# get date from filename for each image
+# NOTE: could just do as a set comprehension
+for image in os.listdir(f"{tifDir}"):
     if (date := ics.get_date_from_filename(image)) not in days:
         days.append(date)
 
 i = 0
-tot = len(os.listdir(f"{current_directory}\\{tifDir}"))
+tot = len(os.listdir(tifDir))
 for day in days:
-    print(f"Classifying image {i} of {len(days)}")
-    allFiles = os.listdir(f"{current_directory}\\{tifDir}")
+    # NOTE: classifying 'date', not image. Multiple images per date are possible
+    print(f"Classifying day {i+1} of {len(days)} - {day} ({i/tot*100:.2f}%)")
+    allFiles = os.listdir(tifDir)
     files = [file for file in allFiles if ics.get_date_from_filename(file) == day]
 
     finalStatBoats = []
@@ -49,11 +65,14 @@ for day in days:
         movingClasses = []
 
         ics.create_padded_png(f"{tifDir}", "tempPNG", file)
-        ics.segment_image_for_classification(f"{os.getcwd()}\\tempPNG\\{file[0:-4]}.png", data_path, 416, 104)
+        png_path = path.join(os.getcwd(), "tempPNG", f"{file[0:-4]}.png")
+        ics.segment_image_for_classification(png_path, data_path, 416, 104)
 
         # Actually run the yolov5 classifier on a single image from a single day
+        detect_path = path.join(yolo_path, "detect.py")
+        weights_path = path.join(yolo_path, "best.pt")
         os.system(
-            f"{python_path} {yolo_path}\\detect.py --imgsz 416 --save-txt --save-conf --weights {yolo_path}\\best.pt --source {data_path}")
+            f"{python_path} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights_path} --source {data_path}")
 
         # Extract this file's classifications from the yolov5 directory
         for classificationFile in os.listdir(f"{classification_path}\\labels"):
@@ -97,20 +116,20 @@ for day in days:
                 maxVals = np.max(thisBoat, axis=0)
                 thisBoatMean[2] = maxVals[2]
                 leftPad, rightPad, topPad, bottomPad = ics.get_required_padding(
-                    f"{current_directory}\\{tifDir}\\{file}")
+                        os.path.join(os.getcwd(), tifDir, file))
                 x = thisBoatMean[0] - leftPad
                 y = thisBoatMean[1] - topPad
-                xp, yp = ics.pixel2coord(x, y, f"{current_directory}\\{tifDir}\\{file}")
+                xp, yp = ics.pixel2coord(x, y, os.path.join.path(os.getcwd(), tifDir, file))
                 thisBoatMean[0], thisBoatMean[1] = ics.coord2latlong(xp, yp)
                 finalStatBoats.append(thisBoatMean)
         elif len(statClassifications) == 1:
             thisBoat = np.c_[statClassifications, statConfidences, 0, statClasses]
             thisBoatMean = np.mean(thisBoat, axis=0)
             leftPad, rightPad, topPad, bottomPad = ics.get_required_padding(
-                f"{current_directory}\\{tifDir}\\{file}")
+                    os.path.join(os.getcwd(), tifDir, file))
             x = thisBoatMean[0] - leftPad
             y = thisBoatMean[1] - topPad
-            xp, yp = ics.pixel2coord(x, y, f"{current_directory}\\{tifDir}\\{file}")
+            xp, yp = ics.pixel2coord(x, y, os.path.join(os.getcwd(), tifDir, file))
             thisBoatMean[0], thisBoatMean[1] = ics.coord2latlong(xp, yp)
             finalStatBoats.append(thisBoatMean)
 
@@ -131,41 +150,41 @@ for day in days:
                 maxVals = np.max(thisBoat, axis=0)
                 thisBoatMean[2] = maxVals[2]
                 leftPad, rightPad, topPad, bottomPad = ics.get_required_padding(
-                    f"{current_directory}\\{tifDir}\\{file}")
+                        os.path.join(os.getcwd(), tifDir, file))
                 x = thisBoatMean[0] - leftPad
                 y = thisBoatMean[1] - topPad
-                xp, yp = ics.pixel2coord(x, y, f"{current_directory}\\{tifDir}\\{file}")
+                xp, yp = ics.pixel2coord(x, y, os.path.join(os.getcwd(), tifDir, file))
                 thisBoatMean[0], thisBoatMean[1] = ics.coord2latlong(xp, yp)
                 finalMovingBoats.append(thisBoatMean)
         elif len(movingClassifications) == 1:
             thisBoat = np.c_[movingClassifications, movingConfidences, 0, movingClasses]
             thisBoatMean = np.mean(thisBoat, axis=0)
             leftPad, rightPad, topPad, bottomPad = ics.get_required_padding(
-                f"{current_directory}\\{tifDir}\\{file}")
+                os.path.join(os.getcwd(), tifDir, file))
             x = thisBoatMean[0] - leftPad
             y = thisBoatMean[1] - topPad
-            xp, yp = ics.pixel2coord(x, y, f"{current_directory}\\{tifDir}\\{file}")
+            xp, yp = ics.pixel2coord(x, y, os.path.join(os.getcwd(), tifDir, file))
             thisBoatMean[0], thisBoatMean[1] = ics.coord2latlong(xp, yp)
             finalMovingBoats.append(thisBoatMean)
 
         # Cleanup temp directories
-        for file in os.listdir(f"{classification_path}\\labels"):
-            os.remove(f"{classification_path}\\labels\\{file}")
-        os.rmdir(f"{classification_path}\\labels")
-        for file in os.listdir(classification_path):
-            os.remove(f"{classification_path}\\{file}")
-        os.rmdir(classification_path)
-        for file in os.listdir("classifier"):
-            os.remove(f"classifier\\{file}")
-        os.rmdir("classifier")
-        for file in os.listdir("tempPNG"):
-            os.remove(f"tempPNG\\{file}")
-        os.rmdir("tempPNG")
-        for file in os.listdir(data_path):
-            os.remove(f"{data_path}\\{file}")
+        # rmdir: classification_path
+        # rmdir: classifier
+        # rmdir: tempPNG
+        # rm: data_path contents
+        def remove(path, del_folder=True):
+            for file in os.listdir(path):
+                os.remove(os.path.join(path, file))
+            if del_folder: 
+                os.rmdir(path)
+        remove(classification_path)
+        remove("classifier")
+        remove("tempPNG")
+        remove(data_path, False)
 
     # Once all images for that day have been classified, we cluster again for boats that are overlapping between images
     finalBoats = []
+    thisBoatMean = None
     # Cluster static boats first
     if finalStatBoats != [] and len(finalStatBoats) > 1:
         statClassifications = np.asarray(finalStatBoats)
