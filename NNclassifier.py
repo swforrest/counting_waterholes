@@ -86,6 +86,11 @@ for day in days:
             f"{python_path} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights_path} --source {data_path}")
 
         # Extract this file's classifications from the yolov5 directory
+        # latest classifications are classification_path/exp{num}
+        # get that folder
+        exps = [int(f.split("exp")[1]) if f != "exp" else 0 for f in os.listdir(classification_path) if "exp" in f]
+        latest_exp = max(exps) if max(exps) != 0 else ""
+        classification_path = path.join(classification_path, f"exp{latest_exp}")
         for classificationFile in os.listdir(os.path.join(classification_path, "labels")):
             with open(os.path.join(classification_path, "labels", classificationFile)) as f:
 
@@ -130,7 +135,7 @@ for day in days:
                         os.path.join(os.getcwd(), tifDir, file))
                 x = thisBoatMean[0] - leftPad
                 y = thisBoatMean[1] - topPad
-                xp, yp = ics.pixel2coord(x, y, os.path.join.path(os.getcwd(), tifDir, file))
+                xp, yp = ics.pixel2coord(x, y, os.path.join(os.getcwd(), tifDir, file))
                 thisBoatMean[0], thisBoatMean[1] = ics.coord2latlong(xp, yp)
                 finalStatBoats.append(thisBoatMean)
         elif len(statClassifications) == 1:
@@ -188,23 +193,23 @@ for day in days:
                 os.remove(os.path.join(path, file))
             if del_folder: 
                 os.rmdir(path)
-        print("Cleaning Temp Directories")
-        try:
-            remove(classification_path)
-        except:
-            print("Classification path could not be removed")
-        try:
-            remove("classifier")
-        except:
-            print("Classifier could not be removed")
-        try:
-            remove("tempPNG")
-        except:
-            print("tempPNG path could not be removed")
-        try:
-            remove(data_path, False)
-        except:
-            print("data path could not be removed")
+        # print("Cleaning Temp Directories")
+        # try:
+        #     remove(classification_path)
+        # except:
+        #     print("Classification path could not be removed")
+        # try:
+        #     remove("classifier")
+        # except:
+        #     print("Classifier could not be removed")
+        # try:
+        #     remove("tempPNG")
+        # except:
+        #     print("tempPNG path could not be removed")
+        # try:
+        #     remove(data_path, False)
+        # except:
+        #     print("data path could not be removed")
 
 
     # Once all images for that day have been classified, we cluster again for boats that are overlapping between images
