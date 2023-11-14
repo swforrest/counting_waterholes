@@ -12,10 +12,18 @@ from datetime import datetime
 Usage: python NNclassifier.py -d <.tif directory> -o <output file name>
 """
 
+
 def remove(path, del_folder=True):
+    """
+    Removes all files in a folder, and optionally the folder itself, recursively.
+    """
     for file in os.listdir(path):
-        os.remove(os.path.join(path, file))
-    if del_folder: 
+        file_path = os.path.join(path, file)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+        elif os.path.isdir(file_path):
+            remove(file_path)
+    if del_folder:
         os.rmdir(path)
 
 # Parse command line arguments
@@ -35,39 +43,48 @@ load_dotenv()
 python_path = os.getenv("PYTHON_PATH")
 yolo_path = os.getenv("YOLO_PATH")
 data_path = os.getenv("DATA_PATH")
-classification_path = os.getenv("CLASSIFICATION_PATH")
+CLASS_PATH = os.getenv("CLASSIFICATION_PATH")
 weights_path = os.getenv("YOLO_WEIGHTS")
 
 # if any are None, exit
-if None in [python_path, yolo_path, data_path, classification_path, weights_path]:
+if None in [python_path, yolo_path, data_path, CLASS_PATH, weights_path]:
     print("One or more paths are not set in .env. Exiting...")
     exit(1)
 
 
 # get date from filename for each image
-# NOTE: could just do as a set comprehension
-for image in os.listdir(f"{tifDir}"):
+for image in os.listdir(tifDir):
+    # check actually valid image:
+    if image[-4:] not in [".tif", ".png", "tiff"]:
+        continue
     if (date := ics.get_date_from_filename(image)) not in days:
         days.append(date)
 
 i = 0
 tot = len(os.listdir(tifDir))
 for day in days:
-    # NOTE: classifying 'date', not image. Multiple images per date are possible
     print(f"Classifying day {i+1} of {len(days)} - {day} ({i/tot*100:.2f}%)")
     allFiles = os.listdir(tifDir)
     files = [file for file in allFiles if ics.get_date_from_filename(file) == day]
 
     finalStatBoats = []
+    statFileNames = []
     finalMovingBoats = []
+    movingFileNames = []
 
     # Iterate over all the images present for the current day
     for file in files:
+
+        # accept .tif, .tiff, .png
+        # check actually valid image:
+        if file[-4:] not in [".tif", ".png", "tiff"]:
+            continue
+
         # Initialise temp directories
-        if os.path.isdir("classifier"):
+        if os.path.exists("classifier"):
             remove("classifier")
         os.mkdir("classifier")
-        if os.path.isdir("tempPNG"):
+        if os.path.exists("tempPNG"):
             remove("tempPNG")
         os.mkdir("tempPNG")
 
@@ -81,14 +98,14 @@ for day in days:
         movingConfidences = []
         movingClasses = []
 
-        # ics.create_padded_png(f"{tifDir}", "tempPNG", file)
-        # png_path = path.join(os.getcwd(), "tempPNG", f"{file[0:-4]}.png")
-        # ics.segment_image_for_classification(png_path, data_path, 416, 104)
+        #ics.create_padded_png(f"{tifDir}", "tempPNG", file)
+        png_path = path.join(os.getcwd(), "tempPNG", f"{file[0:-4]}.png")
+        #ics.segment_image_for_classification(png_path, data_path, 416, 104)
 
         # Actually run the yolov5 classifier on a single image from a single day
         detect_path = path.join(yolo_path, "detect.py")
         # turn weights path into a path object
-        weights_path = path.join(os.getcwd(), weights_path)
+        weights_path = path.join(weights_path)
 
         #os.system(
         #    f"{python_path} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights_path} --source {data_path}")
@@ -96,9 +113,9 @@ for day in days:
         # Extract this file's classifications from the yolov5 directory
         # latest classifications are classification_path/exp{num}
         # get that folder
-        exps = [int(f.split("exp")[1]) if f != "exp" else 0 for f in os.listdir(classification_path) if "exp" in f]
+        exps = [int(f.split("exp")[1]) if f != "exp" else 0 for f in os.listdir(CLASS_PATH) if "exp" in f]
         latest_exp = max(exps) if max(exps) != 0 else ""
-        classification_path = path.join(classification_path, f"exp{latest_exp}")
+        classification_path = path.join(CLASS_PATH, f"exp{latest_exp}")
         for classificationFile in os.listdir(os.path.join(classification_path, "labels")):
             with open(os.path.join(classification_path, "labels", classificationFile)) as f:
 
@@ -134,7 +151,6 @@ for day in days:
             statClustering = scipy.cluster.hierarchy.linkage(statDistances, 'average')
             statClusters = scipy.cluster.hierarchy.fcluster(statClustering, statDistanceCutoff, criterion='distance')
             statPointsWithConf = np.c_[statClassifications, statConfidences, statClusters, statClasses, statSizes]
-            # NOTE: this is where we could grab out the per-image stats?
 
             # clusters are labelled 1, 2, ... n
             for i in range(1, max(statClusters) + 1):
@@ -152,8 +168,10 @@ for day in days:
                 x = thisBoatMean[0] - leftPad
                 y = thisBoatMean[1] - topPad
                 xp, yp = ics.pixel2coord(x, y, os.path.join(os.getcwd(), tifDir, file))
+                print(xp, yp)
                 thisBoatMean[0], thisBoatMean[1] = ics.coord2latlong(xp, yp)
                 finalStatBoats.append(thisBoatMean)
+                statFileNames.append(file)
         elif len(statClassifications) == 1:
             thisBoat = np.c_[statClassifications, statConfidences, 0, statClasses]
             thisBoatMean = np.mean(thisBoat, axis=0)
@@ -164,6 +182,7 @@ for day in days:
             xp, yp = ics.pixel2coord(x, y, os.path.join(os.getcwd(), tifDir, file))
             thisBoatMean[0], thisBoatMean[1] = ics.coord2latlong(xp, yp)
             finalStatBoats.append(thisBoatMean)
+            statFileNames.append(file)
 
         # Cluster moving boats second
         if movingClassifications != [] and len(movingClassifications) > 1:
@@ -188,6 +207,7 @@ for day in days:
                 xp, yp = ics.pixel2coord(x, y, os.path.join(os.getcwd(), tifDir, file))
                 thisBoatMean[0], thisBoatMean[1] = ics.coord2latlong(xp, yp)
                 finalMovingBoats.append(thisBoatMean)
+                movingFileNames.append(file)
         elif len(movingClassifications) == 1:
             thisBoat = np.c_[movingClassifications, movingConfidences, 0, movingClasses]
             thisBoatMean = np.mean(thisBoat, axis=0)
@@ -198,30 +218,22 @@ for day in days:
             xp, yp = ics.pixel2coord(x, y, os.path.join(os.getcwd(), tifDir, file))
             thisBoatMean[0], thisBoatMean[1] = ics.coord2latlong(xp, yp)
             finalMovingBoats.append(thisBoatMean)
+            movingFileNames.append(file)
 
         # Cleanup temp directories
         # rmdir: classification_path
         # rmdir: classifier
         # rmdir: tempPNG
         # rm: data_path contents
-        if os.getenv("REMOVE_RUNS") == 1:
-            print("Cleaning Temp Directories")
-            try:
-                remove(classification_path)
-            except:
-                print("Classification path could not be removed")
-            try:
-                remove("classifier")
-            except:
-                print("Classifier could not be removed")
-            try:
-                remove("tempPNG")
-            except:
-                print("tempPNG path could not be removed")
-            try:
-                remove(data_path, False)
-            except:
-                print("data path could not be removed")
+        try:
+            # remove(classification_path)
+            remove("classifier")
+            remove("tempPNG")
+            # remove(data_path)
+        except Exception as e:
+            print("Could not remove temp directories")
+            print(e)
+            exit(1)
 
 
     # Once all images for that day have been classified, we cluster again for boats that are overlapping between images
@@ -239,22 +251,29 @@ for day in days:
         statDistanceCutoff = 0.00025
         statClustering = scipy.cluster.hierarchy.linkage(statDistances, 'average')
         statClusters = scipy.cluster.hierarchy.fcluster(statClustering, statDistanceCutoff, criterion='distance')
-        statPointsWithConf = np.c_[statClassifications, statConfidences, statClusters, statClasses, statSizes]
+        statPointsWithConf = np.c_[statClassifications, statConfidences, statClusters, statClasses, statSizes, statFileNames]
 
         for i in range(1, max(statClusters) + 1):
-            thisBoat = [line for line in statPointsWithConf if int(line[3]) == i]
+            thisBoat = np.asarray([line for line in statPointsWithConf if int(line[3]) == i])
+            # collate file names into single string (space separated)
+            thisBoatFileNames = " ".join(thisBoat[:, -1])
+            # remove file names from thisBoat
+            thisBoat = thisBoat[:, [0, 1, 2, 3, 4, 5, 6]].astype(np.float64)
+            print(thisBoat)
+            print("*"*20)
             thisBoatMean = np.mean(thisBoat, axis=0)
             thisBoatMean[4] = round(thisBoatMean[4])
             maxVals = np.max(thisBoat, axis=0)
             thisBoatMean[2] = maxVals[2]
-            finalBoats.append(thisBoatMean)
+            finalBoats.append(np.append(thisBoatMean, thisBoatFileNames))
     elif len(finalStatBoats) == 1:
         statClassifications = np.asarray(finalStatBoats)
         statConfidences = statClassifications[:, 2]
         statClusters = statClassifications[:, 3]
         statClasses = statClassifications[:, 4]
         thisBoat = np.c_[statClassifications, statConfidences, 0, statClasses]
-        finalStatBoats.append(thisBoatMean)
+        thisBoatMean = np.mean(thisBoat, axis=0)
+        finalBoats.append(np.append(thisBoatMean, statFileNames[0]))
 
     # Final moving boats cluster
     if finalMovingBoats != [] and len(finalMovingBoats) > 1:
@@ -268,15 +287,20 @@ for day in days:
         movingDistanceCutoff = 0.0003
         movingClustering = scipy.cluster.hierarchy.linkage(movingDistances, 'average')
         movingClusters = scipy.cluster.hierarchy.fcluster(movingClustering, movingDistanceCutoff, criterion='distance')
-        movingPointsWithConf = np.c_[movingClassifications, movingConfidences, movingClusters, movingClasses, movingSizes]
+        movingPointsWithConf = np.c_[movingClassifications, movingConfidences, movingClusters, movingClasses, movingSizes, movingFileNames]
 
         for i in range(1, max(movingClusters) + 1):
             thisBoat = [line for line in movingPointsWithConf if int(line[3]) == i]
+            thisBoat = np.asarray(thisBoat)
+            # collate file names into single string (space separated)
+            thisBoatFileNames = " ".join(thisBoat[:, -1])
+            # remove file names from thisBoat
+            thisBoat = thisBoat[:, [0, 1, 2, 3, 4, 5, 6]].astype(np.float64)
             thisBoatMean = np.mean(thisBoat, axis=0)
             thisBoatMean[4] = round(thisBoatMean[4])
             maxVals = np.max(thisBoat, axis=0)
             thisBoatMean[2] = maxVals[2]
-            finalBoats.append(thisBoatMean)
+            finalBoats.append(np.append(thisBoatMean, thisBoatFileNames))
     elif len(finalMovingBoats) == 1:
         movingClassifications = np.asarray(finalMovingBoats)
         movingConfidences = movingClassifications[:, 2]
@@ -284,15 +308,15 @@ for day in days:
         movingClasses = movingClassifications[:, 4]
         thisBoat = np.c_[movingClassifications, movingConfidences, 0, movingClasses]
         thisBoatMean = np.mean(thisBoat, axis=0)
-        finalMovingBoats.append(thisBoatMean)
+        finalBoats.append(np.append(thisBoatMean, movingFileNames[0]))
 
     # Write to output csv
     # Create output csv if it doesn't exist
     if not os.path.isfile(f"{outfileName}.csv"):
         with open(f"{outfileName}.csv", "a+") as outFile:
-            outFile.writelines("date,class,latitude,longitude,confidence,w,h\n")
+            outFile.writelines("date,class,images,latitude,longitude,confidence,w,h\n")
 
     # Write the data for that day to a csv
     with open(f"{outfileName}.csv", "a+") as outFile:
         for boat in finalBoats:
-            outFile.writelines(f"{day},{boat[4]},{boat[1]},{boat[0]},{boat[2]},{boat[5]},{boat[6]}\n")
+            outFile.writelines(f"{day},{boat[4]},{boat[7]},{boat[1]},{boat[0]},{boat[2]},{boat[5]},{boat[6]}\n")
