@@ -148,22 +148,29 @@ def init():
         if (date := ics.get_date_from_filename(image)) not in days:
             days.append(date)
 
-def detect(file):
-    remove(DATA_PATH)
-    if DATA_PATH: os.mkdir(DATA_PATH) 
-    remove("tempPNG")
-    os.mkdir("tempPNG")
-    ics.create_padded_png(TIF_DIRECTORY, "tempPNG", file)
-    png_path = path.join(os.getcwd(), "tempPNG", f"{file[0:-4]}.png")
-    ics.segment_image_for_classification(png_path, DATA_PATH, 416, 104)
+def detect(file, setup=True):
+    if setup:
+        remove(DATA_PATH)
+        if DATA_PATH: os.mkdir(DATA_PATH) 
+        remove("tempPNG")
+        os.mkdir("tempPNG")
+        ics.create_padded_png(TIF_DIRECTORY, "tempPNG", file)
+        png_path = path.join(os.getcwd(), "tempPNG", f"{file[0:-4]}.png")
+        ics.segment_image_for_classification(png_path, DATA_PATH, 416, 104)
     detect_path = path.join(YOLO_PATH or "", "detect.py")
     weights_path = path.join(WEIGHTS_PATH or "")
     # run the command
     os.system(f"{PYTHON_PATH} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights_path} --source {DATA_PATH}")
-    # Classifications are stored in the CLASS_PATH directory in the latest exp folder
-    exps = [int(f.split("exp")[1]) if f != "exp" else 0 for f in os.listdir(CLASS_PATH) if "exp" in f]
-    latest_exp = max(exps) if max(exps) != 0 else ""
-    classification_path = path.join(CLASS_PATH or "", f"exp{latest_exp}")
+    return read_classifications(file)
+
+def read_classifications(file, class_folder=None):
+    if class_folder is None:
+        # Classifications are stored in the CLASS_PATH directory in the latest exp folder
+        exps = [int(f.split("exp")[1]) if f != "exp" else 0 for f in os.listdir(CLASS_PATH) if "exp" in f]
+        latest_exp = max(exps) if max(exps) != 0 else ""
+        classification_path = path.join(CLASS_PATH or "", f"exp{latest_exp}")
+    else:
+        classification_path = path.join(class_folder)
     # Store classifications as: (x, y, confidence, class, width, height)
     classifications = []
     low_confidence = []
