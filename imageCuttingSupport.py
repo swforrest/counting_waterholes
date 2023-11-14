@@ -316,7 +316,7 @@ def segment_image_for_classification(image, data_path, size, overlap_size):
             croppedImage.save(savePath + "_" + str(i) + "_" + str(j) + ".png", quality=100, compress_level=0)
 
         print(str("Progress: " + str(int(float(i / ((height / overlap_size) - 5)) * 100)) +
-                  "%"))
+                  "%"), end="\r")
 
 def create_padded_png(raw_dir, output_dir, file_name):
     """
@@ -446,6 +446,21 @@ def pixel2coord(x, y, original_image_path):
     yp = d * x + e * y + d * 0.5 + e * 0.5 + f
     return(xp, yp)
 
+def coord2pixel(x, y, original_image_path):
+    """
+    Returns pixel coordinates to pixel center using base-0 raster index
+    :param x: The x coordinate (global coordinates) of the object in the image to be converted to pixel coordinates.
+    :param y: The y coordinate (global coordinates) of the object in the image to be converted to pixel coordinates.
+    :param original_image_path: The path of the file to evaluate - a .tif files should be located here. This file will
+    also need geospatial metadata. Images obtained from Planet have the required metadata.
+    :return: (xp, yp) - A tuple containing the pixel coordinates of the provided global coordinates.
+    """
+    ds = gdal.Open(original_image_path)
+    c, a, b, f, d, e = ds.GetGeoTransform()
+    xp =  (x - b*y - a * 0.5 - b * 0.5 - c) / a
+    yp =  (y - d*x - d * 0.5 - e * 0.5 - f) / e
+    return(xp, yp)
+
 def coord2latlong(x, y):
     """
     Converts global coordinates to latitude/longitude coordinates
@@ -456,6 +471,17 @@ def coord2latlong(x, y):
     proj = pyproj.Transformer.from_crs(32756, 4326, always_xy=True)
     long, lat = proj.transform(x, y)
     return long, lat
+
+def latlong2coord(lat, long):
+    """
+    Converts latitude/longitude coordinates to global coordinates
+    :param long: The longitude coordinate in a pair of latitude/longitude coordinates.
+    :param lat: The latitude coordinate in a pair of latitude/longitude coordinates.
+    :return: (x, y) - A tuple containing the global coordinates at the provided latitude/longitude coordinates.
+    """
+    proj = pyproj.Transformer.from_crs(4326, 32756)
+    x, y = proj.transform(long, lat)
+    return x, y
 
 def get_date_from_filename(filename):
     """
