@@ -54,8 +54,7 @@ for match in matches:
     # now have to adjust for padding
     x = x + leftPad
     y = y + topPad
-    coords.append((x, y, w*416, h*416, conf, class_type))
-
+    coords.append((x, y, w, h, conf, class_type))
 
 
 # now plot the image with plt
