@@ -89,6 +89,8 @@ def summarize(outdir):
     true = all_boats[:, 3].astype(float).astype(int)
     # get the confusion matrix
     ConfusionMatrixDisplay.from_predictions(pred, true, labels=[-1, 0, 1], display_labels=["Undetected", "Static Boat", "Moving Boat"])
+    # save the confusion matrix image
+    plt.savefig(os.path.join(outdir, "confusion_matrix.png"))
     plt.show()
 
 
