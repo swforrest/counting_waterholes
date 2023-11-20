@@ -303,19 +303,25 @@ def process_clusters(classifications_with_clusters):
     classifications_with_clusters = np.array(classifications_with_clusters)
     if len(classifications_with_clusters) == 0:
         return []
-    for i in np.unique(classifications_with_clusters[:, -1]):
-        thisBoat = [line for line in classifications_with_clusters if line[-1] == i]
-        files = np.unique(np.asarray(thisBoat)[:, -2])
-        # remove cluster number
-        thisBoat = np.asarray(thisBoat)[:, [0, 1, 2, 3, 4, 5]].astype(np.float64)
-        thisBoatMean = np.mean(thisBoat, axis=0)
-        # class label has turned back into float for some reason, round it
-        thisBoatMean[3] = round(thisBoatMean[3])
-        # using maximum confidence as the cluster confidence
-        maxVals = np.max(thisBoat, axis=0)
-        thisBoatMean[2] = maxVals[2]
-        boats.append(np.append(thisBoatMean, " ".join(files)))
+    # for i in np.unique(classifications_with_clusters[:, -1]):
+    #     thisBoat = [line for line in classifications_with_clusters if line[-1] == i]
+    #     boats.append(condense(thisBoat))
+    # as a comprehension:
+    boats = [condense([line for line in classifications_with_clusters if line[-1] == i]) 
+             for i in np.unique(classifications_with_clusters[:, -1])]
     return boats
+
+def condense(cluster):
+    files = np.unique(np.asarray(cluster)[:, -2])
+    # remove cluster number
+    thisBoat = np.asarray(cluster)[:, [0, 1, 2, 3, 4, 5]].astype(np.float64)
+    thisBoatMean = np.mean(thisBoat, axis=0)
+    # class label has turned back into float for some reason, round it
+    thisBoatMean[3] = round(thisBoatMean[3])
+    # using maximum confidence as the cluster confidence
+    maxVals = np.max(thisBoat, axis=0)
+    thisBoatMean[2] = maxVals[2]
+    return np.append(thisBoatMean, " ".join(files))
 
 def write_to_csv(classifications, day):
     if OUTFILE is None:
@@ -330,9 +336,9 @@ def write_to_csv(classifications, day):
             outFile.writelines("date,class,images,latitude,longitude,confidence,w,h\n")
 
     # Write the data for that day to a csv
+    lines = [f"{day},{boat[3]},{boat[6]},{boat[1]},{boat[0]},{boat[2]},{float(boat[4])*416},{float(boat[5])*416}\n" for boat in classifications]
     with open(f"{OUTFILE}.csv", "a+") as outFile:
-        for boat in classifications:
-            outFile.writelines(f"{day},{boat[3]},{boat[6]},{boat[1]},{boat[0]},{boat[2]},{float(boat[4])*416},{float(boat[5])*416}\n")
+        outFile.writelines(lines)
 
 if __name__ == "__main__":
     main()
