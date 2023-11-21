@@ -156,7 +156,7 @@ def detect(
         file_name = "dir"                   # for labelling in csv
     detect_path = path.join(yolo_dir, "detect.py")
     # run the command
-    os.system(f"{python} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights} --source {source}")
+    os.system(f"{python} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights} --source {source} --device mps")
     return read_classifications(file_name, yolo_dir=yolo_dir, confidence_threshold=float(config["CONF_THRESHOLD"]))
 
 def parse_classifications(file) -> np.ndarray:
