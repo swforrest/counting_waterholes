@@ -64,7 +64,6 @@ def process_day(files, img_path, stat_cutoff, moving_cutoff, day, i, n_days):
                                                for file in files])
     all_static_boats = all_static_boats[0]
     all_moving_boats = all_moving_boats[0]
-    print(all_static_boats)
     # once a day has been classified, need to cluster again
     static_boats = cluster(np.array(all_static_boats), config["STAT_DISTANCE_CUTOFF_LATLONG"])
     moving_boats = cluster(np.array(all_moving_boats), config["MOVING_DISTANCE_CUTOFF_LATLONG"])
