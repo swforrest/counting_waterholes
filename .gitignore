@@ -3,4 +3,6 @@ TrainImages
 RawImages
 temp
 .env
+*pycache*
+
 
