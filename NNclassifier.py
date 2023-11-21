@@ -11,38 +11,6 @@ from datetime import datetime
 """
 Usage: python NNclassifier.py -d <.tif directory> -o <output file name>
 """
-
-## Helper functions ## 
-
-def remove(path, del_folder=True):
-    """
-    Removes all files in a folder, and optionally the folder itself, recursively.
-    """
-    if not os.path.exists(path):
-        return
-    for file in os.listdir(path):
-        file_path = os.path.join(path, file)
-        if os.path.isfile(file_path):
-            os.remove(file_path)
-        elif os.path.isdir(file_path):
-            remove(file_path)
-    if del_folder:
-        os.rmdir(path)
-
-def pixel2latlong(classifications, file):
-    """
-    Convert the given classifications from pixel coordinates to lat/long.
-    :param classifications: The classifications to convert, must have x, y as first two columns.
-    :param file: The file these classifications came from.
-    """
-    leftPad, _, topPad, _ = ics.get_required_padding(os.path.join(os.getcwd(), TIF_DIRECTORY, file))
-    for c in classifications:
-        x = float(c[0]) - leftPad
-        y = float(c[1]) - topPad
-        xp, yp = ics.pixel2coord(x, y, os.path.join(os.getcwd(), TIF_DIRECTORY, file))
-        c[0], c[1] = ics.coord2latlong(xp, yp)
-    return classifications
-
 # ENVIRONMENT
 # read paths in from .env
 load_dotenv()
@@ -239,7 +207,7 @@ def detect(file=None, dir=None):
     os.system(f"{PYTHON_PATH} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights_path} --source {source}")
     return read_classifications(file)
 
-def read_classifications(file, class_folder=None):
+def read_classifications(file, class_folder=None, confidence_threshold=CONF_THRESHOLD):
     if class_folder is None:
         # Classifications are stored in the CLASS_PATH directory in the latest exp folder
         exps = [int(f.split("exp")[1]) if f != "exp" else 0 for f in os.listdir(CLASS_PATH) if "exp" in f]
@@ -264,7 +232,7 @@ def read_classifications(file, class_folder=None):
                     conf = 1
                 else:
                     conf = conf[0]
-                if float(conf) > CONF_THRESHOLD:
+                if float(conf) > confidence_threshold:
                     classifications.append(
                             [float(xMid) * 416 + across, 
                              float(yMid) * 416 + down, 
@@ -340,6 +308,39 @@ def write_to_csv(classifications, day):
     with open(f"{OUTFILE}.csv", "a+") as outFile:
         outFile.writelines(lines)
 
+## Helper functions ## 
+
+def remove(path, del_folder=True):
+    """
+    Removes all files in a folder, and optionally the folder itself, recursively.
+    """
+    if not os.path.exists(path):
+        return
+    for file in os.listdir(path):
+        file_path = os.path.join(path, file)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+        elif os.path.isdir(file_path):
+            remove(file_path)
+    if del_folder:
+        os.rmdir(path)
+
+def pixel2latlong(classifications, file):
+    """
+    Convert the given classifications from pixel coordinates to lat/long.
+    :param classifications: The classifications to convert, must have x, y as first two columns.
+    :param file: The file these classifications came from.
+    """
+    if TIF_DIRECTORY is None:
+        print("write_to_csv: This function cannot be called from an external script")
+        exit(1)
+    leftPad, _, topPad, _ = ics.get_required_padding(os.path.join(os.getcwd(), TIF_DIRECTORY, file))
+    for c in classifications:
+        x = float(c[0]) - leftPad
+        y = float(c[1]) - topPad
+        xp, yp = ics.pixel2coord(x, y, os.path.join(os.getcwd(), TIF_DIRECTORY, file))
+        c[0], c[1] = ics.coord2latlong(xp, yp)
+    return classifications
+
 if __name__ == "__main__":
     main()
-    exit(0)
