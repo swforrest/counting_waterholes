@@ -30,21 +30,22 @@ def main():
     """
     classify_directory(config.get("tif_dir"))
 
-def process_tif(file, data_path, stat_cutoff, moving_cutoff):
+def process_tif(file, data_path, stat_cutoff, moving_cutoff) -> tuple[np.ndarray, np.ndarray]:
     """
     Processes a single tif file
     """
     classifications, _ = detect(python=config["python"], weights=config["weights"], yolo_dir=config["yolo_dir"], tif_dir = config["tif_dir"] , file_name = file)
     # split into moving and static boats
-    static = [c for c in classifications if c[3] == 0]
-    moving = [c for c in classifications if c[3] == 1]
+    static = classifications[classifications[:, 3].astype(float) == 0]
+    moving = classifications[classifications[:, 3].astype(float) == 1]
     # cluster each set separately
     static_clusters = cluster(static, stat_cutoff)
     moving_clusters = cluster(moving, moving_cutoff)
     # process each set separately
     static_boats = process_clusters(static_clusters)
     moving_boats = process_clusters(moving_clusters)
-    # within the file, need to convert coordinates to lat/long
+    # convert pixel coordinates to lat/long
+    # tif file should have coord details
     static_boats = pixel2latlong(static_boats, file, config["tif_dir"])
     moving_boats = pixel2latlong(moving_boats, file, config["tif_dir"])
     # Clean Up Required Directories
@@ -53,6 +54,25 @@ def process_tif(file, data_path, stat_cutoff, moving_cutoff):
     # add to the list of all boats
     return static_boats, moving_boats
 
+def process_day(files, img_path, stat_cutoff, moving_cutoff, day, i, n_days):
+    print(f"Classifying day {i+1} of {n_days} - {day} ({i/n_days*100:.2f}%)")
+
+    all_static_boats, all_moving_boats = zip(*[process_tif(file, 
+                                                           img_path,
+                                                           stat_cutoff,
+                                                           moving_cutoff)
+                                               for file in files])
+    all_static_boats = all_static_boats[0]
+    all_moving_boats = all_moving_boats[0]
+    print(all_static_boats)
+    # once a day has been classified, need to cluster again
+    static_boats = cluster(np.array(all_static_boats), config["STAT_DISTANCE_CUTOFF_LATLONG"])
+    moving_boats = cluster(np.array(all_moving_boats), config["MOVING_DISTANCE_CUTOFF_LATLONG"])
+    # process again
+    static_boats = process_clusters(static_boats)
+    moving_boats = process_clusters(moving_boats)
+    return (static_boats, moving_boats, day)
+
 def classify_directory(directory):
     """
     Use for directory of tiff images. Preprocesses, classifies, clusters.
@@ -60,23 +80,16 @@ def classify_directory(directory):
     days = {ics.get_date_from_filename(file) for file in os.listdir(directory)}
     days.remove(None)
     allFiles = os.listdir(directory)
-    for i, day in enumerate(days):
-        print(f"Classifying day {i+1} of {len(days)} - {day} ({i/len(days)*100:.2f}%)")
-        files = [file for file in allFiles if ics.get_date_from_filename(file) == day]
-        all_static_boats, all_moving_boats = zip(*[process_tif(file, 
-                                                               config["img_path"], 
-                                                               config["STAT_DISTANCE_CUTOFF_PIX"], 
-                                                               config["MOVING_DISTANCE_CUTOFF_PIX"]) 
-                                                   for file in files])
-        # once a day has been classified, need to cluster again
-        static_boats = cluster(all_static_boats, config["STAT_DISTANCE_CUTOFF_LATLONG"])
-        moving_boats = cluster(all_moving_boats, config["MOVING_DISTANCE_CUTOFF_LATLONG"])
-        # process again
-        static_boats = process_clusters(static_boats)
-        moving_boats = process_clusters(moving_boats)
-        # write to csv
-        write_to_csv(static_boats, day, config["OUTFILE"])
-        write_to_csv(moving_boats, day, config["OUTFILE"])
+    # list of files, and the day they belong to
+    daily_data = (([file for file in allFiles if ics.get_date_from_filename(file) == day], day) for day in days)
+    daily_results = (process_day(files, config["img_path"], 
+                                 config["STAT_DISTANCE_CUTOFF_PIX"], 
+                                 config["MOVING_DISTANCE_CUTOFF_PIX"], day, i, len(days)) 
+                     for i, (files, day) in enumerate(daily_data))
+    # write to csv
+    for static_boats, moving_boats, day in daily_results:
+        write_to_csv(static_boats, day, f"{config['OUTFILE']}")
+        write_to_csv(moving_boats, day, f"{config['OUTFILE']}")
 
 def classify_images(images_dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE):
     """
@@ -117,7 +130,7 @@ def detect(
         file_name = None,
         tif_dir = None,
         img_dir = None, 
-        ):
+        ) -> tuple[np.ndarray, np.ndarray]:
     """
     Run the classifier 
     :param file: Tiff file to run the classifier on.
@@ -145,9 +158,50 @@ def detect(
     detect_path = path.join(yolo_dir, "detect.py")
     # run the command
     os.system(f"{python} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights} --source {source}")
-    return read_classifications(file_name, yolo_dir=yolo_dir, confidence_threshold=config["CONF_THRESHOLD"])
+    return read_classifications(file_name, yolo_dir=yolo_dir, confidence_threshold=float(config["CONF_THRESHOLD"]))
 
-def read_classifications(file, yolo_dir=None, class_folder=None, confidence_threshold=0.5):
+def parse_classifications(file) -> np.ndarray:
+    """
+    parse a single text file of classifications
+    :param file: path to text file
+    :return:     array of classifications from the file
+    """
+    fname = os.path.basename(file)
+    lines = []
+    with open(file) as f:
+        fileSplit = fname.split(".txt")[0].split("_")
+        row = int(fileSplit[-2])
+        col = int(fileSplit[-1])
+        across = col * 104
+        down = row * 104
+        lines = [line.rstrip() for line in f]
+
+    classifications = np.asarray([line.split(" ") for line in lines]) 
+    # if no confidence, add column of 1s
+    if classifications.shape[1] == 5:
+        classifications = np.c_[classifications, np.ones(classifications.shape[0])]
+    # move columns around
+    classifications = np.c_[classifications[:, 1], # xMid
+                            classifications[:, 2], # yMid
+                            classifications[:, 5], # Confidence
+                            classifications[:, 0], # Class
+                            classifications[:, 3], # xWid
+                            classifications[:, 4]] # yWid
+    # convert to float
+    classifications = classifications.astype(np.float64)
+    classifications[:, 0] = classifications[:, 0] * 416 + across
+    classifications[:, 1] = classifications[:, 1] * 416 + down
+    return classifications
+
+def remove_low_confidence(classifications:np.ndarray, confidence_threshold:float):
+    """
+    Remove all classifications with confidence < confidence_threshold
+    """
+    low_confidence  = classifications[classifications[:, 2] < confidence_threshold]
+    classifications = classifications[classifications[:, 2] >= confidence_threshold]
+    return classifications, low_confidence
+
+def read_classifications(img_file, yolo_dir=None, class_folder=None, confidence_threshold:float=0.5) -> tuple[np.ndarray, np.ndarray]:
     if class_folder is None:
         assert yolo_dir is not None, "Must provide yolo_dir if class_folder is not provided"
         # Classifications are stored in the CLASS_PATH directory in the latest exp folder
@@ -156,69 +210,48 @@ def read_classifications(file, yolo_dir=None, class_folder=None, confidence_thre
         classification_path = path.join(os.path.join(yolo_dir, "runs", "detect"), f"exp{latest_exp}", "labels")
     else:
         classification_path = path.join(class_folder)
-    # Store classifications as: (x, y, confidence, class, width, height)
-    classifications = []
-    low_confidence = []
-    for classificationFile in os.listdir(classification_path):
-        with open(os.path.join(classification_path, classificationFile)) as f:
-            fileSplit = classificationFile.split(".txt")[0].split("_")
-            row = int(fileSplit[-2])
-            col = int(fileSplit[-1])
-            across = col * 104
-            down = row * 104
-            lines = [line.rstrip() for line in f]
-            for line in lines:
-                classType, xMid, yMid, xWid, yWid, *conf = line.split(" ")
-                if len(conf) == 0:
-                    conf = 1
-                else:
-                    conf = conf[0]
-                if float(conf) > confidence_threshold:
-                    classifications.append(
-                            [float(xMid) * 416 + across, 
-                             float(yMid) * 416 + down, 
-                             float(conf), int(classType), 
-                             float(xWid), float(yWid), os.path.basename(file)])
-                else:
-                    low_confidence.append([float(xMid) * 416 + across, 
-                                           float(yMid) * 416 + down, 
-                                           float(conf), int(classType), 
-                                           float(xWid), float(yWid), os.path.basename(file)])
+    all_cs = [parse_classifications(path.join(classification_path, file)) for file in os.listdir(classification_path)]
+    # flatten list of lists
+    all_cs = np.concatenate(all_cs)
+    # remove low confidence
+    classifications, low_confidence = remove_low_confidence(all_cs, confidence_threshold)
+    # add filename to last column
+    classifications = np.c_[classifications, [img_file] * len(classifications)]
+    low_confidence  = np.c_[low_confidence,  [img_file] * len(low_confidence)]
     return classifications, low_confidence
 
-def cluster(classifications, cutoff):
+def cluster(classifications:np.ndarray, cutoff:float) -> np.ndarray:
     """
     Cluster the given classifications using the given cutoff.
     """
-    if len(classifications) < 2:
+    if classifications.shape[0] == 0:
         # add cluster = 1 to point
-        if len(classifications) == 1:
-            classifications[0].append(1)
+        if classifications.shape[0] == 1:
+            classifications[0] = np.append(classifications[0], 1)
         return classifications
-    points              = np.asarray(classifications)[:, [0, 1]].astype(np.float64)
+    points              = classifications[:, [0, 1]].astype(np.float64)
     distances           = scipy.spatial.distance.pdist(points, metric='euclidean')
     clustering          = scipy.cluster.hierarchy.linkage(distances, 'average')
     clusters            = scipy.cluster.hierarchy.fcluster(clustering, cutoff, criterion='distance')
-    points_with_cluster = np.c_[points, np.asarray(classifications)[:, 2:], clusters]
+    points_with_cluster = np.c_[classifications, clusters]
     return points_with_cluster
 
-def process_clusters(classifications_with_clusters):
+def process_clusters(classifications_with_clusters) -> np.ndarray:
     """
     Process the given classifications with clusters. Condenses each cluster into a single point.
     :param classifications_with_clusters: The classifications as x, y, confidence, class, width, height, filename, cluster
-    :return: A list of the condensed classifications in the form: x, y, confidence, class, width, height, filenames
+    :return: An array of the condensed classifications in the form: x, y, confidence, class, width, height, filenames
     """
-    boats = []
+    boats = np.array([])
     classifications_with_clusters = np.array(classifications_with_clusters)
     if len(classifications_with_clusters) == 0:
-        return []
-    # for i in np.unique(classifications_with_clusters[:, -1]):
-    #     thisBoat = [line for line in classifications_with_clusters if line[-1] == i]
-    #     boats.append(condense(thisBoat))
+        return boats
     # as a comprehension:
-    boats = [condense([line for line in classifications_with_clusters if line[-1] == i]) 
+    boats = [condense([line for line in classifications_with_clusters 
+                       if line[-1] == i]) 
              for i in np.unique(classifications_with_clusters[:, -1])]
-    return boats
+    return np.asarray(boats)
+
 
 def condense(cluster):
     files = np.unique(np.asarray(cluster)[:, -2])
@@ -235,14 +268,12 @@ def condense(cluster):
 def write_to_csv(classifications, day, file):
     # Write to output csv
     # Create output csv if it doesn't exist
-    print(len(classifications), len(classifications[0]))
-    print(classifications[0])
     if not os.path.isfile(f"{file}.csv"):
         with open(f"{file}.csv", "a+") as outFile:
             outFile.writelines("date,class,images,latitude,longitude,confidence,w,h\n")
 
     # Write the data for that day to a csv
-    lines = [f"{day},{boat[3]},{boat[6]},{boat[1]},{boat[0]},{boat[2]},{float(boat[4])*416},{float(boat[5])*416}\n" for boat in classifications]
+    lines = [f"{day},{int(float(boat[3]))},{boat[6]},{boat[1]},{boat[0]},{boat[2]},{float(boat[4])*416},{float(boat[5])*416}\n" for boat in classifications]
     with open(f"{file}.csv", "a+") as outFile:
         outFile.writelines(lines)
 
