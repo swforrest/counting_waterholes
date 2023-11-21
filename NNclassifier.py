@@ -57,6 +57,7 @@ def main():
         classify_directory(TIF_DIRECTORY)
     elif TEXT_DIRECTORY:
         classify_text(TEXT_DIRECTORY)
+    remove(data_path)
 
 def classify_directory(directory):
     """
