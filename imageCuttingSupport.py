@@ -487,6 +487,8 @@ def get_date_from_filename(filename):
     """
     """
     str_date = filename.split("_")[0]
+    if len(str_date) != 8:
+        return None
     year = str_date[0:4]
     month = str_date[4:6]
     day = str_date[6:8]
