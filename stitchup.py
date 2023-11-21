@@ -1,8 +1,9 @@
 import os
 import datetime
 from PIL import Image
-
-
+"""
+Given the training image grids, stitch them back together into one image
+"""
 
 def main():
     # get the current directory
@@ -29,32 +30,19 @@ def stitch(dir):
     imgs = os.listdir(dir)
     imgs = filter(lambda x: x.endswith(".png"), imgs)
     # for each file, get the x and y coords
-    coords = []
-    for img in imgs:
-        if img == "stitched.png":
-            continue
-        y, x = img.split("_")[-2:]
-        x = x.split(".")[0]
-        coords.append((img, x, y))
-    
+    coords = [
+        (img, int(img.split("_")[-1].split(".")[0]), int(img.split("_")[-2])) for img in imgs if img != "stitched.png"
+            ]
     # get the maximum x and y values
-    max_x = max([int(x[1]) for x in coords])
-    max_y = max([int(x[2]) for x in coords])
+    max_x = max([x[1] for x in coords])
+    max_y = max([x[2] for x in coords])
+    print("Max x: {}, Max y: {}".format(max_x, max_y))
     # we want to use every 4th of each from 0-max_x and 0-max_y
-    rows = range(0, max_x+1, 4)
-    cols = range(0, max_y+1, 4)
-    image = Image.new("RGB", (416*len(cols), 416*len(rows)))
+    image = Image.new("RGB", (104*(max_x+1), 104*(max_y+1)))
     # for each image, paste it into the new image
-    for img, x, y in coords:
-        x = int(x)
-        y = int(y)
-        # paste the image into the new image
-        im = Image.open(os.path.join(dir, img))
-        image.paste(im, (x*104, y*104))
+    [image.paste(Image.open(os.path.join(dir, img)), (x*104, y*104)) for img, x, y in coords]
     image.save(os.path.join(dir, "stitched.png"))
-
 
 if __name__ == "__main__":
     main()
-
 
