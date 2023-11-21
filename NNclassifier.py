@@ -25,7 +25,6 @@ Usage: python NNclassifier.py -d <.tif directory> -o <output file name>
 
 def main():
     """
-    Validate input.
     Run the classifier on each image in the directory.
     """
     classify_directory(config.get("tif_dir"))
@@ -33,6 +32,11 @@ def main():
 def process_tif(file, data_path, stat_cutoff, moving_cutoff) -> tuple[np.ndarray, np.ndarray]:
     """
     Processes a single tif file
+    :param file: The tif file to process
+    :param data_path: The path to the directory to store the data in
+    :param stat_cutoff: The cutoff for static boats (pixels)
+    :param moving_cutoff: The cutoff for moving boats (pixels)
+    :return: A tuple of the static boats and moving boats
     """
     classifications, _ = detect(python=config["python"], weights=config["weights"], yolo_dir=config["yolo_dir"], tif_dir = config["tif_dir"] , file_name = file)
     # split into moving and static boats
@@ -55,6 +59,19 @@ def process_tif(file, data_path, stat_cutoff, moving_cutoff) -> tuple[np.ndarray
     return static_boats, moving_boats
 
 def process_day(files, img_path, stat_cutoff, moving_cutoff, day, i, n_days):
+    #TODO: fix cutoff arguments
+    """
+    Process a day's images. Runs process_tif for each of the given files, 
+    and then clusters and processes the results.
+    :param files: The files to process
+    :param img_path: The path to the directory to store the data in
+    :param stat_cutoff: The cutoff for static boats (pixels)
+    :param moving_cutoff: The cutoff for moving boats (pixels)
+    :param day: The day to process
+    :param i: The index of the day
+    :param n_days: The total number of days
+    :return: A tuple of the static boats, moving boats, and the day
+    """
     print(f"Classifying day {i+1} of {n_days} - {day} ({i/n_days*100:.2f}%)")
 
     all_static_boats, all_moving_boats = zip(*[process_tif(file, 
@@ -75,6 +92,8 @@ def process_day(files, img_path, stat_cutoff, moving_cutoff, day, i, n_days):
 def classify_directory(directory):
     """
     Use for directory of tiff images. Preprocesses, classifies, clusters.
+    :param directory: The directory to classify
+    :return: None
     """
     days = {ics.get_date_from_filename(file) for file in os.listdir(directory)}
     days.remove(None)
