@@ -61,13 +61,16 @@ for match in matches:
 # and put the bounding boxes on it
 
 # first have to create the png if doesn't exist
-print("Creating temporary png...")
-im = None
-path = os.path.join(temp_path, IMAGE_NAME.split(".")[0] + ".png")
-relative_dir = os.path.dirname(NNpicture)
-os.mkdir(temp_path)
-ics.create_padded_png(relative_dir, temp_path, IMAGE_NAME)
-im = Image.open(os.path.join(temp_path, IMAGE_NAME.split(".")[0] + ".png"))
+if IMAGE_NAME.split(".")[1] != "png":
+    print("Creating temporary png...")
+    im = None
+    path = os.path.join(temp_path, IMAGE_NAME.split(".")[0] + ".png")
+    relative_dir = os.path.dirname(NNpicture)
+    os.mkdir(temp_path)
+    ics.create_padded_png(relative_dir, temp_path, IMAGE_NAME)
+    im = Image.open(os.path.join(temp_path, IMAGE_NAME.split(".")[0] + ".png"))
+else:
+    im = Image.open(NNpicture)
 
 fig, ax = plt.subplots(1)
 ax.imshow(im)
