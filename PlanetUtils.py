@@ -46,7 +46,7 @@ def PlanetSelect(items:list):
     #NOTE: currently selects the most recent item from the list
     # sort by aquired
     items.sort(key=lambda x: x['properties']['acquired'])
-    selected = items[-1]
+    selected = [items[-1]]
     # pretty print
     print(json.dumps(selected, indent=4))
     return selected
@@ -58,11 +58,69 @@ def PlanetOrder(items:list, polygon_file:str, name:str):
     Order a given search result.
     :param itemIDs: a list of item IDs to order
     :param polygon_file: a geojson file containing the area of interest to clip to
+        must be of format: {"type": "Polygon", "coordinates": [[[lon, lat], ...]]}
     :param name: the name of the order
     :requires: Planet API key be set in environment variable
     :return: a list of order IDs
     """
-    pass
+    pids = [item['id'] for item in items]
+    products = [{
+        "item_ids": pids,
+        "item_type": "PSScene",
+        "product_bundle": "analytic_sr_udm2"
+        }]
+    # get the polygon
+    polygon = None
+    with open(polygon_file, 'r') as f:
+        polygon = json.load(f)
+    # create the order body
+    order_body = {
+        "name": name,
+        "products": products,
+        "tools": [
+            {
+                "clip": {
+                    "aoi": polygon
+                },
+            },
+            {
+                "harmonize": {
+                    "target_sensor": "Sentinel-2"
+                },
+            },
+            {
+                "composite": {}
+            }
+        ],
+        "notifications": {
+            "email": True
+            },
+        "metadata": {
+            "stac": {}
+        },
+        "order_type": "partial",
+        "delivery": {
+            "archive_filename": "planet_image_api",
+            "archive_type": "zip",
+            "single_archive": True,
+        }
+    }
+    # set the headers
+    headers = {'content-type': 'application/json'}
+    print(json.dumps(order_body, indent=4))
+    # make the request
+    response = requests.post('https://api.planet.com/compute/ops/orders/v2',
+                                data=json.dumps(order_body), headers=headers, auth=(API_KEY, ''))
+
+    #TODO: Handle response codes
+
+    # write the response to a file
+    with open('order_response.json', 'w') as f:
+        f.write(response.text)
+    # return that
+    return response.json()
+
+
 
 def PlanetCheckOrder(orderID:str):
     """
@@ -94,18 +152,18 @@ if __name__ == "__main__":
         # print the result
         print(result)
     elif choice == '2':
-        # prompt for search path or response path
-        items = None
-        c2 = input('1. Search path\n2. Response path\nEnter a number: ')
-        if c2 == '1':
-            search_path = input('Enter the path to the search json: ')
-            items = PlanetSearch(search_path)
-        elif c2 == '2':
-            response_path = input('Enter the path to the response json: ')
-            with open(response_path, 'r') as f:
-                items = json.load(f)['features']
+        search_path = input('Enter the path to the search json: ')
+        items = PlanetSearch(search_path)
         if items is not None:
             PlanetSelect(items)
+    elif choice == '3':
+        search_path = input('Enter the path to the search json: ')
+        items = PlanetSearch(search_path)
+        if items is not None:
+            items = PlanetSelect(items)
+        polygon_file = input('Enter the path to the polygon file: ')
+        name = input('Enter the name of the order: ')
+        PlanetOrder(items, polygon_file, name)
     else:
         print('Not implemented yet')
         
