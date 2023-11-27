@@ -17,7 +17,7 @@ Intended usage:
     Saves the results to a csv file. 
 
 Optionally?:
-    Save some random images to a folder for manual checking after the fact
+    Save some random images to a folder for manual checking after the fact (NOT IMPLEMENTED)
 
 Usage: python NNclassifier.py -d <.tif directory> -o <output file name>
 """
@@ -39,6 +39,8 @@ def process_tif(file, data_path, stat_cutoff, moving_cutoff) -> tuple[np.ndarray
     :return: A tuple of the static boats and moving boats
     """
     classifications, _ = detect(python=config["python"], weights=config["weights"], yolo_dir=config["yolo_dir"], tif_dir = config["tif_dir"] , file_name = file)
+    if len(classifications) == 0:
+        return np.array([]), np.array([])
     # split into moving and static boats
     static = classifications[classifications[:, 3].astype(float) == 0]
     moving = classifications[classifications[:, 3].astype(float) == 1]
@@ -234,6 +236,8 @@ def read_classifications(img_file, yolo_dir=None, class_folder=None, confidence_
     all_cs = [parse_classifications(path.join(classification_path, file)) for file in os.listdir(classification_path)]
     # remove empty arrays
     all_cs = [cs for cs in all_cs if cs.shape[0] != 0]
+    if len(all_cs) == 0:
+        return np.array([]), np.array([])
     # flatten list of lists
     all_cs = np.concatenate(all_cs)
     # remove low confidence
