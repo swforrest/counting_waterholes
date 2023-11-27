@@ -5,7 +5,6 @@ import PIL
 import pyproj
 import random
 
-
 from PIL import Image
 from osgeo import gdal
 
