@@ -12,30 +12,39 @@ API_KEY = os.environ.get('PLANET_API_KEY', config['planet']['api_key'])
 if API_KEY is None or API_KEY == 'ENV':
     raise Exception('Planet API key not found in environment variable or config.yml')
 
-def PlanetSearch(search_path):
+def PlanetSearch(
+        polygon_file:str,
+        min_date:str="-14d",
+        max_date:str="t",
+        cloud_cover:float=0.1,
+        area_cover:float=0.9,
+        ):
     """
     Search a given area of interest for Planet imagery
     :param search_path: path to a json file containing search body
     :requires: Planet API key be set in environment variable
     :return: a list of Planet items (json result from API)
     """
-    # 1. Get the json file as text
-    with open(search_path, 'r') as f:
-        search_body = f.read()
-    # 2. Get the api key from the environment variable
-    api_key = os.environ.get('PLANET_API_KEY')
-    # 3. Set the headers
+    # get the polygon
+    polygon = None
+    with open(polygon_file, 'r') as f:
+        polygon = json.load(f)
+    # Get the format-string json file as text
+    search_body = SEARCH_BODY.replace('MIN_DATE', min_date)
+    search_body = search_body.replace('MAX_DATE', max_date)
+    search_body = search_body.replace('CLOUD_COVER', str(cloud_cover))
+    search_body = search_body.replace('AREA_COVER', str(area_cover))
+    search_body = search_body.replace('POLYGON', json.dumps(polygon))
+    # parse as json
     headers = {'content-type': 'application/json'}
     auth = (API_KEY, '')
-    # 4. Send the request
     response = requests.post('https://api.planet.com/data/v1/quick-search',
                                 data=search_body, headers=headers, auth=auth)
-    # 5. Return the features in the response
-    # NOTE: there is pagination, so this will only return the first page (a lot of items)
-    # If required, can add request pagination but hopefully not nessecary
-    # write the response to a file
     with open('response.json', 'w') as f:
         f.write(response.text)
+    if response.status_code != 200:
+        print(response.text)
+        raise Exception('Planet API returned non-200 status code')
     return response.json()['features']
 
 def PlanetSelect(items:list):
@@ -44,13 +53,11 @@ def PlanetSelect(items:list):
     :param items: the list of items to select from
     :return: list of selected items
     """
-    #NOTE: currently selects the most recent item from the list
+    # NOTE: currently selects the most recent item from the list
     # sort by aquired
     items.sort(key=lambda x: x['properties']['acquired'])
     selected = [items[-1]]
-    # pretty print
-    print(json.dumps(selected, indent=4))
-    return selected
+    return [selected]
 
 
 
@@ -138,9 +145,9 @@ def PlanetCheckOrder(orderID:str):
     return response.json()['state']
 
 
-def PlanetDownload(orderID:str, downloadPath:str='./temp/download.zip'):
+def PlanetDownload(orderID:str):
     """
-    Download a given order and unzip it to a given path
+    Download a given order and move the tif file to the raw tiffs directory
     """
     uri = f"https://api.planet.com/compute/ops/orders/v2/{orderID}"
     response = requests.get(uri, auth=(API_KEY, ''))
@@ -148,22 +155,36 @@ def PlanetDownload(orderID:str, downloadPath:str='./temp/download.zip'):
     links = response.json()['_links']['results']
     download_link = [link['location'] for link in links if "image" in link['name']][0]
     # make the directory if it doesn't exist
-    os.makedirs(os.path.dirname(downloadPath), exist_ok=True)
+    downloadPath = "./temp"
+    downloadFile = "./temp/temp.zip"
+    os.makedirs(downloadPath, exist_ok=True)
     # download the file
     progress = 0
     with requests.get(download_link, stream=True) as r:
-        with open(downloadPath, 'wb') as f:
+        with open(downloadFile, 'wb') as f:
             for chunk in r.iter_content(chunk_size=8192): 
                 if chunk:
                     f.write(chunk)
                     progress += len(chunk)
                     print(f"Downloaded {progress} bytes", end='\r') 
+    print()
     # unzip the file
-    with zipfile.ZipFile(downloadPath, 'r') as zip_ref:
+    with zipfile.ZipFile(downloadFile, 'r') as zip_ref:
         zip_ref.extractall(os.path.dirname(downloadPath))
     # delete the zip file
-    os.remove(downloadPath)
+    os.remove(downloadFile)
+    # move the tif file to the raw tiffs directory
+    newfname = ['_'.join(f.split('_')[:-2]) for f in os.listdir(os.path.dirname(downloadPath)) if f.endswith('.xml')][0]
+    tif = [f for f in os.listdir(os.path.dirname(downloadPath)) if "udm" in f][0]
+    os.rename(os.path.join(os.path.dirname(downloadPath), tif), 
+              os.path.join(config['tif_dir'], newfname + '.tif' ))
     return downloadPath
+
+
+get_aois = lambda: [f.split('.')[0] for f in os.listdir(config['planet']['polygons']) if os.path.isfile(os.path.join(config['planet']['polygons'], f))]
+
+get_polygon = lambda aoi: os.path.join(config['planet']['polygons'], aoi + '.json')
+
 
 if __name__ == "__main__":
     # prompt for what to do
@@ -203,4 +224,110 @@ if __name__ == "__main__":
         PlanetDownload(orderID, downloadPath)
     else:
         print('Not implemented yet')
-        
+
+SEARCH_BODY = """
+        {
+    "filter": {
+        "type": "AndFilter",
+        "config": [
+            {
+                "type": "GeometryFilter",
+                "field_name": "geometry",
+                "config": POLYGON
+            },
+            {
+                "type": "OrFilter",
+                "config": [
+                    {
+                        "type": "DateRangeFilter",
+                        "field_name": "acquired",
+                        "config": {
+                            "gte": "MIN_DATET00:00:00.000Z",
+                            "lte": "MAX_DATET23:59:59.999Z"
+                        }
+                    }
+                ]
+            },
+            {
+                "type": "OrFilter",
+                "config": [
+                    {
+                        "type": "AndFilter",
+                        "config": [
+                            {
+                                "type": "AndFilter",
+                                "config": [
+                                    {
+                                        "type": "StringInFilter",
+                                        "field_name": "item_type",
+                                        "config": [
+                                            "PSScene"
+                                        ]
+                                    },
+                                    {
+                                        "type": "AndFilter",
+                                        "config": [
+                                            {
+                                                "type": "AssetFilter",
+                                                "config": [
+                                                    "basic_analytic_4b"
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "RangeFilter",
+                                "config": {
+                                    "gte": 0,
+                                    "lte": CLOUD_COVER
+                                },
+                                "field_name": "cloud_cover"
+                            },
+                            {
+                                "type": "StringInFilter",
+                                "field_name": "publishing_stage",
+                                "config": [
+                                    "standard",
+                                    "finalized"
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "type": "AndFilter",
+                        "config": [
+                            {
+                                "type": "StringInFilter",
+                                "field_name": "item_type",
+                                "config": [
+                                    "SkySatCollect"
+                                ]
+                            },
+                            {
+                                "type": "RangeFilter",
+                                "config": {
+                                    "gte": 0,
+                                    "lte": CLOUD_COVER
+                                },
+                                "field_name": "cloud_cover"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "type": "PermissionFilter",
+                "config": [
+                    "assets:download"
+                ]
+            }
+        ]
+    },
+    "item_types": [
+        "PSScene",
+        "SkySatCollect"
+    ]
+}
+"""
