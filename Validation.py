@@ -32,7 +32,7 @@ and output:
       - false negatives
 """
 
-STAT_DISTANCE_CUTOFF_PIX = 6
+STAT_DISTANCE_CUTOFF_PIX = 4
 MOVING_DISTANCE_CUTOFF_PIX = 10
 CONF_THRESHOLD = 0.5
 
@@ -44,18 +44,18 @@ def process_image(path, labels, summary):
         return []
     # ML classifications
     ML_classifications, _ = read_classifications("ml", class_folder=path, confidence_threshold=CONF_THRESHOLD)
-    ML_classifications_stat = list(filter(lambda x: x[3] == 0, ML_classifications))
+    ML_classifications_stat = ML_classifications[ML_classifications[:, 3] == "0.0"] 
     summary["detected_stat"] += len(ML_classifications_stat)
-    ML_classifications_moving = list(filter(lambda x: x[3] == 1, ML_classifications))
+    ML_classifications_moving = ML_classifications[ML_classifications[:, 3] == "1.0"]
     summary["detected_mov"] += len(ML_classifications_moving)
     # cluster
     ML_clusters_stat = cluster(ML_classifications_stat, STAT_DISTANCE_CUTOFF_PIX)
     ML_clusters_moving = cluster(ML_classifications_moving, MOVING_DISTANCE_CUTOFF_PIX)
     # manual annotations
     manual_annotations, _ = read_classifications("manual", class_folder=label_dir)
-    manual_annotations_stat = list(filter(lambda x: x[3] == 0, manual_annotations))
+    manual_annotations_stat = manual_annotations[manual_annotations[:, 3] == "0.0"]
     summary["labelled_stat"] += len(manual_annotations_stat)
-    manual_annotations_moving = list(filter(lambda x: x[3] == 1, manual_annotations))
+    manual_annotations_moving = manual_annotations[manual_annotations[:, 3] == "1.0"]
     summary["labelled_mov"] += len(manual_annotations_moving)
     # cluster
     manual_clusters_stat = cluster(manual_annotations_stat, STAT_DISTANCE_CUTOFF_PIX)
@@ -98,6 +98,7 @@ def main(classifications, labels, outdir):
             write_to_csv(process_image(root, labels, summary), this_img, outdir)
             i += 1
             print(f"Processed {i} images", end="\r")
+    print(f"Processed {i} images")
     summarize(outdir, summary)
 
 def summarize(outdir, summary):
@@ -106,6 +107,9 @@ def summarize(outdir, summary):
     """
     # get all lines (except headers) from all files using np list comp
     all_boats = np.asarray([line.strip().split(",") for file in os.listdir(outdir) if (file.endswith(".csv") and "summary" not in file) for line in open(os.path.join(outdir, file)) if line[0] != "x"])
+    if len(all_boats) == 0:
+        print("No boats found")
+        return
     pred = all_boats[:, 2].astype(float).astype(int)
     true = all_boats[:, 3].astype(float).astype(int)
     # get the confusion matrix
@@ -158,7 +162,7 @@ def summarize(outdir, summary):
                 {len(true[(pred != 1) & (true == 1)])}\n")
 
 
-def compare(ml:list, manual:list, cutoff):
+def compare(ml:np.ndarray, manual:np.ndarray, cutoff):
     """
     given two lists of clusters, compare them (cluster them and note the results)
     e.g if ml has the point (52, 101), and manual has (51.8, 101.2), they should be clustered together
@@ -167,12 +171,17 @@ def compare(ml:list, manual:list, cutoff):
     :param manual: list of clusters in form [x, y, confidence, class, width, height, filename]
     :return list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]
     """
-    all = ml + manual
-    points_ml = np.asarray(ml)[:, :2] if len(ml) > 0 else np.empty((0, 2))
-    points_man = np.asarray(manual)[:, :2] if len(manual) > 0 else np.empty((0, 2))
+    # one of ml or manual could be empty so we need to check
+    if len(ml) == 0:
+        all = manual
+    elif len(manual) == 0:
+        all = ml
+    else:
+        all = np.concatenate((ml, manual))
+    points_ml = ml[:, :2] if len(ml) > 0 else np.empty((0, 2))
+    points_man = manual[:, :2] if len(manual) > 0 else np.empty((0, 2))
     # join together
-    all_points = points_man.tolist() + points_ml.tolist()
-    all_points = np.asarray(all_points, dtype=np.float64)
+    all_points = np.concatenate((points_ml, points_man)).astype(float)
     if len(all_points) < 2:
         # if its 1, still need to pretend cluster
         if len(all_points) == 1:
@@ -190,20 +199,27 @@ def compare(ml:list, manual:list, cutoff):
     # for each cluster, note if it is in ml, manual, or both
     results = []
     for cluster in np.unique(clusters):
-        res = [0., 0., -1, -1] # x, y, ml, manual
+        res = [0., 0., -1, -1] # x, y, ml class, manual class
         points = points_with_cluster[points_with_cluster[:, -1] == str(cluster)]
         # 6th is the source, 3 is the class
+        ml_cls = []
+        manual_cls = []
         x = 0
         y = 0
         for point in points:
             x += float(point[0])
             y += float(point[1])
             if point[6] == "ml":
-                res[2] = point[3]
+                ml_cls.append(point[3])
             elif point[6] == "manual":
-                res[3] = point[3]
+                manual_cls.append(point[3])
         res[0] = round(x / len(points), 3)
         res[1] = round(y / len(points), 3)
+        # class should be most common class
+        if len(ml_cls) > 0:
+            res[2] = max(set(ml_cls), key=ml_cls.count)
+        if len(manual_cls) > 0:
+            res[3] = max(set(manual_cls), key=manual_cls.count)
         results.append(res)
     return results
 
@@ -214,18 +230,101 @@ def write_to_csv(boats, filename, outdir):
         for boat in boats:
             file.write(f"{boat[0]}, {boat[1]}, {boat[2]}, {boat[3]}\n")
 
+def plot_boats(csvs:str, imgs:str, **kwargs):
+    """
+    given a directory of csvs, plot the boats on the images and save the images
+    :param csvs: directory containing csvs. Must be of form: x, y, ml_class, manual_class
+    :param imgs: directory containing images. There must be "stitched.png" in subdirs
+    """
+    if "outdir" in kwargs:
+        outdir = kwargs["outdir"]
+    else:
+        outdir = csvs
+    all_csvs = [os.path.join(csvs, file) for file in os.listdir(csvs) if file.endswith(".csv") and "summary" not in file]
+    all_images = [os.path.join(root, file) for root, dirs, files in os.walk(imgs) for file in files if file == "stitched.png"]
+    for csv in all_csvs:
+        # get the corresponding image
+        img = [image for image in all_images if csv.split("/")[-1].split(".")[0] in image]
+        if len(img) == 0:
+            print(f"Could not find image for {csv}")
+            continue
+        img = img[0]
+        # get the boats
+        boats = np.asarray([line.strip().split(",") for line in open(csv) if line[0] != "x"])
+        # plot the image
+        fig, ax = plt.subplots()
+        ax.imshow(plt.imread(img))
+        # draw a box around the boat. 10x10 pixels.
+        #   Green if : detected and labelled static
+        #   Blue If  : detected and labelled moving
+        #   Orange if: detected and labelled but disagree
+        #   Red if   : detected but not labelled
+        #   Yellow if: labelled but not detected
+        for boat in boats:
+            x = float(boat[0])
+            y = float(boat[1])
+            ml = int(float(boat[2]))
+            manual = int(float(boat[3]))
+            if ml == 0 and ml == manual:
+                # green
+                color = "g"
+            elif ml == 1 and ml == manual:
+                # blue
+                color = "b"
+            elif ml != -1 and manual != -1 and ml != manual:
+                # orange
+                color = "orange"
+            elif ml != -1 and manual == -1:
+                # red
+                color = "r"
+            else:
+                # yellow
+                color = "y"
+            if "skip" in kwargs and kwargs["skip"] == True and color == "g":
+                continue
+            rect = plt.Rectangle((x-5, y-5), 10, 10, linewidth=0.1, edgecolor=color, facecolor="none")
+            ax.add_patch(rect)
+            if color == "orange":
+                # also annotate the boat with the classes as "ML: 0, Label: 1"
+                ax.annotate(f"ML: {ml}, Label: {manual}", (x, y), color=color, fontsize=6)
+        # save the image in really high quality with no axis labels
+        plt.axis("off")
+        # add a legend above and to the right of the image (outside). Make it pretty small
+        plt.legend(
+                handles=[plt.Rectangle((0,0), 1, 1, color="g"), 
+                         plt.Rectangle((0,0), 1, 1, color="b"), 
+                         plt.Rectangle((0,0), 1, 1, color="orange"), 
+                         plt.Rectangle((0,0), 1, 1, color="r"), 
+                         plt.Rectangle((0,0), 1, 1, color="y")], 
+                labels=["Detected and Labelled Static", "Detected and Labelled Moving", "Disagreement", "Detected but not Labelled", "Labelled but not Detected"], loc="upper right", bbox_to_anchor=(1.1, 1.1), prop={"size": 6})
+        plt.savefig(os.path.join(outdir, csv.split("/")[-1].split(".")[0] + ".png"), dpi=1000, bbox_inches="tight")
+        plt.close()
+
+
+
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
     argparser.description = "Cluster classifications and labels from yolo and manual annotations to compare them. File names must be identical between given arguments"
-    argparser.add_argument("-c", "--classifications", help="Directory of classifications from yolo (can contain multiple direcories)", required=True)
-    argparser.add_argument("-l", "--labels", help="Directory of manual annotations (can contain multiple direcories)", required=True) 
-    argparser.add_argument("-o", "--outdir", help="Directory to dump output csvs", required=True)
-
+    argparser.add_argument("-c", "--classifications", help="Directory of classifications from yolo (can contain multiple direcories)", required=False)
+    argparser.add_argument("-l", "--labels", help="Directory of manual annotations (can contain multiple direcories)", required=False) 
+    argparser.add_argument("-o", "--outdir", help="Directory to dump output csvs", required=False)
+    argparser.add_argument("-i", "--imgs", help="Directory with images", required=False)
+    argparser.add_argument("-s", "--summaries", help="Directory with summary CSVs", required=False)
     args = argparser.parse_args()
     classifications = args.classifications
     labels = args.labels
     outdir = args.outdir
-    main(classifications, labels, outdir)
+    imgs = args.imgs
+    summaries = args.summaries
+
+    # check what we want to do
+    print("1. Cluster and compare")
+    print("2. Plot boats")
+    choice = input("Enter a number: ")
+    if choice == "1":
+        main(classifications, labels, outdir)
+    elif choice == "2":
+        plot_boats(summaries, imgs)
 
 
 

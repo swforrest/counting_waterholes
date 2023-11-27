@@ -194,7 +194,10 @@ def parse_classifications(file) -> np.ndarray:
         down = row * 104
         lines = [line.rstrip() for line in f]
 
-    classifications = np.asarray([line.split(" ") for line in lines]) 
+    if len(lines) == 0:
+        return np.array([])
+
+    classifications = np.array([line.split(" ") for line in lines])
     # if no confidence, add column of 1s
     if classifications.shape[1] == 5:
         classifications = np.c_[classifications, np.ones(classifications.shape[0])]
@@ -207,8 +210,8 @@ def parse_classifications(file) -> np.ndarray:
                             classifications[:, 4]] # yWid
     # convert to float
     classifications = classifications.astype(np.float64)
-    classifications[:, 0] = classifications[:, 0] * 416 + across
-    classifications[:, 1] = classifications[:, 1] * 416 + down
+    classifications[:, 0] = classifications[:, 0] * 416.0 + across
+    classifications[:, 1] = classifications[:, 1] * 416.0 + down
     return classifications
 
 def remove_low_confidence(classifications:np.ndarray, confidence_threshold:float):
@@ -229,6 +232,8 @@ def read_classifications(img_file, yolo_dir=None, class_folder=None, confidence_
     else:
         classification_path = path.join(class_folder)
     all_cs = [parse_classifications(path.join(classification_path, file)) for file in os.listdir(classification_path)]
+    # remove empty arrays
+    all_cs = [cs for cs in all_cs if cs.shape[0] != 0]
     # flatten list of lists
     all_cs = np.concatenate(all_cs)
     # remove low confidence
@@ -242,10 +247,10 @@ def cluster(classifications:np.ndarray, cutoff:float) -> np.ndarray:
     """
     Cluster the given classifications using the given cutoff.
     """
-    if classifications.shape[0] == 0:
+    if classifications.shape[0] < 2:
         # add cluster = 1 to point
         if classifications.shape[0] == 1:
-            classifications[0] = np.append(classifications[0], 1)
+            classifications = np.array([np.append(classifications[0], 1)])
         return classifications
     points              = classifications[:, [0, 1]].astype(np.float64)
     distances           = scipy.spatial.distance.pdist(points, metric='euclidean')
@@ -254,14 +259,14 @@ def cluster(classifications:np.ndarray, cutoff:float) -> np.ndarray:
     points_with_cluster = np.c_[classifications, clusters]
     return points_with_cluster
 
-def process_clusters(classifications_with_clusters) -> np.ndarray:
+def process_clusters(classifications_with_clusters:np.ndarray) -> np.ndarray:
     """
     Process the given classifications with clusters. Condenses each cluster into a single point.
     :param classifications_with_clusters: The classifications as x, y, confidence, class, width, height, filename, cluster
     :return: An array of the condensed classifications in the form: x, y, confidence, class, width, height, filenames
     """
     boats = np.array([])
-    classifications_with_clusters = np.array(classifications_with_clusters)
+    classifications_with_clusters = classifications_with_clusters
     if len(classifications_with_clusters) == 0:
         return boats
     # as a comprehension:
