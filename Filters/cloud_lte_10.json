@@ -1,0 +1,134 @@
+{
+    "filter": {
+        "type": "AndFilter",
+        "config": [
+            {
+                "type": "GeometryFilter",
+                "field_name": "geometry",
+                "config": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [
+                                153.286744,
+                                -27.523041
+                            ],
+                            [
+                                153.286654,
+                                -27.523882
+                            ],
+                            [
+                                153.28092,
+                                -27.528889
+                            ],
+                            [
+                                153.282595,
+                                -27.531339
+                            ],
+                            [
+                                153.285892,
+                                -27.52948
+                            ],
+                            [
+                                153.286744,
+                                -27.523041
+                            ]
+                        ]
+                    ]
+                }
+            },
+            {
+                "type": "OrFilter",
+                "config": [
+                    {
+                        "type": "DateRangeFilter",
+                        "field_name": "acquired",
+                        "config": {
+                            "gte": "2023-11-13T00:00:00.000Z",
+                            "lte": "2023-11-26T23:59:59.999Z"
+                        }
+                    }
+                ]
+            },
+            {
+                "type": "OrFilter",
+                "config": [
+                    {
+                        "type": "AndFilter",
+                        "config": [
+                            {
+                                "type": "AndFilter",
+                                "config": [
+                                    {
+                                        "type": "StringInFilter",
+                                        "field_name": "item_type",
+                                        "config": [
+                                            "PSScene"
+                                        ]
+                                    },
+                                    {
+                                        "type": "AndFilter",
+                                        "config": [
+                                            {
+                                                "type": "AssetFilter",
+                                                "config": [
+                                                    "basic_analytic_4b"
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "RangeFilter",
+                                "config": {
+                                    "gte": 0,
+                                    "lte": 0.1
+                                },
+                                "field_name": "cloud_cover"
+                            },
+                            {
+                                "type": "StringInFilter",
+                                "field_name": "publishing_stage",
+                                "config": [
+                                    "standard",
+                                    "finalized"
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "type": "AndFilter",
+                        "config": [
+                            {
+                                "type": "StringInFilter",
+                                "field_name": "item_type",
+                                "config": [
+                                    "SkySatCollect"
+                                ]
+                            },
+                            {
+                                "type": "RangeFilter",
+                                "config": {
+                                    "gte": 0,
+                                    "lte": 0.1
+                                },
+                                "field_name": "cloud_cover"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "type": "PermissionFilter",
+                "config": [
+                    "assets:download"
+                ]
+            }
+        ]
+    },
+    "item_types": [
+        "PSScene",
+        "SkySatCollect"
+    ]
+}
