@@ -3,6 +3,7 @@ import os
 import yaml
 import json
 from dotenv import load_dotenv
+import zipfile
 load_dotenv()
 
 # api key is either set in the environment variable or config.yml
@@ -129,11 +130,40 @@ def PlanetCheckOrder(orderID:str):
     :requires: Planet API key be set in environment variable
     :return: the status of the order
     """
-    pass
+    uri = f"https://api.planet.com/compute/ops/orders/v2/{orderID}"
+    response = requests.get(uri, auth=(API_KEY, ''))
+    # write the response to a file
+    with open('order_status.json', 'w') as f:
+        f.write(response.text)
+    return response.json()['state']
 
-def PlanetDownload(orderID:str, downloadPath:str):
-    pass
 
+def PlanetDownload(orderID:str, downloadPath:str='./temp/download.zip'):
+    """
+    Download a given order and unzip it to a given path
+    """
+    uri = f"https://api.planet.com/compute/ops/orders/v2/{orderID}"
+    response = requests.get(uri, auth=(API_KEY, ''))
+    # grab the location uri
+    links = response.json()['_links']['results']
+    download_link = [link['location'] for link in links if "image" in link['name']][0]
+    # make the directory if it doesn't exist
+    os.makedirs(os.path.dirname(downloadPath), exist_ok=True)
+    # download the file
+    progress = 0
+    with requests.get(download_link, stream=True) as r:
+        with open(downloadPath, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=8192): 
+                if chunk:
+                    f.write(chunk)
+                    progress += len(chunk)
+                    print(f"Downloaded {progress} bytes", end='\r') 
+    # unzip the file
+    with zipfile.ZipFile(downloadPath, 'r') as zip_ref:
+        zip_ref.extractall(os.path.dirname(downloadPath))
+    # delete the zip file
+    os.remove(downloadPath)
+    return downloadPath
 
 if __name__ == "__main__":
     # prompt for what to do
@@ -164,6 +194,13 @@ if __name__ == "__main__":
         polygon_file = input('Enter the path to the polygon file: ')
         name = input('Enter the name of the order: ')
         PlanetOrder(items, polygon_file, name)
+    elif choice == '4':
+        orderID = input('Enter the order ID: ')
+        PlanetCheckOrder(orderID)
+    elif choice == '5':
+        orderID = input('Enter the order ID: ')
+        downloadPath = input('Enter the path to download to: ')
+        PlanetDownload(orderID, downloadPath)
     else:
         print('Not implemented yet')
         
