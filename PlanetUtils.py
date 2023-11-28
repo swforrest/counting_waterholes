@@ -14,8 +14,8 @@ if API_KEY is None or API_KEY == 'ENV':
 
 def PlanetSearch(
         polygon_file:str,
-        min_date:str="-14d",
-        max_date:str="t",
+        min_date:str,
+        max_date:str,
         cloud_cover:float=0.1,
         area_cover:float=0.9,
         ):
@@ -47,18 +47,18 @@ def PlanetSearch(
         raise Exception('Planet API returned non-200 status code')
     return response.json()['features']
 
-def PlanetSelect(items:list):
+def PlanetSelect(items:list, date:str|None=None):
     """
     Select a subset of items from a search result
     :param items: the list of items to select from
     :return: list of selected items
     """
-    # NOTE: currently selects the most recent item from the list
-    # sort by aquired
-    items.sort(key=lambda x: x['properties']['acquired'])
-    selected = [items[-1]]
-    return [selected]
-
+    if date is None:
+        items.sort(key=lambda x: x['properties']['acquired'])
+        selected = [item for item in items if item['properties']['acquired'] == items[-1]['properties']['acquired']]
+    else:
+        selected = [item for item in items if date in item['properties']['acquired']]
+    return selected
 
 
 def PlanetOrder(items:list, polygon_file:str, name:str):
@@ -115,7 +115,6 @@ def PlanetOrder(items:list, polygon_file:str, name:str):
     }
     # set the headers
     headers = {'content-type': 'application/json'}
-    print(json.dumps(order_body, indent=4))
     # make the request
     response = requests.post('https://api.planet.com/compute/ops/orders/v2',
                                 data=json.dumps(order_body), headers=headers, auth=(API_KEY, ''))
@@ -151,13 +150,11 @@ def PlanetDownload(orderID:str):
     """
     uri = f"https://api.planet.com/compute/ops/orders/v2/{orderID}"
     response = requests.get(uri, auth=(API_KEY, ''))
-    print(response.text)
     if response.status_code != 200:
         raise Exception('Planet API returned non-200 status code')
     # grab the location uri
     links = response.json()['_links']['results']
     download_link = [link['location'] for link in links if "manifest" not in link['name']][0]
-    print(download_link)
     # make the directory if it doesn't exist
     downloadPath = os.path.join(os.getcwd(), "tempDL")
     downloadFile = os.path.join(downloadPath, "DLZip.zip")
@@ -186,6 +183,17 @@ def PlanetDownload(orderID:str):
     os.rename(os.path.join(downloadPath, tif), 
               os.path.join(config['tif_dir'], newfname + '.tif' ))
     return downloadPath
+
+def get_orders():
+    """
+    Get all orders from the Planet API
+    """
+    uri = f"https://api.planet.com/compute/ops/orders/v2"
+    response = requests.get(uri, auth=(API_KEY, ''))
+    # write the response to a file
+    with open('orders.json', 'w') as f:
+        f.write(response.text)
+    return response.json()['orders']
 
 
 get_aois = lambda: [f.split('.')[0] for f in os.listdir(config['planet']['polygons']) if os.path.isfile(os.path.join(config['planet']['polygons'], f))]
