@@ -22,6 +22,7 @@ EXISTING:
 import os
 import PlanetUtils
 import NNclassifier
+import traceback
 
 def main():
     choice = input("New order or existing? (N/E): ")
@@ -66,8 +67,9 @@ def existing_order():
     try:
         PlanetUtils.PlanetDownload(order_id)
     except Exception as e:
+        traceback.print_exc()
         print(e)
-        exit()
+        exit(1)
 
 def option_select(options:list, prompt:str="Select an option:"):
     print(prompt)
