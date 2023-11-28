@@ -151,13 +151,20 @@ def PlanetDownload(orderID:str):
     """
     uri = f"https://api.planet.com/compute/ops/orders/v2/{orderID}"
     response = requests.get(uri, auth=(API_KEY, ''))
+    print(response.text)
+    if response.status_code != 200:
+        raise Exception('Planet API returned non-200 status code')
     # grab the location uri
     links = response.json()['_links']['results']
-    download_link = [link['location'] for link in links if "image" in link['name']][0]
+    download_link = [link['location'] for link in links if "manifest" not in link['name']][0]
+    print(download_link)
     # make the directory if it doesn't exist
-    downloadPath = "./temp"
-    downloadFile = "./temp/temp.zip"
+    downloadPath = os.path.join(os.getcwd(), "tempDL")
+    downloadFile = os.path.join(downloadPath, "DLZip.zip")
     os.makedirs(downloadPath, exist_ok=True)
+    # clear the directory
+    for f in os.listdir(downloadPath):
+        os.remove(os.path.join(downloadPath, f))
     # download the file
     progress = 0
     with requests.get(download_link, stream=True) as r:
@@ -170,13 +177,13 @@ def PlanetDownload(orderID:str):
     print()
     # unzip the file
     with zipfile.ZipFile(downloadFile, 'r') as zip_ref:
-        zip_ref.extractall(os.path.dirname(downloadPath))
+        zip_ref.extractall(downloadPath)
     # delete the zip file
     os.remove(downloadFile)
     # move the tif file to the raw tiffs directory
-    newfname = ['_'.join(f.split('_')[:-2]) for f in os.listdir(os.path.dirname(downloadPath)) if f.endswith('.xml')][0]
-    tif = [f for f in os.listdir(os.path.dirname(downloadPath)) if "udm" in f][0]
-    os.rename(os.path.join(os.path.dirname(downloadPath), tif), 
+    newfname = ['_'.join(f.split('_')[:-2]) for f in os.listdir(downloadPath) if f.endswith('.xml')][0]
+    tif = [f for f in os.listdir(downloadPath) if f == "composite.tif"][0]
+    os.rename(os.path.join(downloadPath, tif), 
               os.path.join(config['tif_dir'], newfname + '.tif' ))
     return downloadPath
 
