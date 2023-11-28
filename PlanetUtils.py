@@ -101,7 +101,7 @@ def PlanetOrder(items:list, polygon_file:str, name:str):
             }
         ],
         "notifications": {
-            "email": True
+            "email": False
             },
         "metadata": {
             "stac": {}
