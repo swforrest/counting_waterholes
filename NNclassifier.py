@@ -294,21 +294,24 @@ def process_clusters(classifications_with_clusters:np.ndarray) -> np.ndarray:
     if len(classifications_with_clusters) == 0:
         return boats
     # as a comprehension:
-    boats = [condense([line for line in classifications_with_clusters 
-                       if line[-1] == i]) 
+    boats = [condense(classifications_with_clusters[classifications_with_clusters[:, -1] == i])
              for i in np.unique(classifications_with_clusters[:, -1])]
     return np.asarray(boats)
 
 
-def condense(cluster:list):
-    files = np.unique(np.asarray(cluster)[:, 6])
+def condense(cluster:np.ndarray):
     # remove cluster number
     thisBoat = np.asarray(cluster)[:, [0, 1, 2, 3, 4, 5]].astype(np.float64)
     thisBoatMean = np.mean(thisBoat, axis=0)
     # using maximum confidence as the cluster confidence
     maxVals = np.max(thisBoat, axis=0)
     thisBoatMean[2] = maxVals[2]
-    return np.append(thisBoatMean, " ".join(files))
+    # use the most common class
+    thisBoatMean[3] = scipy.stats.mode(thisBoat[:, 3])[0]
+    if cluster.shape[1] == 8:
+        files = np.unique(np.asarray(cluster)[:, 6])
+        return np.append(thisBoatMean.astype(str), " ".join(files))
+    return thisBoatMean
 
 def write_to_csv(classifications, day, file):
     # Write to output csv
