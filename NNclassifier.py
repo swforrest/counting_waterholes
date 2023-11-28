@@ -10,9 +10,6 @@ from datetime import datetime
 
 """
 Intended usage:
-    Automatically called once per day
-    Downloads .tif files into directory
-    Runs the classifier on each .tif file (with preprocessing)
     Processes the outputs
     Saves the results to a csv file. 
 
@@ -67,6 +64,9 @@ def process_tif(
     # tif file should have coord details
     static_boats = pixel2latlong(static_boats, file, config["tif_dir"])
     moving_boats = pixel2latlong(moving_boats, file, config["tif_dir"])
+    # add the image name to each classification (as the last column)
+    static_boats = np.c_[static_boats, [file] * len(static_boats)]
+    moving_boats = np.c_[moving_boats, [file] * len(moving_boats)]
     # move the tif into the processed folder
     os.makedirs(path.join(config["tif_dir"], "processed"), exist_ok=True)
     os.rename(path.join(config["tif_dir"], file), path.join(config["tif_dir"], "processed", file))
@@ -174,7 +174,7 @@ def detect_from_tif(file, tif_dir, yolo_dir, python, weights, confidence_thresho
     ics.segment_image_for_classification(png_path, TEMP, 416, 104)
     detect_path = path.join(yolo_dir, "detect.py")
     os.system(f"{python} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights} --source {TEMP}")
-    return read_classifications(file_name, yolo_dir=yolo_dir, confidence_threshold=confidence_threshold)
+    return read_classifications(yolo_dir=yolo_dir, confidence_threshold=confidence_threshold)
 
 def detect_from_dir(dir, yolo_dir, python, weights, confidence_threshold):
     """
@@ -182,29 +182,37 @@ def detect_from_dir(dir, yolo_dir, python, weights, confidence_threshold):
     """
     detect_path = path.join(yolo_dir, "detect.py")
     os.system(f"{python} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights} --source {dir} --device mps")
-    return read_classifications("prerun", yolo_dir=yolo_dir, confidence_threshold=confidence_threshold)
+    return read_classifications(yolo_dir=yolo_dir, confidence_threshold=confidence_threshold)
 
-def file_info(file):
+def classification_file_info(file)->tuple[int, int, list[str]]:
+    """
+    Get information and data from a small png file
+    The file-name is in the format: <.*>_<row>_<col>.txt
+    :param file: The file path to get information from
+    :return tuple: The across, down, and data from the file
+    """
     fname = os.path.basename(file)
-    fileSplit = fname.split(".txt")[0].split("_")
-    row = int(fileSplit[-2])
-    col = int(fileSplit[-1])
+    fname= fname.split(".txt")[0].split("_")
+    row = int(fname[-2])
+    col = int(fname[-1])
     across = col * 104
     down = row * 104
-    with open(path.join(config["tif_dir"], file)) as f:
+    with open(file) as f:
         lines = [line.rstrip() for line in f]
     return across, down, lines
 
 def parse_classifications(file) -> np.ndarray:
     """
-    parse a single text file of classifications
+    parse a single text file of classifications into the desired format 
     :param file: path to text file
-    :return:     array of classifications from the file
+    :return:     array of classifications from the file in the form:
+                 x, y, confidence, class, width, height
     """
-    across, down, lines = file_info(file)
+    across, down, lines = classification_file_info(file)
     if len(lines) == 0:
         return np.array([])
 
+    # split lines into classifications
     classifications = np.array([line.split(" ") for line in lines])
     # if no confidence, add column of 1s (for manual label files)
     if classifications.shape[1] == 5:
@@ -212,6 +220,7 @@ def parse_classifications(file) -> np.ndarray:
     # move columns around
     # from: class, x, y, w, h, conf
     # to:   x, y, conf, class, w, h
+    print(classifications)
     classifications = np.c_[classifications[:, 1], # xMid
                             classifications[:, 2], # yMid
                             classifications[:, 5], # Confidence
@@ -223,6 +232,9 @@ def parse_classifications(file) -> np.ndarray:
     # adjust x and y for the full image
     classifications[:, 0] = classifications[:, 0] * 416.0 + across
     classifications[:, 1] = classifications[:, 1] * 416.0 + down
+    # adjust width and height for the full image
+    classifications[:, 4] = classifications[:, 4] * 416.0
+    classifications[:, 5] = classifications[:, 5] * 416.0
     return classifications
 
 def remove_low_confidence(classifications:np.ndarray, confidence_threshold:float):
@@ -233,16 +245,16 @@ def remove_low_confidence(classifications:np.ndarray, confidence_threshold:float
     classifications = classifications[classifications[:, 2] >= confidence_threshold]
     return classifications, low_confidence
 
-def read_classifications(img_file, yolo_dir=None, class_folder=None, confidence_threshold:float=0.5) -> tuple[np.ndarray, np.ndarray]:
+def read_classifications(yolo_dir=None, class_folder=None, confidence_threshold:float=0.5) -> tuple[np.ndarray, np.ndarray]:
     if class_folder is None:
         assert yolo_dir is not None, "Must provide yolo_dir if class_folder is not provided"
         # Classifications are stored in the CLASS_PATH directory in the latest exp folder
         exps = [int(f.split("exp")[1]) if f != "exp" else 0 for f in os.listdir(os.path.join(yolo_dir, "runs", "detect" )) if "exp" in f]
         latest_exp = max(exps) if max(exps) != 0 else ""
-        classification_path = path.join(os.path.join(yolo_dir, "runs", "detect"), f"exp{latest_exp}", "labels")
+        classification_path = os.path.join(os.path.join(yolo_dir, "runs", "detect"), f"exp{latest_exp}", "labels")
     else:
-        classification_path = path.join(class_folder)
-    all_cs = [parse_classifications(path.join(classification_path, file)) for file in os.listdir(classification_path)]
+        classification_path = os.path.join(class_folder)
+    all_cs = [parse_classifications(os.path.join(classification_path, file)) for file in os.listdir(classification_path)]
     # remove empty arrays
     all_cs = [cs for cs in all_cs if cs.shape[0] != 0]
     if len(all_cs) == 0:
@@ -251,9 +263,6 @@ def read_classifications(img_file, yolo_dir=None, class_folder=None, confidence_
     all_cs = np.concatenate(all_cs)
     # remove low confidence
     classifications, low_confidence = remove_low_confidence(all_cs, confidence_threshold)
-    # add filename to last column
-    classifications = np.c_[classifications, [img_file] * len(classifications)]
-    low_confidence  = np.c_[low_confidence,  [img_file] * len(low_confidence)]
     # remove the classification path
     remove(classification_path)
     return classifications, low_confidence
@@ -309,7 +318,7 @@ def write_to_csv(classifications, day, file):
             outFile.writelines("date,class,images,latitude,longitude,confidence,w,h\n")
 
     # Write the data for that day to a csv
-    lines = [f"{day},{int(float(boat[3]))},{boat[6]},{boat[1]},{boat[0]},{boat[2]},{float(boat[4])*416},{float(boat[5])*416}\n" for boat in classifications]
+    lines = [f"{day},{int(float(boat[3]))},{boat[6]},{boat[1]},{boat[0]},{boat[2]},{boat[4]},{boat[5]}\n" for boat in classifications]
     with open(f"{file}.csv", "a+") as outFile:
         outFile.writelines(lines)
 
