@@ -75,7 +75,7 @@ def plot(NNcsv, NNpicture, save=False, show=True):
     for coord in coords:
         # plot different classes in different colours (numbered)
         x, y, w, h, conf, class_type = coord
-        rect = plt.Rectangle((x - w/2, y - h/2), w, h, fill=False, edgecolor=colors[int(float(class_type))], linewidth=0.2)
+        rect = plt.Rectangle((x - w, y - h), w*2, h*2, fill=False, edgecolor=colors[int(float(class_type))], linewidth=0.2)
         ax.add_patch(rect)
         #plt.text(x - w/2, y - h/2, round(conf, 2), color=colors[int(float(class_type))], size=6)
 # legend with colors
