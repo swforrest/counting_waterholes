@@ -83,11 +83,12 @@ def full_auto():
         if len(options) == 0:
             print("No images found with filter.")
             continue
-        # build a list of dates from min to max
         dates = [min_date]
         while dates[-1] != datetime.datetime.now().strftime("%Y-%m-%d"):
             dates.append((datetime.datetime.strptime(dates[-1], "%Y-%m-%d") + datetime.timedelta(days=1)).strftime("%Y-%m-%d"))
         for date in dates:
+            if date in [l[2] for l in entries if l[1] == aoi]:
+                continue
             fs_date = "".join(date.split("-")) # filesafe date
             items = PlanetUtils.PlanetSelect(options, date)
             if len(items) == 0:
