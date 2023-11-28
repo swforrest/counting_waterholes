@@ -29,6 +29,8 @@ def main():
     """
     Run the classifier on each image in the directory.
     """
+    global config 
+    config = get_config()
     classify_directory(config.get("tif_dir"))
     remove(TEMP)
     remove(TEMP_PNG)
@@ -220,7 +222,6 @@ def parse_classifications(file) -> np.ndarray:
     # move columns around
     # from: class, x, y, w, h, conf
     # to:   x, y, conf, class, w, h
-    print(classifications)
     classifications = np.c_[classifications[:, 1], # xMid
                             classifications[:, 2], # yMid
                             classifications[:, 5], # Confidence
@@ -383,7 +384,5 @@ def pixel2latlong(classifications, file, tif_dir):
     return classifications
 
 if __name__ == "__main__":
-    global config 
-    config = get_config()
     main()
 
