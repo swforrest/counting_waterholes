@@ -94,12 +94,15 @@ class TestClustering:
                                             [22, 30, 0.91, 0, 2, 2],
                                             [9, 10, 0.65, 0, 2, 2]])
         self.one_point = np.array([   [1, 1, 0.93, 0, 2, 2]])
+
+        self.clusters_w_files = np.array([   [1, 1, 0.93, 0, 2, 2, "test1.jpg"],
+                                            [4, 5, 0.91, 0, 2, 2, "test2.jpg"]])
         yield
 
     def test_cluster(self):
         clusters = NNclassifier.cluster(self.classifications, cutoff=6)
-        assert len(clusters) == 3                   # all 3 points returned
-        assert set(np.unique(clusters[:, -1])) == {1, 2} # 2 clusters 
+        assert len(clusters) == 3                           # all 3 points returned
+        assert set(np.unique(clusters[:, -1])) == {1, 2}    # 2 clusters 
         # get points in each cluster
         cluster1 = clusters[clusters[:, -1] == 1]
         cluster2 = clusters[clusters[:, -1] == 2]
@@ -110,13 +113,40 @@ class TestClustering:
 
     def test_cluster_no_clusters(self):
         clusters = NNclassifier.cluster(self.no_clusters, cutoff=6)
-        assert len(clusters) == 3                   # all 3 points returned
-        assert set(np.unique(clusters[:,-1])) == {1, 2, 3} # 3 clusters
+        assert len(clusters) == 3                           # all 3 points returned
+        assert set(np.unique(clusters[:,-1])) == {1, 2, 3}  # 3 clusters
 
     def test_cluster_one_point(self):
         clusters = NNclassifier.cluster(self.one_point, cutoff=6)
-        assert len(clusters) == 1                   # all 3 points returned
-        assert set(np.unique(clusters[:,-1])) == {1} # 2 clusters
+        assert len(clusters) == 1                    # 1 point returned
+        assert set(np.unique(clusters[:,-1])) == {1} # in its own cluster
+
+    def test_process_clusters(self):
+        clusters = NNclassifier.cluster(self.classifications, cutoff=6)
+        processed = NNclassifier.process_clusters(clusters)
+        # should no longer have cluster numbers
+        assert processed.shape == (2, 6)
+
+    def test_process_clusters_no_clusters(self):
+        clusters = NNclassifier.cluster(self.no_clusters, cutoff=6)
+        processed = NNclassifier.process_clusters(clusters)
+        # should no longer have cluster numbers, but should have all 3 points
+        assert processed.shape == (3, 6)
+
+    def test_process_clusters_one_point(self):
+        clusters = NNclassifier.cluster(self.one_point, cutoff=6)
+        processed = NNclassifier.process_clusters(clusters)
+        # should get the point back
+        assert processed.shape == (1, 6)
+
+    def test_process_clusters_w_files(self):
+        clusters = NNclassifier.cluster(self.clusters_w_files, cutoff=6)
+        processed = NNclassifier.process_clusters(clusters)
+        # should no longer have cluster numbers
+        assert processed.shape == (1, 7)
+        # should have both file names, space separated
+        assert processed[0, -1] == "test1.jpg test2.jpg"
+
 
 
 
