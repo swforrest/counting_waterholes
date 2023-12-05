@@ -29,6 +29,12 @@ def main():
     """
     Run the classifier on each image in the directory.
     """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--directory",    help="directory of images to classify (can be subdirs)", required=False)
+    arg_directory = parser.parse_args().directory
+    if arg_directory is not None:
+        # just classify and cluster the images in the given directory
+        return
     global config 
     config = get_config()
     classify_directory(config.get("tif_dir"))
@@ -176,14 +182,14 @@ def detect_from_tif(file, tif_dir, yolo_dir, python, weights, confidence_thresho
     ics.segment_image_for_classification(png_path, TEMP, 416, 104)
     detect_path = path.join(yolo_dir, "detect.py")
     os.system(f"{python} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights} --source {TEMP}")
-    return read_classifications(yolo_dir=yolo_dir, confidence_threshold=confidence_threshold)
+    return read_classifications(yolo_dir=yolo_dir, confidence_threshold=confidence_threshold, delete_folder=True)
 
 def detect_from_dir(dir, yolo_dir, python, weights, confidence_threshold):
     """
     Detect from a directory containing 416x416 images
     """
     detect_path = path.join(yolo_dir, "detect.py")
-    os.system(f"{python} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights} --source {dir} --device mps")
+    os.system(f"{python} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights} --source {dir}")
     return read_classifications(yolo_dir=yolo_dir, confidence_threshold=confidence_threshold)
 
 def classification_file_info(file)->tuple[int, int, list[str]]:
@@ -246,7 +252,16 @@ def remove_low_confidence(classifications:np.ndarray, confidence_threshold:float
     classifications = classifications[classifications[:, 2] >= confidence_threshold]
     return classifications, low_confidence
 
-def read_classifications(yolo_dir=None, class_folder=None, confidence_threshold:float=0.5) -> tuple[np.ndarray, np.ndarray]:
+def read_classifications(yolo_dir=None, class_folder=None, confidence_threshold:float=0.5, delete_folder=False) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Read classifications from either the given directory, or the latest detection from yolo.
+    Classifications are per-image, this function reads all files and returns a single list.
+    :param yolo_dir: The directory where yolo is installed, used to find the latest detection.
+    :param class_folder: The folder to read classifications from. If None, reads from the latest detection in yolo.
+    :param confidence_threshold = 0.5: The confidence threshold to use when separating low confidence classifications.
+    :param delete_folder: Whether to delete the classification folder after reading.
+    :return tuple[classifications, low_conf]: where each is in the form (x, y, conf, class, w, h)
+    """
     if class_folder is None:
         assert yolo_dir is not None, "Must provide yolo_dir if class_folder is not provided"
         # Classifications are stored in the CLASS_PATH directory in the latest exp folder
@@ -265,7 +280,8 @@ def read_classifications(yolo_dir=None, class_folder=None, confidence_threshold:
     # remove low confidence
     classifications, low_confidence = remove_low_confidence(all_cs, confidence_threshold)
     # remove the classification path
-    remove(classification_path)
+    if delete_folder:
+        remove(classification_path)
     return classifications, low_confidence
 
 def cluster(classifications:np.ndarray, cutoff:float) -> np.ndarray:
