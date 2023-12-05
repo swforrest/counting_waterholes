@@ -32,7 +32,7 @@ and output:
       - false negatives
 """
 
-STAT_DISTANCE_CUTOFF_PIX = 4
+STAT_DISTANCE_CUTOFF_PIX = 6
 MOVING_DISTANCE_CUTOFF_PIX = 10
 CONF_THRESHOLD = 0.5
 
@@ -43,19 +43,19 @@ def process_image(path, labels, summary):
         print(f"Label directory {label_dir} does not exist, skipping...")
         return []
     # ML classifications
-    ML_classifications, _ = read_classifications("ml", class_folder=path, confidence_threshold=CONF_THRESHOLD)
-    ML_classifications_stat = ML_classifications[ML_classifications[:, 3] == "0.0"] 
+    ML_classifications, _ = read_classifications(class_folder=path, confidence_threshold=CONF_THRESHOLD)
+    ML_classifications_stat = ML_classifications[ML_classifications[:, 3] == 0.0] 
     summary["detected_stat"] += len(ML_classifications_stat)
-    ML_classifications_moving = ML_classifications[ML_classifications[:, 3] == "1.0"]
+    ML_classifications_moving = ML_classifications[ML_classifications[:, 3] == 1.0]
     summary["detected_mov"] += len(ML_classifications_moving)
     # cluster
     ML_clusters_stat = cluster(ML_classifications_stat, STAT_DISTANCE_CUTOFF_PIX)
     ML_clusters_moving = cluster(ML_classifications_moving, MOVING_DISTANCE_CUTOFF_PIX)
     # manual annotations
-    manual_annotations, _ = read_classifications("manual", class_folder=label_dir)
-    manual_annotations_stat = manual_annotations[manual_annotations[:, 3] == "0.0"]
+    manual_annotations, _ = read_classifications(class_folder=label_dir)
+    manual_annotations_stat = manual_annotations[manual_annotations[:, 3] == 0.0]
     summary["labelled_stat"] += len(manual_annotations_stat)
-    manual_annotations_moving = manual_annotations[manual_annotations[:, 3] == "1.0"]
+    manual_annotations_moving = manual_annotations[manual_annotations[:, 3] == 1.0]
     summary["labelled_mov"] += len(manual_annotations_moving)
     # cluster
     manual_clusters_stat = cluster(manual_annotations_stat, STAT_DISTANCE_CUTOFF_PIX)
@@ -171,6 +171,12 @@ def compare(ml:np.ndarray, manual:np.ndarray, cutoff):
     :param manual: list of clusters in form [x, y, confidence, class, width, height, filename]
     :return list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]
     """
+    # add "ml" to the end of each ml cluster
+    if len(ml) > 0:
+        ml = np.c_[ml, np.full(len(ml), "ml")]
+    # add "manual" to the end of each manual cluster
+    if len(manual) > 0:
+        manual = np.c_[manual, np.full(len(manual), "manual")]
     # one of ml or manual could be empty so we need to check
     if len(ml) == 0:
         all = manual
@@ -201,6 +207,9 @@ def compare(ml:np.ndarray, manual:np.ndarray, cutoff):
     for cluster in np.unique(clusters):
         res = [0., 0., -1, -1] # x, y, ml class, manual class
         points = points_with_cluster[points_with_cluster[:, -1] == str(cluster)]
+        if len(points) == 0:
+            print("No points in cluster")
+            continue
         # 6th is the source, 3 is the class
         ml_cls = []
         manual_cls = []
@@ -210,9 +219,9 @@ def compare(ml:np.ndarray, manual:np.ndarray, cutoff):
             x += float(point[0])
             y += float(point[1])
             if point[6] == "ml":
-                ml_cls.append(point[3])
+                ml_cls.append(int(float(point[3])))
             elif point[6] == "manual":
-                manual_cls.append(point[3])
+                manual_cls.append(int(float(point[3])))
         res[0] = round(x / len(points), 3)
         res[1] = round(y / len(points), 3)
         # class should be most common class
@@ -300,31 +309,15 @@ def plot_boats(csvs:str, imgs:str, **kwargs):
         plt.savefig(os.path.join(outdir, csv.split("/")[-1].split(".")[0] + ".png"), dpi=1000, bbox_inches="tight")
         plt.close()
 
+def segregate():
+    # ask for the directory
+    directory = input("Enter the directory: ")
+    # separate by day
+    days = segregate_by_day(directory)
+    # separate by image
+    for day in days:
+        segregate_by_image(day, day)
 
-
-if __name__ == "__main__":
-    argparser = argparse.ArgumentParser()
-    argparser.description = "Cluster classifications and labels from yolo and manual annotations to compare them. File names must be identical between given arguments"
-    argparser.add_argument("-c", "--classifications", help="Directory of classifications from yolo (can contain multiple direcories)", required=False)
-    argparser.add_argument("-l", "--labels", help="Directory of manual annotations (can contain multiple direcories)", required=False) 
-    argparser.add_argument("-o", "--outdir", help="Directory to dump output csvs", required=False)
-    argparser.add_argument("-i", "--imgs", help="Directory with images", required=False)
-    argparser.add_argument("-s", "--summaries", help="Directory with summary CSVs", required=False)
-    args = argparser.parse_args()
-    classifications = args.classifications
-    labels = args.labels
-    outdir = args.outdir
-    imgs = args.imgs
-    summaries = args.summaries
-
-    # check what we want to do
-    print("1. Cluster and compare")
-    print("2. Plot boats")
-    choice = input("Enter a number: ")
-    if choice == "1":
-        main(classifications, labels, outdir)
-    elif choice == "2":
-        plot_boats(summaries, imgs)
 
 
 
@@ -359,12 +352,64 @@ def segregate_by_image(directory, into=None):
     for file in os.listdir(directory):
         # everything before the 2nd last underscore is the image name
         img = file[:file.rfind("_", 0, file.rfind("_"))]
-        print(img)
         if img not in imgs:
-            print(img)
             imgs.append(img)
             os.mkdir(os.path.join(into, img))
         os.rename(os.path.join(directory, file), os.path.join(into, img, file))
     # return the directories
     return [os.path.join(directory, img) for img in imgs]
+
+def infer_from_imgs(img_dir, classification_dir):
+    # img dir has subdirectories with images (416x416) and stitched.png
+    # classification dir should end up mirroring img dir, but with classifications
+    weights = "/Users/charlieturner/Documents/CountingBoats/best_weights.pt"
+    for root, subdirs, files in os.walk(img_dir):
+        if len(files) > 0 and files[0].endswith(".png") and "stitched" not in root:
+            # we are in a directory with images
+            this_classification_dir = os.path.join(classification_dir, "/".join(root.split("/")[-2:]))
+            os.makedirs(this_classification_dir, exist_ok=True)
+            # move stitched.png to stitched/stiched.png
+            if os.path.exists(os.path.join(root, "stitched.png")):
+                os.mkdir(os.path.join(root, "stitched"))
+                os.rename(os.path.join(root, "stitched.png"), os.path.join(root, "stitched", "stitched.png"))
+            # classify the imgs in this dir
+            yolo = "/Users/charlieturner/yolov5"
+            os.system(f"python {yolo}/detect.py --imgsz 416 --save-txt --save-conf --weights {weights} --source {root}")
+            # move the classifications to the classification dir
+            # currently in ~/yolov5/runs/detect/exp{""|num}/labels
+            exps = [int(f.split("exp")[1]) if f != "exp" else 0 for f in os.listdir(os.path.join(yolo, "runs", "detect" )) if "exp" in f]
+            latest_exp = max(exps) if max(exps) != 0 else ""
+            os.rename(os.path.join(yolo, "runs", "detect", f"exp{latest_exp}", "labels"), this_classification_dir)
+
+
+if __name__ == "__main__":
+    argparser = argparse.ArgumentParser()
+    argparser.description = "Cluster classifications and labels from yolo and manual annotations to compare them. File names must be identical between given arguments"
+    argparser.add_argument("-c", "--classifications", help="Directory of classifications from yolo (can contain multiple direcories)", required=False)
+    argparser.add_argument("-l", "--labels", help="Directory of manual annotations (can contain multiple direcories)", required=False) 
+    argparser.add_argument("-o", "--outdir", help="Directory to dump output csvs", required=False)
+    argparser.add_argument("-i", "--imgs", help="Directory with images", required=False)
+    argparser.add_argument("-s", "--summaries", help="Directory with summary CSVs", required=False)
+    args = argparser.parse_args()
+    classifications = args.classifications
+    labels = args.labels
+    outdir = args.outdir
+    imgs = args.imgs
+    summaries = args.summaries
+
+    # check what we want to do
+    print("1. Cluster and compare")
+    print("2. Plot boats")
+    print("3. Separate Files")
+    print("4. Infer From Images")
+    choice = input("Enter a number: ")
+    if choice == "1":
+        main(classifications, labels, outdir)
+    elif choice == "2":
+        plot_boats(summaries, imgs)
+    elif choice == "3":
+        segregate()
+    elif choice == "4":
+        infer_from_imgs(imgs, classifications)
+
 
