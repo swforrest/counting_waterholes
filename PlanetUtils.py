@@ -40,8 +40,6 @@ def PlanetSearch(
     auth = (API_KEY, '')
     response = requests.post('https://api.planet.com/data/v1/quick-search',
                                 data=search_body, headers=headers, auth=auth)
-    with open('response.json', 'w') as f:
-        f.write(response.text)
     if response.status_code != 200:
         print(response.text)
         raise Exception('Planet API returned non-200 status code')
@@ -118,12 +116,6 @@ def PlanetOrder(items:list, polygon_file:str, name:str):
     # make the request
     response = requests.post('https://api.planet.com/compute/ops/orders/v2',
                                 data=json.dumps(order_body), headers=headers, auth=(API_KEY, ''))
-
-    #TODO: Handle response codes
-
-    # write the response to a file
-    with open('order_response.json', 'w') as f:
-        f.write(response.text)
     # return that
     return response.json()
 
@@ -138,9 +130,6 @@ def PlanetCheckOrder(orderID:str):
     """
     uri = f"https://api.planet.com/compute/ops/orders/v2/{orderID}"
     response = requests.get(uri, auth=(API_KEY, ''))
-    # write the response to a file
-    with open('order_status.json', 'w') as f:
-        f.write(response.text)
     return response.json()['state']
 
 
@@ -170,7 +159,7 @@ def PlanetDownload(orderID:str):
                 if chunk:
                     f.write(chunk)
                     progress += len(chunk)
-                    print(f"Downloaded {progress} bytes", end='\r') 
+                    print(f"{orderID} \t Downloaded {progress} bytes", end='\r') 
     print()
     # unzip the file
     with zipfile.ZipFile(downloadFile, 'r') as zip_ref:
@@ -204,39 +193,17 @@ get_polygon = lambda aoi: os.path.join(config['planet']['polygons'], aoi + '.jso
 if __name__ == "__main__":
     # prompt for what to do
     print('What would you like to do?')
-    print('1. Search')
-    print('2. Select')
-    print('3. Order')
-    print('4. Check Order')
-    print('5. Download')
+    print('1. Check Order')
+    print('2. Download')
     choice = input('Enter a number: ')
     if choice == '1':
-        # prompt for search path
-        search_path = input('Enter the path to the search json: ')
-        # search
-        result = PlanetSearch(search_path)
-        # print the result
-        print(result)
-    elif choice == '2':
-        search_path = input('Enter the path to the search json: ')
-        items = PlanetSearch(search_path)
-        if items is not None:
-            PlanetSelect(items)
-    elif choice == '3':
-        search_path = input('Enter the path to the search json: ')
-        items = PlanetSearch(search_path)
-        if items is not None:
-            items = PlanetSelect(items)
-        polygon_file = input('Enter the path to the polygon file: ')
-        name = input('Enter the name of the order: ')
-        PlanetOrder(items, polygon_file, name)
-    elif choice == '4':
         orderID = input('Enter the order ID: ')
-        PlanetCheckOrder(orderID)
-    elif choice == '5':
+        state = PlanetCheckOrder(orderID)
+        print(f'Order {orderID} is {state}')
+    elif choice == '2':
         orderID = input('Enter the order ID: ')
         downloadPath = input('Enter the path to download to: ')
-        PlanetDownload(orderID, downloadPath)
+        PlanetDownload(orderID)
     else:
         print('Not implemented yet')
 
