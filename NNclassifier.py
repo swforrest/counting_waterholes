@@ -262,6 +262,7 @@ def read_classifications(yolo_dir=None, class_folder=None, confidence_threshold:
     :param delete_folder: Whether to delete the classification folder after reading.
     :return tuple[classifications, low_conf]: where each is in the form (x, y, conf, class, w, h)
     """
+    latest_exp = None
     if class_folder is None:
         assert yolo_dir is not None, "Must provide yolo_dir if class_folder is not provided"
         # Classifications are stored in the CLASS_PATH directory in the latest exp folder
@@ -280,8 +281,9 @@ def read_classifications(yolo_dir=None, class_folder=None, confidence_threshold:
     # remove low confidence
     classifications, low_confidence = remove_low_confidence(all_cs, confidence_threshold)
     # remove the classification path
-    if delete_folder:
-        remove(classification_path)
+    if delete_folder and latest_exp is not None:
+        folder = os.path.join(yolo_dir, "runs", "detect", f"exp{latest_exp}")
+        remove(folder)
     return classifications, low_confidence
 
 def cluster(classifications:np.ndarray, cutoff:float) -> np.ndarray:
