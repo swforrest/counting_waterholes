@@ -251,6 +251,7 @@ def plot_boats(csvs:str, imgs:str, **kwargs):
         outdir = csvs
     all_csvs = [os.path.join(csvs, file) for file in os.listdir(csvs) if file.endswith(".csv") and "summary" not in file]
     all_images = [os.path.join(root, file) for root, dirs, files in os.walk(imgs) for file in files if file == "stitched.png"]
+    i = 0
     for csv in all_csvs:
         # get the corresponding image
         img = [image for image in all_images if csv.split("/")[-1].split(".")[0] in image]
@@ -308,6 +309,8 @@ def plot_boats(csvs:str, imgs:str, **kwargs):
                 labels=["Detected and Labelled Static", "Detected and Labelled Moving", "Disagreement", "Detected but not Labelled", "Labelled but not Detected"], loc="upper right", bbox_to_anchor=(1.1, 1.1), prop={"size": 6})
         plt.savefig(os.path.join(outdir, csv.split("/")[-1].split(".")[0] + ".png"), dpi=1000, bbox_inches="tight")
         plt.close()
+        i += 1
+        print(f"Plotted {i}/{len(all_images)} images", end="\r")
 
 def segregate():
     # ask for the directory
