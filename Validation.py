@@ -4,6 +4,7 @@ import numpy as np
 import scipy.cluster
 import scipy.spatial
 import matplotlib.pyplot as plt
+import shutil
 import imageCuttingSupport as ics
 from sklearn.metrics import ConfusionMatrixDisplay, f1_score 
 from NNclassifier import read_classifications, cluster, process_clusters
@@ -34,10 +35,11 @@ and output:
 
 STAT_DISTANCE_CUTOFF_PIX = 6
 MOVING_DISTANCE_CUTOFF_PIX = 10
+COMPARE_DISTANCE_CUTOFF_PIX = 8
 CONF_THRESHOLD = 0.5
 
 def process_image(path, labels, summary):
-    label_dir = os.path.join(labels, "/".join(path.split("/")[-2:]))
+    label_dir = os.path.join(labels, os.path.sep.join(path.split("/")[-2:]))
     # check if it exists
     if not os.path.exists(label_dir):
         print(f"Label directory {label_dir} does not exist, skipping...")
@@ -69,9 +71,11 @@ def process_image(path, labels, summary):
     summary["labelled_stat_clusters"] += len(manual_clusters_stat)
     manual_clusters_moving = process_clusters(manual_clusters_moving)
     summary["labelled_mov_clusters"] += len(manual_clusters_moving)
-    stat = compare(ML_clusters_stat, manual_clusters_stat, STAT_DISTANCE_CUTOFF_PIX)
-    moving = compare(ML_clusters_moving, manual_clusters_moving, MOVING_DISTANCE_CUTOFF_PIX)
-    return stat + moving
+
+    ML_clusters = np.concatenate((ML_clusters_stat, ML_clusters_moving))
+    manual_clusters = np.concatenate((manual_clusters_stat, manual_clusters_moving))
+    comparison = compare(ML_clusters, manual_clusters, COMPARE_DISTANCE_CUTOFF_PIX)
+    return comparison
 
 def main(classifications, labels, outdir):
     """
@@ -293,6 +297,24 @@ def plot_boats(csvs:str, imgs:str, **kwargs):
             if "skip" in kwargs and kwargs["skip"] == True and color == "g":
                 continue
             rect = plt.Rectangle((x-5, y-5), 10, 10, linewidth=0.1, edgecolor=color, facecolor="none")
+            if color == "r":
+                # also draw a big circle around the boat (50x50)
+                circ = plt.Circle((x, y), 50, linewidth=0.3, edgecolor=color, facecolor="none")
+                ax.add_patch(circ)
+                # and annotate the detection as "ML: 0"
+                ax.annotate(f"ML: {ml}", (x, y), color=color, fontsize=6)
+            if color == "y":
+                # also draw a big star around the boat (50x50)
+                star = plt.Polygon(np.array([[x-50, y-50], [x+50, y-50], [x, y+50]]), linewidth=0.3, edgecolor=color, facecolor="none")
+                ax.add_patch(star)
+                # and annotate the label as "Label: 1"
+                ax.annotate(f"Label: {manual}", (x, y), color=color, fontsize=6)
+            if color == "orange":
+                # also draw a big square
+                square = plt.Rectangle((x-50, y-50), 100, 100, linewidth=0.3, edgecolor=color, facecolor="none")
+                ax.add_patch(square)
+                # and annotate the detection as "ML: 0, Label: 1"
+                ax.annotate(f"ML: {ml}, Label: {manual}", (x, y), color=color, fontsize=6)
             ax.add_patch(rect)
             if color == "orange":
                 # also annotate the boat with the classes as "ML: 0, Label: 1"
@@ -336,7 +358,11 @@ def segregate_by_day(directory, into=None):
     days = []
     print("Segregating by day...")
     for file in os.listdir(directory):
-        if (date := ics.get_date_from_filename(file).replace("/", "_")) not in days:
+        date = ics.get_date_from_filename(file)
+        if date is None:
+            print(f"Could not get date from {file}")
+            continue
+        if (date := date.replace("/", "_")) not in days:
             print(date)
             days.append(date)
             os.mkdir(os.path.join(into, date))
@@ -362,6 +388,110 @@ def segregate_by_image(directory, into=None):
     # return the directories
     return [os.path.join(directory, img) for img in imgs]
 
+def all_possible_imgs(x, y):
+    """
+    return a list of tuples (row, col) that would contain the given x and y coords
+    """
+    row = y // 104 - 1
+    col = x // 104 - 1
+    options = []
+    # NOTE: we do it like this to try to keep the 'best' subimages as highest priority
+    for i in [0,-1, 1]:
+        for j in [0, -1, 1]:
+            options.append((row + i, col + j))
+    for i in [-2, 2]:
+        for j in [0, 1, -1, -2, 2]:
+            options.append((row + i, col + j))
+
+    return options
+
+def find_ml_mistakes(summary_dir, img_dir):
+    """
+    Given a summary csv, find the images where there is a mistake made.
+    Since the x and y in the summary refer to the entire image, we need to 
+    calculate the subimage(s) that the boat is in. save the best subimage (most central)
+    to a new directory with the type of mistake (e.g "false_positive")
+    """
+    output_dir = os.path.join(summary_dir, "mistakes")
+    os.makedirs(output_dir, exist_ok=True)
+    # for image:
+    #   for boat:
+    #       if mistake:
+    #           find the subimage
+    #           draw a box around the boat
+    #           save the image
+    csvs = [os.path.join(summary_dir, file) for file in os.listdir(summary_dir) if file.endswith(".csv") and "summary" not in file]
+    for csv in csvs:
+        csv_name = os.path.basename(csv)
+        day = csv_name.split("_")[0][-2:]
+        month = csv_name.split("_")[0][-4:-2]
+        year = csv_name.split("_")[0][-8:-4]
+        this_img_dir = os.path.join(img_dir, f"{day}_{month}_{year}", csv_name.split(".")[0])
+        if not os.path.exists(this_img_dir):
+            print(f"Could not find image directory for {csv_name}")
+            print(f"Expected {this_img_dir}")
+            continue
+        boats = np.asarray([line.strip().split(",") for line in open(csv) if line[0] != "x"])
+        for boat in boats:
+            if boat[2] != boat[3]:
+                x = float(boat[0])
+                y = float(boat[1])
+                # get the best subimage
+                row = min(y // 104 - 1, 1)
+                col = min(x // 104 - 1, 1)
+                # get the image
+                img_path = os.path.join(this_img_dir, csv_name.split(".")[0] + "_" + str(int(row)) + "_" + str(int(col)) + ".png")
+                if not os.path.exists(img_path):
+                    all_imgs = all_possible_imgs(x, y)
+                    # find one img that does exists
+                    for row, col in all_imgs:
+                        img_path = os.path.join(this_img_dir, csv_name.split(".")[0] + "_" + str(int(row)) + "_" + str(int(col)) + ".png")
+                        if os.path.exists(img_path):
+                            break
+                        img_path = ""
+                    if img_path == "":
+                        print(f"Could not find section for {csv_name} with x={x}, y={y}")
+                        print("*" * 80)
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+                ax.imshow(plt.imread(img_path))
+                # draw a box around the boat. 10x10 pixels.
+                #   Red if   : detected but not labelled
+                #   Yellow if: labelled but not detected
+                ml = int(float(boat[2]))
+                manual = int(float(boat[3]))
+                rel_x = x - (col * 104) 
+                rel_y = y - (row * 104) 
+                if ml != -1 and manual != -1 and ml != manual:
+                    # also draw a big square
+                    rect = plt.Rectangle((rel_x-10, rel_y-10), 20, 20, linewidth=0.3, edgecolor="gray", facecolor="none")
+                    square = plt.Rectangle((rel_x-50, rel_y-50), 100, 100, linewidth=0.3, edgecolor="orange", facecolor="none")
+                    ax.add_patch(square)
+                    # and annotate the detection as "ML: 0, Label: 1"
+                    ax.annotate(f"ML: {ml}, Label: {manual}", (rel_x, rel_y), color="orange", fontsize=6)
+                elif ml != -1 and manual == -1:
+                    # also draw a big circle around the boat (50x50)
+                    rect = plt.Rectangle((rel_x-10, rel_y-10), 20, 20, linewidth=0.3, edgecolor="gray", facecolor="none")
+                    circ = plt.Circle((rel_x, rel_y), 50, linewidth=0.3, edgecolor="r", facecolor="none")
+                    ax.add_patch(circ)
+                    # and annotate the detection as "ML: 0"
+                    ax.annotate(f"ML: {ml}", (rel_x, rel_y), color="r", fontsize=6)
+                else:
+                    # also draw a big star around the boat (50x50)
+                    rect = plt.Rectangle((rel_x-10, rel_y-10), 20, 20, linewidth=0.3, edgecolor="gray", facecolor="none")
+                    star = plt.Polygon(np.array([[rel_x-50, rel_y-50], [rel_x+50, rel_y-50], [rel_x, rel_y+50]]), linewidth=0.3, edgecolor="y", facecolor="none")
+                    ax.add_patch(star)
+                    # and annotate the label as "Label: 1"
+                    ax.annotate(f"Label: {manual}", (rel_x, rel_y), color="y", fontsize=6)
+                ax.add_patch(rect)
+                # save the image in really high quality with no axis labels
+                plt.axis("off")
+                plt.savefig(os.path.join(output_dir, csv_name.split(".")[0] + "_" + str(int(row)) + "_" + str(int(col)) + ".png"), dpi=1000, bbox_inches="tight")
+                plt.close()
+    print("Done")
+
+
+
 def infer_from_imgs(img_dir, classification_dir):
     # img dir has subdirectories with images (416x416) and stitched.png
     # classification dir should end up mirroring img dir, but with classifications
@@ -382,7 +512,11 @@ def infer_from_imgs(img_dir, classification_dir):
             # currently in ~/yolov5/runs/detect/exp{""|num}/labels
             exps = [int(f.split("exp")[1]) if f != "exp" else 0 for f in os.listdir(os.path.join(yolo, "runs", "detect" )) if "exp" in f]
             latest_exp = max(exps) if max(exps) != 0 else ""
-            os.rename(os.path.join(yolo, "runs", "detect", f"exp{latest_exp}", "labels"), this_classification_dir)
+            # os.rename(os.path.join(yolo, "runs", "detect", f"exp{latest_exp}", "labels"), this_classification_dir)
+            # dir isn't empty, use shutil instead:
+            for file in os.listdir(os.path.join(yolo, "runs", "detect", f"exp{latest_exp}", "labels")):
+                shutil.move(os.path.join(yolo, "runs", "detect", f"exp{latest_exp}", "labels", file), this_classification_dir)
+            print(f"Classified {root}, saved to {this_classification_dir}")
 
 
 if __name__ == "__main__":
@@ -405,6 +539,7 @@ if __name__ == "__main__":
     print("2. Plot boats")
     print("3. Separate Files")
     print("4. Infer From Images")
+    print("5. Highlight ML Mistakes")
     choice = input("Enter a number: ")
     if choice == "1":
         main(classifications, labels, outdir)
@@ -414,5 +549,7 @@ if __name__ == "__main__":
         segregate()
     elif choice == "4":
         infer_from_imgs(imgs, classifications)
+    elif choice == "5":
+        find_ml_mistakes(summaries, imgs)
 
 
