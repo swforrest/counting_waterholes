@@ -271,7 +271,7 @@ def read_classifications(yolo_dir=None, class_folder=None, confidence_threshold:
         classification_path = os.path.join(os.path.join(yolo_dir, "runs", "detect"), f"exp{latest_exp}", "labels")
     else:
         classification_path = os.path.join(class_folder)
-    all_cs = [parse_classifications(os.path.join(classification_path, file)) for file in os.listdir(classification_path)]
+    all_cs = [parse_classifications(os.path.join(classification_path, file)) for file in os.listdir(classification_path) if not "DS" in file]
     # remove empty arrays
     all_cs = [cs for cs in all_cs if cs.shape[0] != 0]
     if len(all_cs) == 0:
@@ -308,8 +308,7 @@ def process_clusters(classifications_with_clusters:np.ndarray) -> np.ndarray:
     :param classifications_with_clusters: The classifications as x, y, confidence, class, width, height, filename, cluster
     :return: An array of the condensed classifications in the form: x, y, confidence, class, width, height, filenames
     """
-    boats = np.array([])
-    classifications_with_clusters = classifications_with_clusters
+    boats = np.array([], dtype=np.float64).reshape(0, 6)
     if len(classifications_with_clusters) == 0:
         return boats
     # as a comprehension:
