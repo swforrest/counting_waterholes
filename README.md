@@ -29,18 +29,27 @@ Extendable to any images from any area, the reccommended pipeline runs as follow
 ### Installation
 #### Yolov5
 
+Clone [YoloV5](https://github.com/ultralytics/yolov5). This is used for the Neural Network detections.
 
 #### Python Dependencies
 It's reccommended to install a conda-based package manager such as [Miniconda](https://docs.conda.io/projects/miniconda/en/latest/). 
 Running the following will then install all required dependencies:
+
 ```
 conda create --name CountingBoats --file requirements.txt
 ```
-Activate the environment (if not already) with `conda activate CountingBoats`, and you should be good to go.
 
+Activate the environment (if not already) with `conda activate CountingBoats`, and you should be good to go.
 
 ### Setup
 
+#### Configuration
+Set the variables in `config.yml` to align with your environment and preferences.
+
+####
+
 ### Running
+
+#### Full-Auto With
 
 ## Acknowledgements
