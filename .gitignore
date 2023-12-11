@@ -2,6 +2,7 @@
 .DS_Store
 TrainImages
 RawImages
+TestImgs
 temp
 .env
 *pycache*
