@@ -89,7 +89,7 @@ def add_margin(pil_img, left, right, top, bottom, color):
     return result
 
 
-def segment_image(image, json_file, size, overlap_size, metadata_components):
+def segment_image(image, json_file, size, overlap_size, metadata_components=None):
     """
     Segments a large .tif file into smaller .png files for use in a neural network. Also created
     files in the IMGtxts directory which contain the annotations present in that sub image.
@@ -211,7 +211,7 @@ def segment_image(image, json_file, size, overlap_size, metadata_components):
             # smaller/segmented image.
             im_name = os.path.basename(image).split(".")[0] + "_" + str(i) + "_" + str(j) + ".txt"
 
-            path = os.path.join(os.getcwd(), "IMGtxts", im_name)
+            path = os.path.join(os.getcwd(), "Labels", im_name)
             outfile = open(path, 'a+')
 
             if len(subsetClassifications) > 0:
@@ -232,7 +232,7 @@ def segment_image(image, json_file, size, overlap_size, metadata_components):
 
             outfile.close()
         print(str("Progress: " + str(int(float(i / ((height / overlap_size) - 5)) * 100)) +
-                  "%"))
+                  "%"), end="\r")
 
 def segment_image_for_classification(image, data_path, size, overlap_size):
     """
