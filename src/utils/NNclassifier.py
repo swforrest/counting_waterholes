@@ -1,4 +1,3 @@
-import imageCuttingSupport as ics
 import numpy as np
 import os
 import os.path as path
@@ -6,6 +5,7 @@ import scipy.cluster
 import scipy.spatial
 import argparse
 import yaml
+from . import imageCuttingSupport as ics
 from datetime import datetime
 
 """

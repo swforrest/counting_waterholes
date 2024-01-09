@@ -1,4 +1,12 @@
 """
+With Flag --full-auto, runs in full auto mode.
+1. Orders all AOIs for any days in the last {--history} days that we don't have yet
+2. Checks if any previous orders are complete
+3. Downloads completed orders
+4. Counts the boats
+5. Saves the results to the ???????????
+
+else:
 The semi-automated boat counter.
 1. Asks: New order or existing?
 NEW:
@@ -28,9 +36,10 @@ import argparse
 def main():
     parser = argparse.ArgumentParser(description="Count the boats!")
     parser.add_argument("-a", "--full-auto", action="store_true", help="Run in full auto mode")
+    parser.add_argument("-d", "--history", type=int, default=14, help="Number of days to check for new images")
     args = parser.parse_args()
     if args.full_auto:
-        full_auto()
+        full_auto(args.history)
     else:
         choice = input("New order or existing? (N/E): ")
         if choice == "N":
@@ -41,7 +50,7 @@ def main():
             print("Invalid choice. Exiting.")
             exit()
 
-def full_auto():
+def full_auto(days):
     """
     Runs the program in full auto mode
     1. Orders all three AOIs for any days in the last 14 days that we don't have yet

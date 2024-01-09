@@ -89,7 +89,7 @@ def add_margin(pil_img, left, right, top, bottom, color):
     return result
 
 
-def segment_image(image, json_file, size, overlap_size, metadata_components=None):
+def segment_image(image, json_file, size, overlap_size, metadata_components=None, remove_empty=0.9):
     """
     Segments a large .tif file into smaller .png files for use in a neural network. Also created
     files in the IMGtxts directory which contain the annotations present in that sub image.
@@ -165,9 +165,9 @@ def segment_image(image, json_file, size, overlap_size, metadata_components=None
             subsetClassifications = [classification for classification in allImageClassifications if
                                      classification.in_bounds(left, right, top, bottom)]
 
-            if subsetClassifications is None or subsetClassifications == []:
+            if remove_empty>0 and (subsetClassifications is None or subsetClassifications == []):
                 subsetClassifications = []
-                if random.uniform(0, 1) < 0.9:
+                if random.uniform(0, 1) < remove_empty: 
                     continue
 
             for f in range(0, size - 1, 8):
@@ -300,7 +300,7 @@ def segment_image_for_classification(image, data_path, size, overlap_size):
                 else:
                     total += 1
 
-            # If more than 98% of the edge of the image is empty/black do NOT create a smaller image.
+            # If more than 93% of the edge of the image is empty/black do NOT create a smaller image.
             if percentageEmpty / total > 0.93:
                 continue
 

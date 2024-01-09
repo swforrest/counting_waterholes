@@ -5,9 +5,10 @@ import scipy.cluster
 import scipy.spatial
 import matplotlib.pyplot as plt
 import shutil
-import imageCuttingSupport as ics
+import random
+import src.utils.imageCuttingSupport as ics
 from sklearn.metrics import ConfusionMatrixDisplay, f1_score 
-from NNclassifier import read_classifications, cluster, process_clusters
+from src.utils.NNclassifier import read_classifications, cluster, process_clusters
 
 """
 given:
@@ -274,24 +275,28 @@ def plot_boats(csvs:str, imgs:str, **kwargs):
         #   Orange if: detected and labelled but disagree
         #   Red if   : detected but not labelled
         #   Yellow if: labelled but not detected
+        correct = 0
+        incorrect = 0
         for boat in boats:
             x = float(boat[0])
             y = float(boat[1])
             ml = int(float(boat[2]))
             manual = int(float(boat[3]))
-            if ml == 0 and ml == manual:
+            if ml == manual: correct += 1
+            else: incorrect += 1
+            if ml == 0 and ml == manual:                        # Agree Static
                 # green
                 color = "g"
-            elif ml == 1 and ml == manual:
+            elif ml == 1 and ml == manual:                      # Agree Moving
                 # blue
                 color = "b"
-            elif ml != -1 and manual != -1 and ml != manual:
+            elif ml != -1 and manual != -1 and ml != manual:    # Disagreement
                 # orange
                 color = "orange"
-            elif ml != -1 and manual == -1:
+            elif ml != -1 and manual == -1:                     # Detected but not Labelled
                 # red
                 color = "r"
-            else:
+            else:                                               # Labelled but not Detected
                 # yellow
                 color = "y"
             if "skip" in kwargs and kwargs["skip"] == True and color == "g":
@@ -321,14 +326,17 @@ def plot_boats(csvs:str, imgs:str, **kwargs):
                 ax.annotate(f"ML: {ml}, Label: {manual}", (x, y), color=color, fontsize=6)
         # save the image in really high quality with no axis labels
         plt.axis("off")
-        # add a legend above and to the right of the image (outside). Make it pretty small
+        # add a legend below the image (outside). Make it very small and 2 rows
         plt.legend(
                 handles=[plt.Rectangle((0,0), 1, 1, color="g"), 
                          plt.Rectangle((0,0), 1, 1, color="b"), 
                          plt.Rectangle((0,0), 1, 1, color="orange"), 
                          plt.Rectangle((0,0), 1, 1, color="r"), 
                          plt.Rectangle((0,0), 1, 1, color="y")], 
-                labels=["Detected and Labelled Static", "Detected and Labelled Moving", "Disagreement", "Detected but not Labelled", "Labelled but not Detected"], loc="upper right", bbox_to_anchor=(1.1, 1.1), prop={"size": 6})
+                labels=["Detected and Labelled Static", "Detected and Labelled Moving", "Disagreement", "Detected but not Labelled", "Labelled but not Detected"], 
+                loc="lower center", ncol=3, bbox_to_anchor=(0.5, -0.05), fontsize=6)
+        # make the title the correct, incorrect, and accuracy. Put the title at the bottom
+        plt.title(f"Correct: {correct}, Incorrect: {incorrect}, Accuracy: {round(correct/(correct+incorrect), 3)}")
         plt.savefig(os.path.join(outdir, csv.split("/")[-1].split(".")[0] + ".png"), dpi=1000, bbox_inches="tight")
         plt.close()
         i += 1
@@ -432,13 +440,14 @@ def find_ml_mistakes(summary_dir, img_dir):
             print(f"Expected {this_img_dir}")
             continue
         boats = np.asarray([line.strip().split(",") for line in open(csv) if line[0] != "x"])
+        id = 0
         for boat in boats:
             if boat[2] != boat[3]:
                 x = float(boat[0])
                 y = float(boat[1])
                 # get the best subimage
-                row = min(y // 104 - 1, 1)
-                col = min(x // 104 - 1, 1)
+                row = max(y // 104 - 1, 1)
+                col = max(x // 104 - 1, 1)
                 # get the image
                 img_path = os.path.join(this_img_dir, csv_name.split(".")[0] + "_" + str(int(row)) + "_" + str(int(col)) + ".png")
                 if not os.path.exists(img_path):
@@ -452,6 +461,7 @@ def find_ml_mistakes(summary_dir, img_dir):
                     if img_path == "":
                         print(f"Could not find section for {csv_name} with x={x}, y={y}")
                         print("*" * 80)
+                        continue
                 fig = plt.figure()
                 ax = fig.add_subplot(111)
                 ax.imshow(plt.imread(img_path))
@@ -486,8 +496,12 @@ def find_ml_mistakes(summary_dir, img_dir):
                 ax.add_patch(rect)
                 # save the image in really high quality with no axis labels
                 plt.axis("off")
-                plt.savefig(os.path.join(output_dir, csv_name.split(".")[0] + "_" + str(int(row)) + "_" + str(int(col)) + ".png"), dpi=1000, bbox_inches="tight")
+                plt.savefig(os.path.join(output_dir, csv_name.split(".")[0] + "_" + str(id) + "_" + str(int(row)) + "_" + str(int(col)) + ".png"), dpi=1000, bbox_inches="tight")
+                # also save a text file with the x, y, ml, manual
+                with open(os.path.join(output_dir, csv_name.split(".")[0] + "_" + str(id) + ".txt"), "w+") as file:
+                    file.write(f"{x}, {y}, {manual}")
                 plt.close()
+                id += 1
     print("Done")
 
 
