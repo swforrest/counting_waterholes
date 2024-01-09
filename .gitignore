@@ -1,11 +1,14 @@
 *.csv
 .DS_Store
 TrainImages
-RawImages
+RawImage
 TestImgs
 temp
 .env
 *pycache*
+*.png
+*.tif
+./Test*
 
 
 order_status.json
