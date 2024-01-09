@@ -7,11 +7,31 @@ Simple GUI used to reconcile issues with ML detections for labelled images.
 import os
 import numpy as np
 import pandas as pd
+import json
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 from PIL import Image
 
+label_json_str = '''{
+      "label": "boat",
+      "points": [
+        [
+          5975.0,
+          5108.0
+        ],
+        [
+          5983.0,
+          5118.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "shape_type": "rectangle",
+      "flags": {}
+    }'''
+
 folder = input("Enter img folder: ")
+labels = input("Enter labels root: ")
 
 fig, ax = plt.subplots()
 plt.subplots_adjust(bottom=0.2)
@@ -41,16 +61,7 @@ class Reconcile:
         self.folder = folder
         self.imgs = [os.path.join(folder, file) for file in os.listdir(folder) if file.endswith('.png')]
         self.img_idx = -1
-        self.results = self.load_results()
         self.display_next_image()
-
-    def load_results(self):
-        path = os.path.join(self.folder, 'results.csv')
-        if os.path.exists(path):
-            self.results = pd.read_csv(path)
-        else:
-            self.results = pd.DataFrame(columns=['img', 'result'])
-        return self.results
 
     def display_next_image(self):
         """Display next image in folder."""
@@ -58,16 +69,44 @@ class Reconcile:
         img = Image.open(self.imgs[self.img_idx])
         img = np.array(img)
         ax.imshow(img)
-        existing_result = self.results[self.results['img'] == self.imgs[self.img_idx]]
-        if len(existing_result) > 0:
-            self.result = existing_result['result'].iloc[0]
-            ax.set_title(f"Charlie Thinks: {self.result}")
         plt.draw()
 
     def write_result(self, result):
         """Write result"""
-        self.results = pd.concat([self.results, pd.DataFrame([{'img': self.imgs[self.img_idx], 'result': result}])], ignore_index=True)
-        self.results.to_csv(os.path.join(self.folder, 'results.csv'), index=False)
+        if result == -1:
+            return
+        this_img = self.imgs[self.img_idx]
+        this_img_name = os.path.basename(this_img)
+        # want up to third underscore
+        this_img_name = '_'.join(this_img_name.split('_')[:3])
+        txt_file = os.path.join(folder, this_img_name + '.txt')
+        # get x and y from txt file has format: x, y
+        with open(txt_file, 'r') as f:
+            x, y, label = f.read().split(', ')
+            x = float(x)
+            y = float(y)
+            label = int(label)
+        # update the labels if necessary
+        if label == result:
+            return
+        this_img_name = '_'.join(this_img_name.split('_')[:2]) # remove ID from name
+        label_file = os.path.join(labels, this_img_name + '.json')
+        data = json.loads(label_json_str)
+        w = 5
+        # update the json
+        data['label'] = 'boat' if result == 0 else 'movingBoat'
+        data['points'] = [[x - w, y - w], [x + w, y + w]]
+        print(label_file)
+        with open(label_file, 'r+') as f:
+            # load the existing data if it exists
+            all_data = json.load(f)
+            # add the shape into the 'shapes' array
+            all_data['shapes'].append(data)
+            # clear the file
+            f.seek(0)
+            f.truncate()
+            # write everything back
+            json.dump(all_data, f)
 
     def is_boat(self, event):
         """Callback function for "Boat" button."""
@@ -97,5 +136,7 @@ moving_boat_btn.on_clicked(callback.is_moving_boat)
 neither_btn_ax = plt.axes([0.7, 0.05, 0.2, 0.075])
 neither_btn = Button(neither_btn_ax, 'Neither')
 neither_btn.on_clicked(callback.is_neither)
+
+title = plt.title("Select what you see in the center of the square.")
 
 plt.show()
