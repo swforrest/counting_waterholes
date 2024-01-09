@@ -1,15 +1,17 @@
-*.csv
-.DS_Store
 TrainImages
+.DS_Store
 RawImage
 TestImgs
 temp
-.env
 *pycache*
-*.png
-*.tif
 Test*
 
+.env
+*.csv
+*.png
+*.tif
+*.key
+*.pdf
 
 order_status.json
 tempDL
