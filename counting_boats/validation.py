@@ -5,10 +5,9 @@ import scipy.cluster
 import scipy.spatial
 import matplotlib.pyplot as plt
 import shutil
-import random
-import src.utils.imageCuttingSupport as ics
+import utils.image_cutting_support as ics
 from sklearn.metrics import ConfusionMatrixDisplay, f1_score 
-from src.utils.NNclassifier import read_classifications, cluster, process_clusters
+from utils.classifier import read_classifications, cluster, process_clusters
 
 """
 given:
@@ -342,9 +341,7 @@ def plot_boats(csvs:str, imgs:str, **kwargs):
         i += 1
         print(f"Plotted {i}/{len(all_images)} images", end="\r")
 
-def segregate():
-    # ask for the directory
-    directory = input("Enter the directory: ")
+def segregate(directory):
     # separate by day
     days = segregate_by_day(directory)
     # separate by image
@@ -366,6 +363,8 @@ def segregate_by_day(directory, into=None):
     days = []
     print("Segregating by day...")
     for file in os.listdir(directory):
+        if not (file.endswith(".png") or file.endswith(".txt")):
+            continue
         date = ics.get_date_from_filename(file)
         if date is None:
             print(f"Could not get date from {file}")
@@ -387,6 +386,8 @@ def segregate_by_image(directory, into=None):
     imgs = []
     print("Segregating by image...")
     for file in os.listdir(directory):
+        if not (file.endswith(".png") or file.endswith(".txt")):
+            continue
         # everything before the 2nd last underscore is the image name
         img = file[:file.rfind("_", 0, file.rfind("_"))]
         if img not in imgs:
@@ -514,6 +515,9 @@ def infer_from_imgs(img_dir, classification_dir):
         if len(files) > 0 and files[0].endswith(".png") and "stitched" not in root:
             # we are in a directory with images
             this_classification_dir = os.path.join(classification_dir, "/".join(root.split("/")[-2:]))
+            # if the dir exists, skip it
+            if os.path.exists(this_classification_dir):
+                continue
             os.makedirs(this_classification_dir, exist_ok=True)
             # move stitched.png to stitched/stiched.png
             if os.path.exists(os.path.join(root, "stitched.png")):
@@ -560,7 +564,8 @@ if __name__ == "__main__":
     elif choice == "2":
         plot_boats(summaries, imgs)
     elif choice == "3":
-        segregate()
+        segregate(labels)
+        segregate(imgs)
     elif choice == "4":
         infer_from_imgs(imgs, classifications)
     elif choice == "5":

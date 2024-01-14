@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 import argparse
-import imageCuttingSupport as ics
+import counting_boats.utils.image_cutting_support as ics
 import os
 from datetime import datetime
 

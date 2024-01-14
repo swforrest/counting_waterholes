@@ -1,4 +1,4 @@
-import imageCuttingSupport as ics
+import utils.image_cutting_support as ics 
 import os
 
 

@@ -28,7 +28,7 @@ EXISTING:
     8. save a labelled image for review
 """
 import os
-import PlanetUtils
+import counting_boats.utils.planet_utils as planet_utils
 import traceback
 import datetime
 import argparse
@@ -69,7 +69,7 @@ def full_auto(days):
         open(csv_path, "w").close()
     entries = open(csv_path).readlines()
     entries = [l.split(",") for l in entries]
-    for aoi in PlanetUtils.get_aois():
+    for aoi in planet_utils.get_aois():
         # check csv
         dates = [l[2] for l in entries if l[1] == aoi]
         if len(dates) == 0:
@@ -81,8 +81,8 @@ def full_auto(days):
             print("Already have all dates for", aoi)
             continue
         # search for images
-        polygon = PlanetUtils.get_polygon(aoi)
-        options = PlanetUtils.PlanetSearch(polygon_file=polygon, 
+        polygon = planet_utils.get_polygon(aoi)
+        options = planet_utils.PlanetSearch(polygon_file=polygon, 
                                            min_date=min_date, 
                                            max_date=datetime.datetime.now().strftime("%Y-%m-%d"), 
                                            cloud_cover=0.1, 
@@ -100,10 +100,10 @@ def full_auto(days):
             if date in [l[2] for l in entries if l[1] == aoi]:
                 continue
             fs_date = "".join(date.split("-")) # filesafe date
-            items = PlanetUtils.PlanetSelect(options, date)
+            items = planet_utils.PlanetSelect(options, date)
             if len(items) == 0:
                 continue
-            order = PlanetUtils.PlanetOrder(polygon_file=polygon, 
+            order = planet_utils.PlanetOrder(polygon_file=polygon, 
                                             items=items, 
                                             name=f"{aoi}_{fs_date}")
             order_id = order["id"]
@@ -114,7 +114,7 @@ def full_auto(days):
                     )
             open(csv_path, "w").writelines([",".join(l) for l in entries])
     # check for complete orders
-    orders = PlanetUtils.get_orders()
+    orders = planet_utils.get_orders()
     new = 0
     for order in [o for o in orders if o["state"] == "success"]:
         if order["id"] in [l[0] for l in entries if l[3] == "complete"]:
@@ -122,7 +122,7 @@ def full_auto(days):
         elif order["id"] in [l[0] for l in entries if l[3] == "ordered"]:
             # download
             this_order = [l for l in entries if l[0] == order["id"]][0]
-            PlanetUtils.PlanetDownload(order["id"])
+            planet_utils.PlanetDownload(order["id"])
             # update csv
             this_order[3] = "complete"
             entries = [l for l in entries if l[0] != order["id"]]
@@ -141,8 +141,8 @@ def new_order():
     """
     Prompts the user and orders the image from Planet
     """
-    aoi = option_select(PlanetUtils.get_aois(), prompt="Select an AOI:")
-    polygon = PlanetUtils.get_polygon(aoi)
+    aoi = option_select(planet_utils.get_aois(), prompt="Select an AOI:")
+    polygon = planet_utils.get_polygon(aoi)
     min_date_default = datetime.datetime.now() - datetime.timedelta(days=14)
     min_date_default = min_date_default.strftime("%Y-%m-%d")
     today = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -155,12 +155,12 @@ def new_order():
     area_cover = input("Minimum area cover (0.9): ")
     if area_cover == "": area_cover = 0.9
     try:
-        options = PlanetUtils.PlanetSearch(polygon_file=polygon, min_date=min_date, max_date=max_date, cloud_cover=float(cloud_cover), area_cover=float(area_cover))
+        options = planet_utils.PlanetSearch(polygon_file=polygon, min_date=min_date, max_date=max_date, cloud_cover=float(cloud_cover), area_cover=float(area_cover))
         if len(options) == 0:
             print("No images found with filter.")
             exit()
-        items = PlanetUtils.PlanetSelect(options)
-        order = PlanetUtils.PlanetOrder(polygon_file=polygon, items=items, name=f"{aoi}_{items[0]['properties']['acquired'][:10]}_{items[-1]['properties']['acquired'][:10]}")
+        items = planet_utils.PlanetSelect(options)
+        order = planet_utils.PlanetOrder(polygon_file=polygon, items=items, name=f"{aoi}_{items[0]['properties']['acquired'][:10]}_{items[-1]['properties']['acquired'][:10]}")
         order_id = order["id"]
         print("Order ID:", order_id)
         return order_id
@@ -177,7 +177,7 @@ def existing_order():
     order_id = input("Order ID: ")
     # Download 
     try:
-        PlanetUtils.PlanetDownload(order_id)
+        planet_utils.PlanetDownload(order_id)
     except Exception as e:
         traceback.print_exc()
         print(e)
