@@ -3,6 +3,7 @@ import os
 import yaml
 import json
 from dotenv import load_dotenv
+from . import area_coverage
 import zipfile
 load_dotenv()
 
@@ -17,7 +18,6 @@ def PlanetSearch(
         min_date:str,
         max_date:str,
         cloud_cover:float=0.1,
-        area_cover:float=0.9,
         ):
     """
     Search a given area of interest for Planet imagery
@@ -33,7 +33,6 @@ def PlanetSearch(
     search_body = SEARCH_BODY.replace('MIN_DATE', min_date)
     search_body = search_body.replace('MAX_DATE', max_date)
     search_body = search_body.replace('CLOUD_COVER', str(cloud_cover))
-    search_body = search_body.replace('AREA_COVER', str(area_cover))
     search_body = search_body.replace('POLYGON', json.dumps(polygon))
     # parse as json
     headers = {'content-type': 'application/json'}
@@ -45,17 +44,36 @@ def PlanetSearch(
         raise Exception('Planet API returned non-200 status code')
     return response.json()['features']
 
-def PlanetSelect(items:list, date:str|None=None):
+def PlanetSelect(items:list, AOI:str, date:str|None=None, area_coverage:float=0.9):
     """
     Select a subset of items from a search result
     :param items: the list of items to select from
+    :param AOI: the area of interest to check coverage against
+    :param date: the date to select
+    :param area_coverage: the minimum area coverage to select
     :return: list of selected items
     """
+    selected = None
     if date is None:
-        items.sort(key=lambda x: x['properties']['acquired'])
-        selected = [item for item in items if item['properties']['acquired'] == items[-1]['properties']['acquired']]
+        coverage = 0
+        offset = 1
+        while coverage <= area_coverage:
+            try:
+                items.sort(key=lambda x: x['properties']['acquired'])
+                selected = [item for item in items if item['properties']['acquired'] == items[-offset]['properties']['acquired']]
+                offset += len(selected)
+                # check the area coverage
+                coverage = items_area_coverage(selected, AOI)
+            except Exception as e:
+                print(e)
+                selected = None
+                break
     else:
         selected = [item for item in items if date in item['properties']['acquired']]
+        # check the area coverage
+        coverage = items_area_coverage(selected, AOI)
+        if coverage < area_coverage:
+            selected = None
     return selected
 
 
@@ -189,6 +207,17 @@ get_aois = lambda: [f.split('.')[0] for f in os.listdir(config['planet']['polygo
 
 get_polygon = lambda aoi: os.path.join(config['planet']['polygons'], aoi + '.json')
 
+def items_area_coverage(items, AOI):
+    """
+    Given all the items for a particular day, and a polygon, compute the area coverage
+    """
+    item_polys = [item['geometry'] for item in items]
+    # combine the polygons
+    combined = area_coverage.combine_polygons(item_polys)
+    # get the coverage
+    coverage, _ = area_coverage.area_coverage_poly(AOI, combined)
+    return coverage
+
 
 if __name__ == "__main__":
     # prompt for what to do
@@ -206,6 +235,7 @@ if __name__ == "__main__":
         PlanetDownload(orderID)
     else:
         print('Not implemented yet')
+
 
 SEARCH_BODY = """
         {
