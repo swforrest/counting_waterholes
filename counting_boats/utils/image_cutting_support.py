@@ -89,7 +89,7 @@ def add_margin(pil_img, left, right, top, bottom, color):
     return result
 
 
-def segment_image(image, json_file, size, overlap_size, metadata_components=None, remove_empty=0.9):
+def segment_image(image, json_file, size, overlap_size, metadata_components=None, remove_empty=0.9, im_outdir=None, labels_outdir=None):
     """
     Segments a large .tif file into smaller .png files for use in a neural network. Also created
     files in the IMGtxts directory which contain the annotations present in that sub image.
@@ -203,15 +203,21 @@ def segment_image(image, json_file, size, overlap_size, metadata_components=None
             # Crop image
             croppedImage = cropImage.crop((left, top, right, bottom))
 
+            if im_outdir is None:
+                im_outdir = os.path.join(os.getcwd(), "SegmentedImages")
+
             # Save image
-            path = os.path.join(os.getcwd(), "SegmentedImages", os.path.basename(image).split(".")[0])
+            path = os.path.join(im_outdir, os.path.basename(image).split(".")[0])
             croppedImage.save(path + "_" + str(i) + "_" + str(j) + ".png", quality=100, compress_level=0)
 
             # Write all of these classifications to a master set containing each time a classification appears in a
             # smaller/segmented image.
             im_name = os.path.basename(image).split(".")[0] + "_" + str(i) + "_" + str(j) + ".txt"
 
-            path = os.path.join(os.getcwd(), "Labels", im_name)
+            if labels_outdir is None:
+                labels_outdir = os.path.join(os.getcwd(), "Labels")
+
+            path = os.path.join(labels_outdir, im_name)
             outfile = open(path, 'a+')
 
             if len(subsetClassifications) > 0:
