@@ -28,10 +28,13 @@ EXISTING:
     8. save a labelled image for review
 """
 import os
-import counting_boats.utils.planet_utils as planet_utils
+import utils.planet_utils as planet_utils
 import traceback
 import datetime
 import argparse
+
+ALLOWED_CLOUD_COVER = 0.1
+ALLOWED_AREA_COVER = 0.9
 
 def main():
     parser = argparse.ArgumentParser(description="Count the boats!")
@@ -73,7 +76,7 @@ def full_auto(days):
         # check csv
         dates = [l[2] for l in entries if l[1] == aoi]
         if len(dates) == 0:
-            min_date = datetime.datetime.now() - datetime.timedelta(days=14)
+            min_date = datetime.datetime.now() - datetime.timedelta(days=days)
             min_date = min_date.strftime("%Y-%m-%d")
         else:
             min_date = max(dates)
@@ -85,8 +88,7 @@ def full_auto(days):
         options = planet_utils.PlanetSearch(polygon_file=polygon, 
                                            min_date=min_date, 
                                            max_date=datetime.datetime.now().strftime("%Y-%m-%d"), 
-                                           cloud_cover=0.1, 
-                                           area_cover=0.9)
+                                           cloud_cover=ALLOWED_CLOUD_COVER)
         print("Found", len(options), "images for", aoi)
         # select and order for each date
         if len(options) == 0:
@@ -100,8 +102,9 @@ def full_auto(days):
             if date in [l[2] for l in entries if l[1] == aoi]:
                 continue
             fs_date = "".join(date.split("-")) # filesafe date
-            items = planet_utils.PlanetSelect(options, date)
-            if len(items) == 0:
+            items = planet_utils.PlanetSelect(options, date, area_coverage=ALLOWED_AREA_COVER)
+            if items is None or len(items) == 0:
+                print("No images found for", date)
                 continue
             order = planet_utils.PlanetOrder(polygon_file=polygon, 
                                             items=items, 
@@ -155,11 +158,14 @@ def new_order():
     area_cover = input("Minimum area cover (0.9): ")
     if area_cover == "": area_cover = 0.9
     try:
-        options = planet_utils.PlanetSearch(polygon_file=polygon, min_date=min_date, max_date=max_date, cloud_cover=float(cloud_cover), area_cover=float(area_cover))
+        options = planet_utils.PlanetSearch(polygon_file=polygon, min_date=min_date, max_date=max_date, cloud_cover=float(cloud_cover))
         if len(options) == 0:
-            print("No images found with filter.")
+            print("No images found with filter in search.")
             exit()
-        items = planet_utils.PlanetSelect(options)
+        items = planet_utils.PlanetSelect(options, AOI=polygon, area_coverage=float(area_cover))
+        if items is None or len(items) == 0:
+            print("No images found with filter in select.")
+            exit()
         order = planet_utils.PlanetOrder(polygon_file=polygon, items=items, name=f"{aoi}_{items[0]['properties']['acquired'][:10]}_{items[-1]['properties']['acquired'][:10]}")
         order_id = order["id"]
         print("Order ID:", order_id)
