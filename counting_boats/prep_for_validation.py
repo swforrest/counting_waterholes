@@ -13,5 +13,5 @@ for filename in os.listdir(folder):
         # find the corresponding image file
         img_file = os.path.join(folder, filename[:-5] + ".png")
         if os.path.isfile(img_file):
-            ics.segment_image(img_file, os.path.join(folder, filename), 416, 104, remove_empty=0)
+            ics.segment_image(img_file, os.path.join(folder, filename), 416, 104, remove_empty=0, im_outdir=os.path.join(folder, "SegmentedImages"), labels_outdir=os.path.join(folder, "Labels"))
 

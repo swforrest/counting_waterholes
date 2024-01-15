@@ -18,10 +18,12 @@ for root, dirs, files in os.walk(folder):
             os.rename(os.path.join(root, file), 
                       os.path.join(root, name))
             # want to create a png for this
+            new_name = os.path.join(folder, f"{name.split('.')[0]}.png")
             if not os.path.exists(os.path.join(root, f"{name.split('.')[0]}.png")):
                 ics.create_padded_png(root, folder, name)
         # if the file is a tif and first part is a date, don't need to rename
         elif file.endswith('tif') and file.split('_')[0].isdigit():
             # check if we have already created a png for this
-            if not os.path.exists(os.path.join(root, f"{file.split('.')[0]}.png")):
+            new_name = os.path.join(folder, f"{file.split('.')[0]}.png")
+            if not os.path.exists(os.path.join(folder, f"{file.split('.')[0]}.png")):
                 ics.create_padded_png(root, folder, file)
