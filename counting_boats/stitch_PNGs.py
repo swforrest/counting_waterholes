@@ -27,6 +27,9 @@ def stitch(dir):
     need to stich them back together into one image
     """
     # get list of files in directory
+    if "stitched.png" in os.listdir(dir):
+        print("Already stitched {}".format(dir))
+        return
     imgs = os.listdir(dir)
     imgs = filter(lambda x: x.endswith(".png"), imgs)
     # for each file, get the x and y coords
