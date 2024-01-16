@@ -103,6 +103,8 @@ def polygon_to_32756(polygon:str|dict) -> ogr.Geometry:
             # read as json
             geoJSON = json.load(f)
 # convert from lat long to EPSG:32756
+    if 'geometry' in geoJSON:
+        geoJSON = geoJSON['geometry']
     for i, val in enumerate(geoJSON['coordinates'][0]):
         lat, long = val
         x, y = ics.latlong2coord(lat, long)
