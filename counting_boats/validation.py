@@ -247,14 +247,20 @@ def plot_boats(csvs:str, imgs:str, **kwargs):
     """
     given a directory of csvs, plot the boats on the images and save the images
     :param csvs: directory containing csvs. Must be of form: x, y, ml_class, manual_class
-    :param imgs: directory containing images. There must be "stitched.png" in subdirs
+    :param imgs: base folder with the images (png), or a folder with subfolders with images (stitched.png)
     """
     if "outdir" in kwargs:
         outdir = kwargs["outdir"]
     else:
         outdir = csvs
     all_csvs = [os.path.join(csvs, file) for file in os.listdir(csvs) if file.endswith(".csv") and "summary" not in file]
-    all_images = [os.path.join(root, file) for root, dirs, files in os.walk(imgs) for file in files if file == "stitched.png"]
+    all_images = [os.path.join(imgs, file) for file in os.listdir(imgs) if file.endswith(".png")]
+    # filter to images which have a csv
+    all_images = [image for image in all_images if any([image.split("/")[-1].split(".")[0] in csv for csv in [s.split("/")[-1].split(".")[0] for s in all_csvs]])]
+    print(all_images)
+    if len(all_images) == 0:
+        # try to see if the stitched images exist
+        all_images = [os.path.join(root, file) for root, dirs, files in os.walk(imgs) for file in files if file == "stitched.png"]
     i = 0
     for csv in all_csvs:
         # get the corresponding image
@@ -540,12 +546,19 @@ def infer_from_imgs(img_dir, classification_dir):
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
     argparser.description = "Cluster classifications and labels from yolo and manual annotations to compare them. File names must be identical between given arguments"
+    argparser.add_argument("-f", "--folder", help="Directory of classifications and labels", required=False)
     argparser.add_argument("-c", "--classifications", help="Directory of classifications from yolo (can contain multiple direcories)", required=False)
     argparser.add_argument("-l", "--labels", help="Directory of manual annotations (can contain multiple direcories)", required=False) 
     argparser.add_argument("-o", "--outdir", help="Directory to dump output csvs", required=False)
     argparser.add_argument("-i", "--imgs", help="Directory with images", required=False)
     argparser.add_argument("-s", "--summaries", help="Directory with summary CSVs", required=False)
     args = argparser.parse_args()
+    if args.folder is not None:
+        args.classifications = os.path.join(args.folder, "Classifications")
+        args.labels = os.path.join(args.folder, "Labels")
+        args.outdir = os.path.join(args.folder, "Summary")
+        args.imgs = os.path.join(args.folder, "SegmentedImages")
+        args.summaries = os.path.join(args.folder, "Summary")
     classifications = args.classifications
     labels = args.labels
     outdir = args.outdir
@@ -562,7 +575,8 @@ if __name__ == "__main__":
     if choice == "1":
         main(classifications, labels, outdir)
     elif choice == "2":
-        plot_boats(summaries, imgs)
+        folder = args.folder if args.folder is not None else imgs
+        plot_boats(summaries, folder)
     elif choice == "3":
         segregate(labels)
         segregate(imgs)
