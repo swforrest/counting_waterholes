@@ -15,7 +15,7 @@ bribie_area = bribie_poly.Area()
 print("Peel area: {}".format(peel_area))
 print("Tangalooma area: {}".format(tangalooma_area))
 print("Bribie area: {}".format(bribie_area))
-total_area_labelled = 3* peel_area + 3*tangalooma_area + 3*bribie_area
+total_area_labelled = 4* peel_area + 3*tangalooma_area + 4*bribie_area
 print(f"Total area (3x each ,only 2x tangalooma): {total_area_labelled}", "m^2")
 print(f"Total area (3x each): {total_area_labelled/1000000}", "km^2")
 

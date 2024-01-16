@@ -2,7 +2,7 @@ import utils.image_cutting_support as ics
 import os
 
 
-folder = "/Users/charlieturner/Documents/CountingBoats/TestGBR"
+folder = "/Users/charlieturner/Documents/CountingBoats/TestMoreton"
 
 # Walk through each subdir, and for each image 'composite.tif' create the padded png for it
 # as root_png.png

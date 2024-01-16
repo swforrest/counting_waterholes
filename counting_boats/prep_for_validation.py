@@ -1,7 +1,7 @@
 import os
 import utils.image_cutting_support as ics
 
-folder = "/Users/charlieturner/Documents/CountingBoats/TestGBR"
+folder = "/Users/charlieturner/Documents/CountingBoats/TestMoreton"
 
 for filename in os.listdir(folder):
     if filename.endswith(".json"):
