@@ -16,12 +16,12 @@ label_json_str = '''{
       "label": "boat",
       "points": [
         [
-          5975.0,
-          5108.0
+          0,
+          0
         ],
         [
-          5983.0,
-          5118.0
+          0,
+          0
         ]
       ],
       "group_id": null,
@@ -36,6 +36,7 @@ labels = input("Enter labels root: ")
 fig, ax = plt.subplots()
 plt.subplots_adjust(bottom=0.2)
 plt.axis('off')
+title = plt.title("Select what you see in the center of the square.")
 
 def all_possible_imgs(x, y):
     """
@@ -59,22 +60,33 @@ class Reconcile:
 
     def __init__(self, folder):
         self.folder = folder
-        self.imgs = [os.path.join(folder, file) for file in os.listdir(folder) if file.endswith('.png')]
+        self.imgs = [os.path.join(folder, file) for file in os.listdir(folder) if file.endswith('.png') and not file.endswith('done.png')]
         self.img_idx = -1
+        self.next_img = None
         self.display_next_image()
 
     def display_next_image(self):
         """Display next image in folder."""
         self.img_idx += 1
-        img = Image.open(self.imgs[self.img_idx])
+        if self.img_idx >= len(self.imgs) - 1:
+            print("No more images to display.")
+            return
+        if self.next_img is not None:
+            # display the image
+            ax.imshow(self.next_img)
+            plt.draw()
+        else:
+            img = Image.open(self.imgs[self.img_idx])
+            img = np.array(img)
+            ax.imshow(img)
+            plt.draw()
+        # get the next image
+        img = Image.open(self.imgs[self.img_idx+1])
         img = np.array(img)
-        ax.imshow(img)
-        plt.draw()
+        self.next_img = img
 
     def write_result(self, result):
         """Write result"""
-        if result == -1:
-            return
         this_img = self.imgs[self.img_idx]
         this_img_name = os.path.basename(this_img)
         # want up to third underscore
@@ -88,6 +100,8 @@ class Reconcile:
             label = int(label)
         # update the labels if necessary
         if label == result:
+            print("No change needed")
+            os.rename(this_img, this_img[:-4] + 'done.png')
             return
         this_img_name = '_'.join(this_img_name.split('_')[:2]) # remove ID from name
         label_file = os.path.join(labels, this_img_name + '.json')
@@ -98,15 +112,31 @@ class Reconcile:
         data['points'] = [[x - w, y - w], [x + w, y + w]]
         print(label_file)
         with open(label_file, 'r+') as f:
-            # load the existing data if it exists
-            all_data = json.load(f)
-            # add the shape into the 'shapes' array
-            all_data['shapes'].append(data)
-            # clear the file
+            json_data = json.load(f)
+            # check if there is already a boat label at this location (+- 5 pixels)
+            updated = False
+            for shape in json_data['shapes']:
+                x1, y1 = shape['points'][0]
+                x2, y2 = shape['points'][1]
+                if x1 - w <= x <= x2 + w and y1 - w <= y <= y2 + w:
+                    # update this label
+                    if result == -1:
+                        json_data['shapes'].remove(shape)
+                        print("Removing label")
+                    else:
+                        shape['label'] = data['label']
+                        print("Updating label")
+                    updated = True
+            # if we didn't find an existing label, add this one
+            if not updated:
+                json_data['shapes'].append(data)
+                print("Adding new label")
+            # write the updated json
             f.seek(0)
+            json.dump(json_data, f, indent=4)
             f.truncate()
-            # write everything back
-            json.dump(all_data, f)
+        # update the name of the image to end with 'done.png'
+        os.rename(this_img, this_img[:-4] + 'done.png')
 
     def is_boat(self, event):
         """Callback function for "Boat" button."""
@@ -137,6 +167,5 @@ neither_btn_ax = plt.axes([0.7, 0.05, 0.2, 0.075])
 neither_btn = Button(neither_btn_ax, 'Neither')
 neither_btn.on_clicked(callback.is_neither)
 
-title = plt.title("Select what you see in the center of the square.")
 
 plt.show()
