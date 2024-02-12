@@ -13,10 +13,7 @@ Intended usage:
     Processes the outputs
     Saves the results to a csv file. 
 
-Optionally?:
-    Save some random images to a folder for manual checking after the fact (NOT IMPLEMENTED)
-
-Usage: python NNclassifier.py -d <.tif directory> -o <output file name>
+Usage: python classifier.py -d <.tif directory> -o <output file name>
 """
 
 TEMP = os.path.join(os.getcwd(), "Boat_Temp")
@@ -25,18 +22,12 @@ TEMP = os.path.join(os.getcwd(), "Boat_Temp")
 TEMP_PNG = os.path.join(os.getcwd(), "Boat_Temp_PNG")
 """ Temporary directory for storing png version of tif images """
 
+config = yaml.safe_load(open("config.yml"))
+
 def main():
     """
     Run the classifier on each image in the directory.
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--directory",    help="directory of images to classify (can be subdirs)", required=False)
-    arg_directory = parser.parse_args().directory
-    if arg_directory is not None:
-        # just classify and cluster the images in the given directory
-        return
-    global config 
-    config = get_config()
     classify_directory(config.get("tif_dir"))
     remove(TEMP)
     remove(TEMP_PNG)
@@ -342,34 +333,6 @@ def write_to_csv(classifications, day, file):
     lines = [f"{day},{int(float(boat[3]))},{boat[6]},{boat[1]},{boat[0]},{boat[2]},{boat[4]},{boat[5]}\n" for boat in classifications]
     with open(f"{file}.csv", "a+") as outFile:
         outFile.writelines(lines)
-
-## Helper functions ## 
-def get_config():
-    """
-    parses command line args, and gets config.yml. 
-    Command line args have precedence and can be used to override config.yml
-    """
-    config:dict = yaml.safe_load(open("config.yml"))
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--directory",    help="Directory containing .tif files to be classified", required=False)
-    parser.add_argument("-i", "--images",       help="Directory of segmented 416x416 images", required=False)
-    parser.add_argument("-t", "--text",         help="Directory of text files with classifications", required=False)
-    parser.add_argument("-o", "--output",       help="Output file name", required=False)
-    args = parser.parse_args()
-    # command line args override config.yml
-    if args.directory:
-        config["tif_dir"] = args.directory
-    if args.images:
-        config["img_path"] = args.images
-    if args.text:
-        config["text_dir"] = args.text
-    if args.output:
-        config["OUTFILE"] = args.output
-    else:
-        if config.get("OUTFILE") is None:
-            config["OUTFILE"] = config["OUTFILE"].replace("<DATETIME>", datetime.now().strftime("%Y%m%d_%H%M%S"))
-    # replace <DATETIME> with current datetime
-    return config
 
 def remove(path, del_folder=True):
     """
