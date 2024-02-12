@@ -73,6 +73,7 @@ def full_auto(days):
     entries = open(csv_path).readlines()
     entries = [l.split(",") for l in entries]
     for aoi in planet_utils.get_aois():
+        print(aoi)
         # check csv
         dates = [l[2] for l in entries if l[1] == aoi]
         if len(dates) == 0:
@@ -102,7 +103,7 @@ def full_auto(days):
             if date in [l[2] for l in entries if l[1] == aoi]:
                 continue
             fs_date = "".join(date.split("-")) # filesafe date
-            items = planet_utils.PlanetSelect(options, date, area_coverage=ALLOWED_AREA_COVER)
+            items = planet_utils.PlanetSelect(items=options,polygon=polygon, date=date, area_coverage=ALLOWED_AREA_COVER)
             if items is None or len(items) == 0:
                 print("No images found for", date)
                 continue

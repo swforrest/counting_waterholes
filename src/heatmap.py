@@ -13,6 +13,7 @@ Given a heap of polygons, create a heatmap of the density of seeing each area.
 """
 
 import numpy as np
+import math
 import os
 import json
 from osgeo import ogr, gdal, osr
@@ -52,16 +53,15 @@ def get_polygons_from_folder(folder, name=None):
                         polygons.append(polygon_to_32756(json.load(f)))
     return polygons
 
-def create_grid(x_min, x_max, y_min, y_max):
-    # make shortest side 100px, and scale the other
+def create_grid(x_min, x_max, y_min, y_max, size=1000):
+    """
+    Create's a grid of pixels that covers the area of the bounding box.
+    """
+    # make the grid using (size x size)m^2 sized pixels
     x_range = x_max - x_min
     y_range = y_max - y_min
-    if x_range < y_range:
-        cols = 1000
-        rows = int(cols * y_range / x_range)
-    else:
-        rows = 1000
-        cols = int(rows * x_range / y_range)
+    cols = math.ceil(x_range / size) 
+    rows = math.ceil(y_range / size)
     # make the grid
     grid = np.zeros((cols, rows))
     print(grid.shape)
@@ -80,14 +80,14 @@ def paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly):
             if point is not None and poly.Contains(point):
                 grid[int((x - x_min) / x_step), int((y - y_min) / y_step)] += 1
 
-def export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step):
+def export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="heatmap.tif"):
     """
     Export the grid as a GEOTIFF.
     """
     driver = gdal.GetDriverByName('GTiff')
     rows, cols = grid.shape
     print(rows, cols)
-    new_raster = driver.Create("heatmap.tif", cols, rows, 1, gdal.GDT_Float32)
+    new_raster = driver.Create(filename, cols, rows, 1, gdal.GDT_Float32)
     # set origin and pixel size
     origin_x = x_min
     origin_y = y_max
@@ -133,6 +133,32 @@ def polygon_from_tif(tif):
     ax.plot(*zip(*max_poly_coords))
     plt.show()
 
+def add_to_heatmap(heatmap, polygons):
+    """
+    Add polygons to the heatmap. Does this by creating a new raster, 
+    then adding the polygons to the raster, and then adding the rasters
+    together.
+    @param heatmap: Path to raster file e.g. 'heatmap.tif'
+    @param polygons: List of polygons
+    """
+    x_min, x_max, y_min, y_max = get_bbox(polygons)
+    grid, x_step, y_step = create_grid(x_min, x_max, y_min, y_max)
+    for poly in polygons:
+        paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly)
+    grid = np.rot90(grid)
+    export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="temp.tif")
+    # add the rasters together
+    ds1 = gdal.Open(heatmap, gdal.GA_Update)
+    ds2 = gdal.Open("temp.tif")
+    band1 = ds1.GetRasterBand(1)
+    band2 = ds2.GetRasterBand(1)
+    # add the rasters together
+    band1.WriteArray(band1.ReadAsArray() + band2.ReadAsArray())
+    band1.FlushCache()
+    # remove the temp file
+    os.remove("temp.tif")
+
+
 if __name__ == "__main__":
     # Load the polygons
     polygons = get_polygons_from_folder("/Users/charlieturner/Documents/CountingBoats/TestMoreton/RawImgs", name="composite_metadata.json") 
@@ -152,4 +178,9 @@ if __name__ == "__main__":
     plt.imshow(grid)
     plt.show()
     # Export the grid
-    export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step)
+    export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="heatmap.tif")
+
+    # then add the polygons to the heatmap (again)
+    new_polygons = get_polygons_from_folder("/Users/charlieturner/Documents/CountingBoats/TestGBR/RawImages", name="composite_metadata.json")
+    add_to_heatmap("heatmap.tif", new_polygons)
+

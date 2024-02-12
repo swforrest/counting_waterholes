@@ -75,7 +75,6 @@ def combine_polygons(polygons):
     # combine
     poly = ogr_polys[0]
     if len(ogr_polys) == 1:
-        print("combine_polygons: Received only one polygon, returning it")
         return poly
     for i in range(1, len(ogr_polys)):
         poly = poly.Union(ogr_polys[i])
@@ -109,7 +108,8 @@ def polygon_to_32756(polygon:str|dict) -> ogr.Geometry:
         lat, long = val
         x, y = ics.latlong2coord(lat, long)
         geoJSON['coordinates'][0][i] = [x, y]
-    poly = ogr.CreateGeometryFromJson(str(geoJSON))
+    geoJSON = json.dumps(geoJSON)
+    poly = ogr.CreateGeometryFromJson(geoJSON)
     return poly
 
 

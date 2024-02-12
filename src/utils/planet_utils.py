@@ -44,11 +44,11 @@ def PlanetSearch(
         raise Exception('Planet API returned non-200 status code')
     return response.json()['features']
 
-def PlanetSelect(items:list, AOI:str, date:str|None=None, area_coverage:float=0.9):
+def PlanetSelect(items:list, polygon:str, date:str|None=None, area_coverage:float=0.9):
     """
     Select a subset of items from a search result
     :param items: the list of items to select from
-    :param AOI: the area of interest to check coverage against
+    :param polygon: the area of interest to check coverage against (polygon file)
     :param date: the date to select
     :param area_coverage: the minimum area coverage to select
     :return: list of selected items
@@ -63,7 +63,7 @@ def PlanetSelect(items:list, AOI:str, date:str|None=None, area_coverage:float=0.
                 selected = [item for item in items if item['properties']['acquired'] == items[-offset]['properties']['acquired']]
                 offset += len(selected)
                 # check the area coverage
-                coverage = items_area_coverage(selected, AOI)
+                coverage = items_area_coverage(selected, polygon)
             except Exception as e:
                 print(e)
                 selected = None
@@ -71,7 +71,7 @@ def PlanetSelect(items:list, AOI:str, date:str|None=None, area_coverage:float=0.
     else:
         selected = [item for item in items if date in item['properties']['acquired']]
         # check the area coverage
-        coverage = items_area_coverage(selected, AOI)
+        coverage = items_area_coverage(selected, polygon)
         if coverage < area_coverage:
             selected = None
     return selected
@@ -189,6 +189,9 @@ def PlanetDownload(orderID:str):
     tif = [f for f in os.listdir(downloadPath) if f == "composite.tif"][0]
     os.rename(os.path.join(downloadPath, tif), 
               os.path.join(config['tif_dir'], newfname + '.tif' ))
+    # also move the composite_metadata.json file:
+    os.rename(os.path.join(downloadPath, 'composite_metadata.json'),
+              os.path.join(config['tif_dir'], newfname + '_metadata.json'))
     return downloadPath
 
 def get_orders():
@@ -202,10 +205,19 @@ def get_orders():
         f.write(response.text)
     return response.json()['orders']
 
+def get_aois():
+    """
+    Get all the areas of interest
+    """
+    return [f.split('.')[0] for f in os.listdir(config['planet']['polygons']) if f.endswith('json')]
 
-get_aois = lambda: [f.split('.')[0] for f in os.listdir(config['planet']['polygons']) if os.path.isfile(os.path.join(config['planet']['polygons'], f))]
-
-get_polygon = lambda aoi: os.path.join(config['planet']['polygons'], aoi + '.json')
+def get_polygon(aoi):
+    """
+    Get the polygon for a given area of interest
+    """
+    files = os.listdir(config['planet']['polygons'])
+    file = [f for f in files if f.split('.')[0] == aoi][0]
+    return os.path.join(config['planet']['polygons'], file)
 
 def items_area_coverage(items, AOI):
     """
