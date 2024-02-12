@@ -20,7 +20,7 @@ def area_coverage_tif(polygon, tif):
     :return: coverage (decimal), area of polygon, area of tif
     """
 # Area of polygon:
-    poly = polygon_to_32756(polygon)
+    poly = polygons_to_32756(polygon)
     area = poly.Area()
 # Same idea with the tif. Get the area of the tif
     with rasterio.open(tif) as src:
@@ -50,8 +50,8 @@ def area_coverage_poly(reference, polygon):
     :param polygon: path to polygon file (geojson format)
     :return: coverage (decimal), area of reference polygon, area of polygon
     """
-    ref_poly = polygon_to_32756(reference)
-    poly = polygon_to_32756(polygon)
+    ref_poly = polygons_to_32756(reference)[0]
+    poly = polygons_to_32756(polygon)[0]
     # intersection
     intersection = ref_poly.Intersection(poly)
     if intersection is None:
@@ -71,7 +71,12 @@ def combine_polygons(polygons):
     :return: combined polygon in EPSG:32756
     """
     # convert to ogr polygons
-    ogr_polys = [polygon_to_32756(poly) for poly in polygons]
+    ogr_polys = [polygons_to_32756(poly)[0] for poly in polygons]
+    if len(ogr_polys) == 0:
+        print("No polygons to combine")
+        print(ogr_polys)
+        print(polygons)
+        exit()
     # combine
     poly = ogr_polys[0]
     if len(ogr_polys) == 1:
@@ -82,35 +87,45 @@ def combine_polygons(polygons):
         raise ValueError("Polygons do not intersect")
     return poly
 
-def polygon_to_32756(polygon:str|dict) -> ogr.Geometry:
+def polygons_to_32756(polygon:str|dict|ogr.Geometry) -> list[ogr.Geometry]:
     """
     Converts a polygon from lat long to EPSG:32756
     :param polygon: path to polygon file (geojson format) or polygon string
         e.g "{ "type": "Polygon", "coordinates": [...]}"
     :return: polygon in EPSG:32756
     """
-    geoJSON = polygon
+    if type(polygon) == ogr.Geometry:
+        return [polygon]
+    geoJSON:dict = {}
     if type(polygon) != str and type(polygon) != dict:
-        print("polygon_to_32756: Received polygon of type {}, must be string or dict to convert".format(type(polygon)))
-        return polygon
+        raise ValueError("polygons_to_32756: Received polygon of type {}, must be string or dict to convert".format(type(polygon)))
     # check if the polygon is a string or a path
-    if type(polygon) == str and polygon[0] == "{":
+    if type(polygon) == str and polygon[0] == "{": # } <- obligatory bracket to fix linting
         # if string, convert to json
         geoJSON = json.loads(polygon)
     elif type(polygon) == str:
         with open(polygon) as f:
             # read as json
             geoJSON = json.load(f)
+    elif type(polygon) == dict:
+        geoJSON = polygon
 # convert from lat long to EPSG:32756
     if 'geometry' in geoJSON:
         geoJSON = geoJSON['geometry']
-    for i, val in enumerate(geoJSON['coordinates'][0]):
-        lat, long = val
-        x, y = ics.latlong2coord(lat, long)
-        geoJSON['coordinates'][0][i] = [x, y]
-    geoJSON = json.dumps(geoJSON)
-    poly = ogr.CreateGeometryFromJson(geoJSON)
-    return poly
+    polygons = []
+    for i, poly in enumerate(geoJSON['coordinates']):
+        if geoJSON['type'] == "MultiPolygon":
+            poly = poly[0]
+        poly_dict = {
+                "coordinates": [[None] * len(poly)],
+                "type": "Polygon"
+                }
+        for i, val in enumerate(poly):
+            lat, long = val
+            x, y = ics.latlong2coord(lat, long)
+            poly_dict['coordinates'][0][i] = [x, y]
+        polygons.append(ogr.CreateGeometryFromJson(json.dumps(poly_dict)))
+    return polygons
 
 
 
