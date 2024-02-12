@@ -29,6 +29,7 @@ EXISTING:
 """
 import os
 import utils.planet_utils as planet_utils
+import utils.classifier as classifier
 import traceback
 import datetime
 import argparse
@@ -126,7 +127,7 @@ def full_auto(days):
         elif order["id"] in [l[0] for l in entries if l[3] == "ordered"]:
             # download
             this_order = [l for l in entries if l[0] == order["id"]][0]
-            planet_utils.PlanetDownload(order["id"])
+            planet_utils.PlanetDownload(order["id"], this_order[1], this_order[2].replace("-",""))
             # update csv
             this_order[3] = "complete"
             entries = [l for l in entries if l[0] != order["id"]]
@@ -136,10 +137,19 @@ def full_auto(days):
     # count the boats
     # run NNClassifier.py
     if new > 0:
-        print("New orders downloaded. Running NNClassifier.py")
-        os.system("python NNClassifier.py")
+        print("New orders downloaded. Running Classifier")
+        classifier.main()
     else:
         print("No new orders to process.")
+
+    # archive the raw data
+    archive("tempDL")
+
+def archive(path):
+    """
+    Deal with folder of raw data after processing
+    """
+    pass
 
 def new_order():
     """
@@ -163,7 +173,7 @@ def new_order():
         if len(options) == 0:
             print("No images found with filter in search.")
             exit()
-        items = planet_utils.PlanetSelect(options, AOI=polygon, area_coverage=float(area_cover))
+        items = planet_utils.PlanetSelect(options, polygon=polygon, area_coverage=float(area_cover))
         if items is None or len(items) == 0:
             print("No images found with filter in select.")
             exit()
