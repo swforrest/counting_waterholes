@@ -70,6 +70,8 @@ def PlanetSelect(items:list, polygon:str, date:str|None=None, area_coverage:floa
                 break
     else:
         selected = [item for item in items if date in item['properties']['acquired']]
+        if len(selected) == 0:
+            return None
         # check the area coverage
         coverage = items_area_coverage(selected, polygon)
         if coverage < area_coverage:
@@ -151,7 +153,7 @@ def PlanetCheckOrder(orderID:str):
     return response.json()['state']
 
 
-def PlanetDownload(orderID:str):
+def PlanetDownload(orderID:str, aoi=None, date=None):
     """
     Download a given order and move the tif file to the raw tiffs directory
     """
@@ -164,11 +166,9 @@ def PlanetDownload(orderID:str):
     download_link = [link['location'] for link in links if "manifest" not in link['name']][0]
     # make the directory if it doesn't exist
     downloadPath = os.path.join(os.getcwd(), "tempDL")
-    downloadFile = os.path.join(downloadPath, "DLZip.zip")
+    downloadFile = os.path.join(downloadPath, f"{aoi}_{date}.zip")
+    extractPath = downloadFile.split('.')[0]
     os.makedirs(downloadPath, exist_ok=True)
-    # clear the directory
-    for f in os.listdir(downloadPath):
-        os.remove(os.path.join(downloadPath, f))
     # download the file
     progress = 0
     with requests.get(download_link, stream=True) as r:
@@ -181,18 +181,13 @@ def PlanetDownload(orderID:str):
     print()
     # unzip the file
     with zipfile.ZipFile(downloadFile, 'r') as zip_ref:
-        zip_ref.extractall(downloadPath)
-    # delete the zip file
-    os.remove(downloadFile)
+        zip_ref.extractall(extractPath)
     # move the tif file to the raw tiffs directory
-    newfname = ['_'.join(f.split('_')[:-2]) for f in os.listdir(downloadPath) if f.endswith('.xml')][0]
-    tif = [f for f in os.listdir(downloadPath) if f == "composite.tif"][0]
-    os.rename(os.path.join(downloadPath, tif), 
+    newfname = ['_'.join(f.split('_')[:-2]) for f in os.listdir(extractPath) if f.endswith('.xml')][0]
+    tif = os.path.join(extractPath, "composite.tif")
+    os.rename(os.path.join(extractPath, tif), 
               os.path.join(config['tif_dir'], newfname + '.tif' ))
-    # also move the composite_metadata.json file:
-    os.rename(os.path.join(downloadPath, 'composite_metadata.json'),
-              os.path.join(config['tif_dir'], newfname + '_metadata.json'))
-    return downloadPath
+    return extractPath
 
 def get_orders():
     """
