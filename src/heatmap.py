@@ -18,7 +18,7 @@ import os
 import json
 from osgeo import ogr, gdal, osr
 import matplotlib.pyplot as plt
-from utils.area_coverage import polygon_to_32756
+from utils.area_coverage import polygons_to_32756
 
 gdal.UseExceptions()
 
@@ -46,11 +46,11 @@ def get_polygons_from_folder(folder, name=None):
             if name is None:
                 if file.endswith(".json"):
                     with open(os.path.join(root, file), "r") as f:
-                        polygons.append(polygon_to_32756(json.load(f)))
+                        polygons.extend(polygons_to_32756(json.load(f)))
             else:
                 if name in file:
                     with open(os.path.join(root, file), "r") as f:
-                        polygons.append(polygon_to_32756(json.load(f)))
+                        polygons.extend(polygons_to_32756(json.load(f)))
     return polygons
 
 def create_grid(x_min, x_max, y_min, y_max, size=1000):
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     x_min, x_max, y_min, y_max = get_bbox(polygons)
     print(x_min, x_max, y_min, y_max)
     # Get the grid
-    grid, x_step, y_step = create_grid(x_min, x_max, y_min, y_max)
+    grid, x_step, y_step = create_grid(x_min, x_max, y_min, y_max, size=100)
     # Paint the polygons onto the grid
     for poly in polygons:
         paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly)
@@ -179,8 +179,4 @@ if __name__ == "__main__":
     plt.show()
     # Export the grid
     export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="heatmap.tif")
-
-    # then add the polygons to the heatmap (again)
-    new_polygons = get_polygons_from_folder("/Users/charlieturner/Documents/CountingBoats/TestGBR/RawImages", name="composite_metadata.json")
-    add_to_heatmap("heatmap.tif", new_polygons)
 
