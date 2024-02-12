@@ -4,14 +4,6 @@ This project counts small marine vessels from satellite imagery of the Moreton B
 region. The counts are recorded and can be analysed or presented later. Tools for 
 visualising training and inference data are also available.
 
-## Why
-
-Moreton Bay is a complex ecosystem, home to a vast array of marine life, and at the 
-same time being a heavily used and enjoyed swimming, boating, and fishing area for humans. 
-Understanding the interactions between human activity and marine life is a crucial aspect
-in ensuring that the bay can be enjoyed by all for years to come. This project 
-is a small part of the much wider [Living and Playing Together Project](https://moretonbayfoundation.org/research/living-and-playing-together).
-
 ## How
 
 This project utilises satellite images, and harnesses machine learning
