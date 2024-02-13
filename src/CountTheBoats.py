@@ -87,7 +87,7 @@ def auto_search(aoi, csv_path):
     """
     Search for images for a given AOI
     @param aoi: Area of Interest name
-    @param history: DataFrame of the history of orders
+    @param csv_path: Path to csv of order history
     @return list: list of options
     """
     # First get all the dates that we have for the AOI
@@ -109,11 +109,17 @@ def auto_search(aoi, csv_path):
     # create list of dates between min and max
     dates = pd.date_range(start=min_date, end=max_date).strftime("%Y-%m-%d").tolist()
     # search for images
-    polygon = planet_utils.get_polygon(aoi)
-    options = planet_utils.PlanetSearch(polygon_file=polygon, 
+    polygon = planet_utils.get_polygon_file(aoi)
+    options = []
+    try:
+        options = planet_utils.PlanetSearch(polygon_file=polygon, 
                                        min_date=min_date, 
                                        max_date=max_date,
                                        cloud_cover=ALLOWED_CLOUD_COVER)
+    except Exception as e:
+        traceback.print_exc()
+        print(e)
+        return None, None
     print("Found", len(options), "total images for", aoi)
     # select and order for each date
     if len(options) == 0:
@@ -128,10 +134,15 @@ def auto_select(aoi, options, dates):
     @param dates: list of dates that we want to select for
     @return list: list of items
     """
-    polygon = planet_utils.get_polygon(aoi)
+    polygon = planet_utils.get_polygon_file(aoi)
     # Select images for each date and yield them
     for date in dates:
-        items = planet_utils.PlanetSelect(items=options,polygon=polygon, date=date, area_coverage=ALLOWED_AREA_COVER)
+        try:
+            items = planet_utils.PlanetSelect(items=options,polygon=polygon, date=date, area_coverage=ALLOWED_AREA_COVER)
+        except Exception as e:
+            traceback.print_exc()
+            print(e)
+            continue
         if items is None or len(items) == 0:
             continue
         yield items
@@ -143,12 +154,17 @@ def auto_order(aoi, items, csv_path):
     @param items: list of items to order
     @param history: DataFrame of the history of orders
     """
-    polygon = planet_utils.get_polygon(aoi)
+    polygon = planet_utils.get_polygon_file(aoi)
     date = items[0]["properties"]["acquired"][:10]
     fs_date = "".join(date.split("-")) # filesafe date
-    order = planet_utils.PlanetOrder(polygon_file=polygon, 
+    try:
+        order = planet_utils.PlanetOrder(polygon_file=polygon, 
                                     items=items, 
                                     name=f"{aoi}_{fs_date}")
+    except Exception as e:
+        traceback.print_exc()
+        print(e)
+        return
     order_id = order["id"]
     print("Order ID:", order_id)
     # add to history
@@ -174,7 +190,12 @@ def auto_download(csv_path):
             print("Downloading", order["id"])
             # download
             this_order = history[history["order_id"] == order["id"]].iloc[0]
-            planet_utils.PlanetDownload(order["id"], this_order["aoi"], this_order["date"].replace("-",""))
+            try:
+                planet_utils.PlanetDownload(order["id"], this_order["aoi"], this_order["date"].replace("-",""))
+            except Exception as e:
+                traceback.print_exc()
+                print(e)
+                continue
             # update history
             history.loc[history["order_id"] == order["id"], "order_status"] = "downloaded"
             save_history(history, csv_path)
@@ -184,6 +205,7 @@ def auto_count():
     Process any downloaded images
     """
     classifier.main()
+
 
 def auto_save(csv_path):
     """
@@ -238,7 +260,7 @@ def archive(path, coverage_path):
                 aoi = "_".join(d.split("_")[0:-1])
                 date = d.split("_")[-1]
                 date = date[:4] + "-" + date[4:6] + "-" + date[6:8]
-                cov_amount, _ = ac.area_coverage_poly(planet_utils.get_polygon(aoi), polygon)
+                cov_amount, _ = ac.area_coverage_poly(planet_utils.get_polygon_file(aoi), polygon)
                 # add to coverage
                 coverage = pd.concat([coverage, pd.DataFrame({"aoi": [aoi], "date": [date], "area_coverage": [cov_amount], "polygon": [json.dumps(polygon)]})])
                 # save the coverage
@@ -252,7 +274,7 @@ def new_order():
     Prompts the user and orders the image from Planet
     """
     aoi = option_select(planet_utils.get_aois(), prompt="Select an AOI:")
-    polygon = planet_utils.get_polygon(aoi)
+    polygon = planet_utils.get_polygon_file(aoi)
     min_date_default = datetime.datetime.now() - datetime.timedelta(days=14)
     min_date_default = min_date_default.strftime("%Y-%m-%d")
     today = datetime.datetime.now().strftime("%Y-%m-%d")
