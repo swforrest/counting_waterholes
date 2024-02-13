@@ -39,8 +39,8 @@ import utils.area_coverage as ac
 import json
 
 ALLOWED_CLOUD_COVER = 0.1
-ALLOWED_AREA_COVER = 0.9
-HISTORY_LENGTH = 14 # days to check for new images if no existing history
+ALLOWED_AREA_COVER = 0.2
+HISTORY_LENGTH = 14 # days to check for new images
 
 def main():
     parser = argparse.ArgumentParser(description="Count the boats!")
@@ -94,20 +94,14 @@ def auto_search(aoi, csv_path):
     history = get_history(csv_path)
     dates = history[history["aoi"] == aoi]["date"].unique()
     # If we don't have any, use the default last 14 days
-    if len(dates) == 0:
-        min_date = datetime.datetime.now() - datetime.timedelta(days=HISTORY_LENGTH)
-        min_date = min_date.strftime("%Y-%m-%d")
-    else:
-        min_date = max(dates)
-        # add one day to it to start the search
-        min_date = (datetime.datetime.strptime(min_date, "%Y-%m-%d") + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-    # If the latest is today, don't need to waste an API call
-    if min_date == datetime.datetime.now().strftime("%Y-%m-%d"):
-        print("Already have all dates for", aoi)
-        return None, None
+    min_date = datetime.datetime.now() - datetime.timedelta(days=HISTORY_LENGTH)
+    min_date = min_date.strftime("%Y-%m-%d")
+
     max_date = datetime.datetime.now().strftime("%Y-%m-%d")
     # create list of dates between min and max
-    dates = pd.date_range(start=min_date, end=max_date).strftime("%Y-%m-%d").tolist()
+    daterange = pd.date_range(start=min_date, end=max_date).strftime("%Y-%m-%d").tolist()
+    # remove any dates we already have
+    dates = [d for d in daterange if d not in dates]
     # search for images
     polygon = planet_utils.get_polygon_file(aoi)
     options = []
