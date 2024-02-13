@@ -3,6 +3,7 @@ import math
 import os
 import PIL
 import pyproj
+import re
 import random
 
 from PIL import Image
@@ -436,6 +437,19 @@ def get_required_padding(filepath):
     bottomPad = math.ceil(heightPadding / 2)
     return leftPad + pad, rightPad + pad, topPad + pad, bottomPad + pad
 
+def get_crs(filepath):
+    """
+    Get the EPSG code of the coordinate reference system of a .tif file.
+    """
+    ds = gdal.Open(filepath)
+    metadata = gdal.Info(ds, format='json')
+    ds = None
+    try:
+        crs = metadata['stac']['proj:projjson']['id']['code']
+        return crs
+    except:
+        raise Exception("The coordinate reference system does not exist in the metadata")
+
 def pixel2coord(x, y, original_image_path):
     """
     Returns global coordinates to pixel center using base-0 raster index
@@ -466,25 +480,25 @@ def coord2pixel(x, y, original_image_path):
     yp =  (y - d*x - d * 0.5 - e * 0.5 - f) / e
     return(xp, yp)
 
-def coord2latlong(x, y):
+def coord2latlong(x, y, crs=32756):
     """
     Converts global coordinates to latitude/longitude coordinates
     :param x: The x coordinate in a pair of global coordinates.
     :param y: The y coordinate in a pair of global coordinates.
     :return: (long, lat) - A tuple containing the longitude and latitude at the provided global coordinates.
     """
-    proj = pyproj.Transformer.from_crs(32756, 4326, always_xy=True)
+    proj = pyproj.Transformer.from_crs(crs, 4326, always_xy=True)
     long, lat = proj.transform(x, y)
     return long, lat
 
-def latlong2coord(lat, long):
+def latlong2coord(lat, long, crs=32756):
     """
     Converts latitude/longitude coordinates to global coordinates
     :param long: The longitude coordinate in a pair of latitude/longitude coordinates.
     :param lat: The latitude coordinate in a pair of latitude/longitude coordinates.
     :return: (x, y) - A tuple containing the global coordinates at the provided latitude/longitude coordinates.
     """
-    proj = pyproj.Transformer.from_crs(4326, 32756)
+    proj = pyproj.Transformer.from_crs(4326, crs)
     x, y = proj.transform(long, lat)
     return x, y
 

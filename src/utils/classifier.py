@@ -3,10 +3,8 @@ import os
 import os.path as path
 import scipy.cluster
 import scipy.spatial
-import argparse
 import yaml
 import utils.image_cutting_support as ics
-from datetime import datetime
 
 """
 Intended usage:
@@ -23,14 +21,18 @@ TEMP_PNG = os.path.join(os.getcwd(), "Boat_Temp_PNG")
 """ Temporary directory for storing png version of tif images """
 
 config = yaml.safe_load(open("config.yml"))
+completed = [] # record of files which have been processed
 
 def main():
     """
     Run the classifier on each image in the directory.
+    Return the name of each directory which is successfully processed.
     """
     classify_directory(config.get("tif_dir"))
     remove(TEMP)
     remove(TEMP_PNG)
+
+
 
 def process_tif(
         file, 
@@ -356,11 +358,13 @@ def pixel2latlong(classifications, file, tif_dir):
     :param file: The file these classifications came from.
     """
     leftPad, _, topPad, _ = ics.get_required_padding(os.path.join(os.getcwd(), tif_dir, file))
+    crs = ics.get_crs(os.path.join(os.getcwd(), tif_dir, file))
+    # get the crs from the tif, e.g EPSG:4326
     for c in classifications:
         x = float(c[0]) - leftPad
         y = float(c[1]) - topPad
         xp, yp = ics.pixel2coord(x, y, os.path.join(os.getcwd(), tif_dir, file))
-        c[0], c[1] = ics.coord2latlong(xp, yp)
+        c[0], c[1] = ics.coord2latlong(xp, yp, crs)
     return classifications
 
 if __name__ == "__main__":

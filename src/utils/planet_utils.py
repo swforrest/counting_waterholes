@@ -182,12 +182,12 @@ def PlanetDownload(orderID:str, aoi=None, date=None):
     # unzip the file
     with zipfile.ZipFile(downloadFile, 'r') as zip_ref:
         zip_ref.extractall(extractPath)
-    # move the tif file to the raw tiffs directory
-    newfname = ['_'.join(f.split('_')[:-2]) for f in os.listdir(extractPath) if f.endswith('.xml')][0]
+    # move the tif file to the raw tiffs directory, naming it (date)_(aoi).tif
+    newfname = f"{date}_{aoi}.tif"
     tif = os.path.join(extractPath, "composite.tif")
     os.rename(os.path.join(extractPath, tif), 
-              os.path.join(config['tif_dir'], newfname + '.tif' ))
-    return extractPath
+              os.path.join(config['tif_dir'], newfname))
+    return newfname
 
 def get_orders():
     """
