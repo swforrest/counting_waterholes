@@ -48,7 +48,7 @@ def area_coverage_poly(reference, polygon):
     Computes the intersection of a polygon and a reference polygon, as a percentage of the reference polygon area.
     :param reference: path to reference polygon file (geojson format)
     :param polygon: path to polygon file (geojson format)
-    :return: coverage (decimal), area of reference polygon, area of polygon
+    :return: coverage (decimal), intersection polygon
     """
     ref_poly = polygons_to_32756(reference)[0]
     poly = polygons_to_32756(polygon)[0]

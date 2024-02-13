@@ -35,6 +35,8 @@ import traceback
 import datetime
 import argparse
 import pandas as pd
+import utils.area_coverage as ac
+import json
 
 ALLOWED_CLOUD_COVER = 0.1
 ALLOWED_AREA_COVER = 0.9
@@ -58,16 +60,18 @@ def main():
 
 def full_auto():
     csv_path = os.path.join("data", "AOI_history.csv")
-    history = get_history(csv_path)
+    archive_path = os.path.join("data", "coverage.csv")
+    archive("tempDL", archive_path)
     for aoi in planet_utils.get_aois():
-        options = auto_search(aoi, history)
+        options, dates = auto_search(aoi, csv_path)
         if options is None:
             continue
-        for items in auto_select(aoi, options, history):
-            auto_order(aoi, items, history, csv_path)
-    auto_download(history, csv_path)
+        for items in auto_select(aoi, options, dates):
+            auto_order(aoi, items, csv_path )
+    auto_download(csv_path)
     auto_count()
-    auto_save(history, csv_path)
+    auto_save(csv_path)
+    archive("tempDL", archive_path)
 
 
 def get_history(csv_path) -> pd.DataFrame:
@@ -76,11 +80,10 @@ def get_history(csv_path) -> pd.DataFrame:
         os.makedirs(os.path.dirname(csv_path), exist_ok=True)
         open(csv_path, "w").write("order_id,aoi,date,order_status,area_coverage,cloud_coverage\n")
     history = pd.read_csv(csv_path)
-    print("Loaded history")
     return history
 
 
-def auto_search(aoi, history):
+def auto_search(aoi, csv_path):
     """
     Search for images for a given AOI
     @param aoi: Area of Interest name
@@ -88,6 +91,7 @@ def auto_search(aoi, history):
     @return list: list of options
     """
     # First get all the dates that we have for the AOI
+    history = get_history(csv_path)
     dates = history[history["aoi"] == aoi]["date"].unique()
     # If we don't have any, use the default last 14 days
     if len(dates) == 0:
@@ -100,7 +104,7 @@ def auto_search(aoi, history):
     # If the latest is today, don't need to waste an API call
     if min_date == datetime.datetime.now().strftime("%Y-%m-%d"):
         print("Already have all dates for", aoi)
-        return
+        return None, None
     max_date = datetime.datetime.now().strftime("%Y-%m-%d")
     # create list of dates between min and max
     dates = pd.date_range(start=min_date, end=max_date).strftime("%Y-%m-%d").tolist()
@@ -113,8 +117,7 @@ def auto_search(aoi, history):
     print("Found", len(options), "total images for", aoi)
     # select and order for each date
     if len(options) == 0:
-        print("No images found with filter.")
-        return
+        return None, None
     return options, dates
 
 def auto_select(aoi, options, dates):
@@ -133,7 +136,7 @@ def auto_select(aoi, options, dates):
             continue
         yield items
 
-def auto_order(aoi, items, history, csv_path):
+def auto_order(aoi, items, csv_path):
     """
     Place a Planet order for the given items
     @param aoi: Area of Interest name
@@ -143,30 +146,29 @@ def auto_order(aoi, items, history, csv_path):
     polygon = planet_utils.get_polygon(aoi)
     date = items[0]["properties"]["acquired"][:10]
     fs_date = "".join(date.split("-")) # filesafe date
-    print(f"Ordering {len(items)} images for {aoi} on {date}")
-    exit()
     order = planet_utils.PlanetOrder(polygon_file=polygon, 
                                     items=items, 
                                     name=f"{aoi}_{fs_date}")
     order_id = order["id"]
     print("Order ID:", order_id)
     # add to history
+    history = get_history(csv_path)
     history = pd.concat([history, pd.DataFrame({"order_id": [order_id], "aoi": [aoi], "date": [date], "order_status": ["ordered"], "area_coverage": ["-"], "cloud_coverage": ["-"]})])
     save_history(history, csv_path)
     return order_id
 
-def auto_download(history, csv_path):
+def auto_download(csv_path):
     """
     Download the given order from Planet
     @param order: order_id
     @param history: DataFrame of the history of orders
     """
+    history = get_history(csv_path)
     orders = planet_utils.get_orders()
     for order in [o for o in orders if o["state"] == "success"]:
         # check if we have already downloaded (status == downloaded or complete)
         if order["id"] in history[history["order_status"].isin(["downloaded", "complete"])]["order_id"].tolist():
-            # already downloaded
-            print("Already downloaded", order["id"])
+            # already have this
             continue
         elif order["id"] in history[history["order_status"] == "ordered"]["order_id"].tolist():
             print("Downloading", order["id"])
@@ -183,21 +185,22 @@ def auto_count():
     """
     classifier.main()
 
-def auto_save(history, csv_path):
+def auto_save(csv_path):
     """
     Confirm completion of the process and archive the raw data
     """
+    history = get_history(csv_path)
     new = history[history["order_status"] == "downloaded"]
     if len(new) == 0:
         print("No new orders this run. Exiting.")
     # make a list of new file names (row["date"]_row["aoi"] for each row in new)
-    new_files = [f"{row['date'].replace('-','')}_{row['aoi']}.tif" for i, row in new.iterrows()]
+    new_files = [f"{row['date'].replace('-','')}_{row['aoi']}" for _, row in new.iterrows()]
     # update to complete if file does not exist in rawimages.
     # the classifier will have moved the files if complete
     for new_file in new_files:
         if not os.path.exists(os.path.join("data", "RawImages", new_file)):
             date = new_file[:4] + "-" + new_file[4:6] + "-" + new_file[6:8]
-            aoi = new_file.split("_")[1]
+            aoi = "_".join(new_file.split("_")[1:])
             right_aoi = history[history["aoi"] == aoi]
             right_date = right_aoi[right_aoi["date"] == date]
             if len(right_date) == 0:
@@ -205,24 +208,41 @@ def auto_save(history, csv_path):
                 continue
             order_id = right_date["order_id"].iloc[0]
             history.loc[history["order_id"] == order_id, "order_status"] = "complete"
-    # archive the raw data
-    archive("tempDL")
     # save the history
     save_history(history, csv_path)
 
 def save_history(history, csv_path):
     history.to_csv(csv_path, index=False)
 
-def archive(path):
+def archive(path, coverage_path):
     """
     Deal with folder of raw data after processing
     """
     # We want to delete any folders, but keep zip folders
+    if not os.path.exists(coverage_path):
+        # create it
+        open(coverage_path, "w").write("date,aoi,area_coverage,polygon\n")
+    coverage = pd.read_csv(coverage_path)
     import shutil
     for root, dirs, files in os.walk(path):
         for d in dirs:
             if d.endswith(".zip"):
+                # ARCHIVE THIS ZIP
+                print("Sending to archive:", d)
                 continue
+            # save the polygon to the coverage file
+            # load composite_metadata.json from the directory if it exists
+            if "composite_metadata.json" in os.listdir(os.path.join(root, d)):
+                meta = json.load(open(os.path.join(root, d, "composite_metadata.json")))
+                polygon = meta["geometry"]
+                aoi = "_".join(d.split("_")[0:-1])
+                date = d.split("_")[-1]
+                date = date[:4] + "-" + date[4:6] + "-" + date[6:8]
+                cov_amount, _ = ac.area_coverage_poly(planet_utils.get_polygon(aoi), polygon)
+                # add to coverage
+                coverage = pd.concat([coverage, pd.DataFrame({"aoi": [aoi], "date": [date], "area_coverage": [cov_amount], "polygon": [json.dumps(polygon)]})])
+                # save the coverage
+                coverage.to_csv(coverage_path, index=False)
             shutil.rmtree(os.path.join(root, d))
     
 
