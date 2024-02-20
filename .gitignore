@@ -1,21 +1,7 @@
-TrainImages
-.DS_Store
-RawImage
-TestImgs
-temp
-*pycache*
-Test*
-
 .env
-*.csv
-*.png
-*.tif
-*.key
-*.pdf
+case_studies
+documents
+outputs
+images
+*pycache*
 
-order_status.json
-tempDL
-order_response.json
-orders.json
-response.json
-ImgDetections
