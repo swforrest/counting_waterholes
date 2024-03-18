@@ -30,7 +30,7 @@ def main():
 
 def plot(NNcsv, NNpicture, save=False, show=True):
     IMAGE_NAME = os.path.basename(NNpicture)
-    temp_path = "./temp" + datetime.now().strftime("%Y%m%d%H%M%S%f")
+    temp_path = os.path.join(os.path.dirname(NNpicture), "temp" + datetime.now().strftime("%Y%m%d%H%M%S%f"))
     # open the csv file, get all rows with image matching image name
     matches = []
     with open(NNcsv, 'r') as f:

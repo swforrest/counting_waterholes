@@ -1,13 +1,24 @@
-# import pandas as pd
+"""
+This module provides functions for calculating the coverage of polygons and TIFF files.
+
+The main functions in this module are:
+- `area_coverage_tif`: Calculates the intersection of a polygon and a TIFF file, as a percentage of the polygon area.
+- `area_coverage_poly`: Computes the intersection of a polygon and a reference polygon, as a percentage of the reference polygon area.
+- `combine_polygons`: Combines two or more polygons into one.
+- `polygons_to_32756`: Converts a polygon from latitude-longitude coordinates to EPSG:32756 coordinate system.
+
+These functions are useful for analyzing and measuring the coverage of geographic areas by polygons and TIFF files.
+
+Author: Charlie Turner
+Date: 18/3/24
+"""
+
 import json
-
 import numpy as np
-
-import matplotlib.pyplot as plt
 from osgeo import gdal, ogr
 import rasterio
 
-import utils.image_cutting_support as ics
+from . import image_cutting_support as ics
 
 def area_coverage_tif(polygon, tif):
     """
@@ -20,7 +31,7 @@ def area_coverage_tif(polygon, tif):
     :return: coverage (decimal), area of polygon, area of tif
     """
 # Area of polygon:
-    poly = polygons_to_32756(polygon)
+    poly = polygons_to_32756(polygon)[0]
     area = poly.Area()
 # Same idea with the tif. Get the area of the tif
     with rasterio.open(tif) as src:

@@ -1,3 +1,5 @@
+
+
 import numpy as np
 import os
 import os.path as path
@@ -5,6 +7,7 @@ import scipy.cluster
 import scipy.spatial
 import yaml
 import utils.image_cutting_support as ics
+from config import cfg
 
 """
 Intended usage:
@@ -20,15 +23,51 @@ TEMP = os.path.join(os.getcwd(), "Boat_Temp")
 TEMP_PNG = os.path.join(os.getcwd(), "Boat_Temp_PNG")
 """ Temporary directory for storing png version of tif images """
 
-config = yaml.safe_load(open("config.yml"))
 completed = [] # record of files which have been processed
 
 def main():
     """
     Run the classifier on each image in the directory.
     Return the name of each directory which is successfully processed.
+    Requires 
     """
-    classify_directory(config.get("tif_dir"))
+    classify_directory(cfg["tif_dir"])
+    remove(TEMP)
+    remove(TEMP_PNG)
+
+# Rest of the code...
+import numpy as np
+import os
+import os.path as path
+import scipy.cluster
+import scipy.spatial
+import yaml
+import utils.image_cutting_support as ics
+from config import cfg
+
+"""
+Intended usage:
+    Processes the outputs
+    Saves the results to a csv file. 
+
+Usage: python classifier.py -d <.tif directory> -o <output file name>
+"""
+
+TEMP = os.path.join(os.getcwd(), "Boat_Temp")
+""" Temporary directory for storing images """
+
+TEMP_PNG = os.path.join(os.getcwd(), "Boat_Temp_PNG")
+""" Temporary directory for storing png version of tif images """
+
+completed = [] # record of files which have been processed
+
+def main():
+    """
+    Run the classifier on each image in the directory.
+    Return the name of each directory which is successfully processed.
+    Requires 
+    """
+    classify_directory(cfg["tif_dir"])
     remove(TEMP)
     remove(TEMP_PNG)
 
@@ -46,10 +85,10 @@ def process_tif(
     :param moving_cutoff: The cutoff for moving boats (pixels)
     :return: A tuple of the static boats and moving boats
     """
-    classifications, _ = detect_from_tif(file, config["tif_dir"], 
-                                         config["yolo_dir"], config["python"], 
-                                         config["weights"], 
-                                         config["CONFIDENCE_THRESHOLD"])
+    classifications, _ = detect_from_tif(file, cfg["tif_dir"], 
+                                         cfg["yolo_dir"], cfg["python"], 
+                                         cfg["weights"], 
+                                         cfg["CONFIDENCE_THRESHOLD"])
     if len(classifications) == 0:
         return np.array([]), np.array([])
     # split into moving and static boats
@@ -63,14 +102,14 @@ def process_tif(
     moving_boats = process_clusters(moving_clusters)
     # convert pixel coordinates to lat/long
     # tif file should have coord details
-    static_boats = pixel2latlong(static_boats, file, config["tif_dir"])
-    moving_boats = pixel2latlong(moving_boats, file, config["tif_dir"])
+    static_boats = pixel2latlong(static_boats, file, cfg["tif_dir"])
+    moving_boats = pixel2latlong(moving_boats, file, cfg["tif_dir"])
     # add the image name to each classification (as the last column)
     static_boats = np.c_[static_boats, [file] * len(static_boats)]
     moving_boats = np.c_[moving_boats, [file] * len(moving_boats)]
     # move the tif into the processed folder
-    os.makedirs(path.join(config["tif_dir"], "processed"), exist_ok=True)
-    os.rename(path.join(config["tif_dir"], file), path.join(config["tif_dir"], "processed", file))
+    os.makedirs(path.join(cfg["tif_dir"], "processed"), exist_ok=True)
+    os.rename(path.join(cfg["tif_dir"], file), path.join(cfg["tif_dir"], "processed", file))
     return static_boats, moving_boats
 
 def process_day(files, stat_cutoff, moving_cutoff, day, i, n_days):
@@ -96,9 +135,9 @@ def process_day(files, stat_cutoff, moving_cutoff, day, i, n_days):
     all_moving_boats = all_moving_boats[0]
     # once a day has been classified, need to cluster again
     static_boats = cluster(np.array(all_static_boats), 
-                           config["STAT_DISTANCE_CUTOFF_LATLONG"])
+                           cfg["STAT_DISTANCE_CUTOFF_LATLONG"])
     moving_boats = cluster(np.array(all_moving_boats), 
-                           config["MOVING_DISTANCE_CUTOFF_LATLONG"])
+                           cfg["MOVING_DISTANCE_CUTOFF_LATLONG"])
     # process again
     static_boats = process_clusters(static_boats)
     moving_boats = process_clusters(moving_boats)
@@ -118,14 +157,14 @@ def classify_directory(directory):
                     if ics.get_date_from_filename(file) == day], day) 
                   for day in days)
     daily_results = (process_day(files, 
-                                 config["STAT_DISTANCE_CUTOFF_PIX"], 
-                                 config["MOVING_DISTANCE_CUTOFF_PIX"], 
+                                 cfg["STAT_DISTANCE_CUTOFF_PIX"], 
+                                 cfg["MOVING_DISTANCE_CUTOFF_PIX"], 
                                  day, i, len(days)) 
                      for i, (files, day) in enumerate(daily_data))
     # write to csv
     for static_boats, moving_boats, day in daily_results:
-        write_to_csv(static_boats, day, f"{config['OUTFILE']}")
-        write_to_csv(moving_boats, day, f"{config['OUTFILE']}")
+        write_to_csv(static_boats, day, f"{cfg['OUTFILE']}")
+        write_to_csv(moving_boats, day, f"{cfg['OUTFILE']}")
 
 def classify_images(images_dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE):
     """
@@ -136,11 +175,11 @@ def classify_images(images_dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE):
     # read a day of images at a time
     for dir in dirs:
         day = path.basename(dir)
-        day = day.split("_").join("/")
-        classifications, _ = detect_from_dir(dir, config["yolo_dir"], 
-                                             config["python"], 
-                                             config["weights"], 
-                                             config["CONFIDENCE_THRESHOLD"])
+        day = "/".join(day.split("_"))
+        classifications, _ = detect_from_dir(dir, cfg["yolo_dir"], 
+                                             cfg["python"], 
+                                             cfg["weights"], 
+                                             cfg["CONFIDENCE_THRESHOLD"])
         # cluster
         clusters = cluster(classifications, STAT_DISTANCE_CUTOFF_PIX)
         # process
@@ -274,7 +313,7 @@ def read_classifications(yolo_dir=None, class_folder=None, confidence_threshold:
     # remove low confidence
     classifications, low_confidence = remove_low_confidence(all_cs, confidence_threshold)
     # remove the classification path
-    if delete_folder and latest_exp is not None:
+    if delete_folder and latest_exp is not None and yolo_dir is not None:
         folder = os.path.join(yolo_dir, "runs", "detect", f"exp{latest_exp}")
         remove(folder)
     return classifications, low_confidence
@@ -327,6 +366,7 @@ def condense(cluster:np.ndarray):
 def write_to_csv(classifications, day, file):
     # Write to output csv
     # Create output csv if it doesn't exist
+    file = os.path.join(cfg["proj_root"], "outputs", file)
     if not os.path.isfile(f"{file}.csv"):
         with open(f"{file}.csv", "a+") as outFile:
             outFile.writelines("date,class,images,latitude,longitude,confidence,w,h\n")

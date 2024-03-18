@@ -1,49 +1,13 @@
-"""
-With Flag --full-auto, runs in full auto mode.
-1. Orders all AOIs for any days in the last {--history} days that we don't have yet
-2. Checks if any previous orders are complete
-3. Downloads completed orders
-4. Counts the boats
-5. Saves the results to the ???????????
-
-else:
-The semi-automated boat counter.
-1. Asks: New order or existing?
-NEW:
-    1. Which AOI/AOI's?
-    2. Which date?
-        Latest is default, or specify
-    3. Acceptable Cloud Coverage?
-        Default is 10%
-    4. Acceptable Area Coverage?
-        Default is 90%
-EXISTING:
-    1. Order ID?
-    2. Download the zip
-    3. Unzip the zip
-    4. Move the TIF to the correct folder
-    5. Delete the zip
-    6. Count them boats
-    7. Add boat counts to the database
-    8. save a labelled image for review
-"""
 import os
 import utils.planet_utils as planet_utils
 import utils.classifier as classifier
-import utils.image_cutting_support as ics
 import traceback
 import datetime
 import argparse
 import pandas as pd
 import utils.area_coverage as ac
 import json
-import yaml
-
-ALLOWED_CLOUD_COVER = 0.1
-ALLOWED_AREA_COVER = 0.2
-HISTORY_LENGTH = 14 # days to check for new images
-
-# config = yaml.safe_load(open("config.yaml"))
+from config import cfg
 
 def main():
     parser = argparse.ArgumentParser(description="Count the boats!")
@@ -101,7 +65,7 @@ def auto_search(aoi, csv_path):
     history = get_history(csv_path)
     dates = history[history["aoi"] == aoi]["date"].unique()
     # If we don't have any, use the default last 14 days
-    min_date = datetime.datetime.now() - datetime.timedelta(days=HISTORY_LENGTH)
+    min_date = datetime.datetime.now() - datetime.timedelta(days=cfg["HISTORY_LENGTH"])
     min_date = min_date.strftime("%Y-%m-%d")
 
     max_date = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -116,7 +80,7 @@ def auto_search(aoi, csv_path):
         options = planet_utils.PlanetSearch(polygon_file=polygon, 
                                        min_date=min_date, 
                                        max_date=max_date,
-                                       cloud_cover=ALLOWED_CLOUD_COVER)
+                                       cloud_cover=cfg["ALLOWED_CLOUD_COVER"])
     except Exception as e:
         traceback.print_exc()
         print(e)
@@ -139,7 +103,7 @@ def auto_select(aoi, options, dates):
     # Select images for each date and yield them
     for date in dates:
         try:
-            items = planet_utils.PlanetSelect(items=options,polygon=polygon, date=date, area_coverage=ALLOWED_AREA_COVER)
+            items = planet_utils.PlanetSelect(items=options,polygon=polygon, date=date, area_coverage=cfg["ALLOWED_AREA_COVER"])
         except Exception as e:
             traceback.print_exc()
             print(e)
@@ -251,7 +215,7 @@ def archive(path, coverage_path):
         for d in dirs:
             if d.endswith(".zip"):
                 # ARCHIVE THIS ZIP
-                print("Sending to archive:", d)
+                print("Sending to archive (not really, make sure we do this later!!!):", d)
                 continue
             # save the polygon to the coverage file
             # load composite_metadata.json from the directory if it exists

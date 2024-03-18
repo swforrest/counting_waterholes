@@ -2,14 +2,14 @@ import requests
 import os
 import yaml
 import json
+from config import cfg
 from dotenv import load_dotenv
 from . import area_coverage
 import zipfile
 load_dotenv()
 
 # api key is either set in the environment variable or config.yml
-config = yaml.load(open('config.yml', 'r'), Loader=yaml.FullLoader)
-API_KEY = os.environ.get('PLANET_API_KEY', config['planet']['api_key'])
+API_KEY = os.environ.get('PLANET_API_KEY', cfg['planet']['api_key'])
 if API_KEY is None or API_KEY == 'ENV':
     raise Exception('Planet API key not found in environment variable or config.yml')
 
@@ -167,7 +167,6 @@ def PlanetDownload(orderID:str, aoi=None, date=None):
     # make the directory if it doesn't exist
     downloadPath = os.path.join(os.getcwd(), "tempDL")
     downloadFile = os.path.join(downloadPath, f"{aoi}_{date}.zip")
-    extractPath = downloadFile.split('.')[0]
     os.makedirs(downloadPath, exist_ok=True)
     # download the file
     progress = 0
@@ -179,14 +178,25 @@ def PlanetDownload(orderID:str, aoi=None, date=None):
                     progress += len(chunk)
                     print(f"{orderID} \t Downloaded {progress} bytes", end='\r') 
     print()
-    # unzip the file
+    # extract the file
+    return extract_zip(downloadFile, aoi, date)
+
+def extract_zip(downloadFile, aoi=None, date=None):
+    if aoi is None or date is None:
+        try:
+            seps = os.path.basename(downloadFile).split('.')[0].split('_')
+            date = seps[-1]
+            aoi = "_".join(seps[:-1])
+        except:
+            raise Exception('AOI and date must be provided')
+    extractPath = downloadFile.split('.')[0]
     with zipfile.ZipFile(downloadFile, 'r') as zip_ref:
         zip_ref.extractall(extractPath)
     # move the tif file to the raw tiffs directory, naming it (date)_(aoi).tif
     newfname = f"{date}_{aoi}.tif"
     tif = os.path.join(extractPath, "composite.tif")
     os.rename(os.path.join(extractPath, tif), 
-              os.path.join(config['tif_dir'], newfname))
+              os.path.join(cfg["proj_root"], "images", "RawImages", newfname))
     return newfname
 
 def get_orders():
@@ -204,15 +214,15 @@ def get_aois():
     """
     Get all the areas of interest
     """
-    return [f.split('.')[0] for f in os.listdir(config['planet']['polygons']) if f.endswith('json')]
+    return [f.split('.')[0] for f in os.listdir(cfg['planet']['polygons']) if f.endswith('json')]
 
 def get_polygon_file(aoi):
     """
     Get the polygon for a given area of interest
     """
-    files = os.listdir(config['planet']['polygons'])
+    files = os.listdir(cfg['planet']['polygons'])
     file = [f for f in files if f.split('.')[0] == aoi][0]
-    return os.path.join(config['planet']['polygons'], file)
+    return os.path.join(cfg['planet']['polygons'], file)
 
 def items_area_coverage(items, AOI):
     """

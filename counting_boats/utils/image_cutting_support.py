@@ -324,7 +324,7 @@ def segment_image_for_classification(image, data_path, size, overlap_size):
         print(str("Progress: " + str(int(float(i / ((height / overlap_size) - 5)) * 100)) +
                   "%"), end="\r")
 
-def create_padded_png(raw_dir, output_dir, file_name):
+def create_padded_png(raw_dir, output_dir, file_name, rename=False):
     """
     Creates an image which is padded for use in training/classifying within a neural network. Note: this images pads
     the images expecting that the size of sub-images created from this images will be 416x416 pixels.
@@ -371,7 +371,10 @@ def create_padded_png(raw_dir, output_dir, file_name):
     im_new = add_margin(colourImage, pad + leftPad, pad + rightPad, pad + topPad, pad + bottomPad, (0, 0, 0))
 
     # Save the padded image which is now ready for classification
-    savePath = os.path.join(PNGpath, file_name.split('.')[0]+ ".png")
+    if rename != False and type(rename) == str:
+        savePath = os.path.join(PNGpath, rename + ".png")
+    else:
+        savePath = os.path.join(PNGpath, file_name.split('.')[0]+ ".png")
     im_new.save(savePath, quality=100, compress_level=0)
 
     # Close loose file descriptors
