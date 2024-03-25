@@ -5,4 +5,5 @@ outputs
 images
 *pycache*
 YoloV8_Test
+runs
 
