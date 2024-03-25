@@ -1,43 +1,39 @@
 import os
 import utils.validation as val_utils
 import argparse
+import yaml
 
+def init_run(config_file:str):
+    # create a new folder
+    os.makedirs(os.path.join("runs", "val"), exist_ok=True)
+    # name it "val" + the next number
+    run_num = 0
+    while os.path.exists(os.path.join("runs", "val", "val" + str(run_num))):
+        run_num += 1
+    os.makedirs(os.path.join("runs", "val", "val" + str(run_num)))
+    # make a "imgs" and "plots" folder
+    os.makedirs(os.path.join("runs", "val", "val" + str(run_num), "imgs"))
+    os.makedirs(os.path.join("runs", "val", "val" + str(run_num), "plots"))
+    # copy the config file to the folder
+    with open(config_file, 'r') as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    with open(os.path.join("runs", "val", "val" + str(run_num), "config.yaml"), 'w') as f:
+        yaml.dump(config, f)
+    # return the folder
+    return os.path.join("runs", "val", "val" + str(run_num))
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
     argparser.description = "Cluster classifications and labels from yolo and manual annotations to compare them. File names must be identical between given arguments"
-    argparser.add_argument("-f", "--folder", help="Directory of classifications and labels", required=True)
+    argparser.add_argument("-c", "--config", help="Configuration Folder", required=True)
     args = argparser.parse_args()
-    classifications = os.path.join(args.folder, "Classifications")
-    labels = os.path.join(args.folder, "Labels")
-    outdir = os.path.join(args.folder, "Summary")
-    imgs = os.path.join(args.folder, "SegmentedImages")
-    summaries = os.path.join(args.folder, "Summary") 
-    # make args.folder global
-    folder = args.folder
-
-    # check what we want to do
-    print("1. Prepare tif images for labelling")
-    print("2. Prepare images for validation")
-    print("3. Infer From Images")
-    print("4. Analyse Results")
-    choice = input("Enter a number: ")
-    if choice == "1":
-        val_utils.prepare_png_from_tifs(folder)
-    elif choice == "2":
-        val_utils.prepare_pngs_for_detection(folder)
-    elif choice == "3":
-        val_utils.run_detection(folder)
-    elif choice == "4":
-        # First do the comparisons
-        val_utils.compare_detections_to_ground_truth(folder)
-        # Then summarise the results
-        val_utils.summarize(folder)
-        # Then plot the boats
-        val_utils.plot_boats(summaries, folder)
-        # Then highlight the mistakes
-        val_utils.highlight_mistakes(folder)
-
-
-
-
+    folder = init_run(args.config)
+    config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
+    # Basically go through and complete each task
+    tasks = config["tasks"]
+    for task in tasks:
+        if config["tasks"][task] == False:
+            print(f"Task '{task}' disabled, skipping...")
+            continue
+        do_task = getattr(val_utils, task)  # each task is a funcion in val_utils
+        do_task(folder, config)             # Do the task, each takes the folder and config

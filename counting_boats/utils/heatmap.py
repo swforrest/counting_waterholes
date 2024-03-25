@@ -58,13 +58,20 @@ def get_polygons_from_folder(folder, name=None):
                         polygons.extend(polygons_to_32756(json.load(f)))
     return polygons
 
-def get_polygons_from_file(csv_path):
+def get_polygons_from_file(csv_path, group=None):
+    """
+    Get the polygons from a csv file with 'polygon' column.
+    Group optionally is a group of aois to use
+    """
     df = pd.read_csv(csv_path)
+    # filter where df[aoi] is in group
+    if group is not None:
+        df = df[df["aoi"].isin(group)]
     if "polygon" not in df.columns:
         raise ValueError("No column named 'polygon' in file")
     polygons = []
     for poly in df["polygon"]:
-        polygons.append(ogr.CreateGeometryFromJson(poly))
+        polygons.append(polygons_to_32756(poly)[0])
     return polygons
 
 def create_grid(x_min, x_max, y_min, y_max, size=1000):
@@ -188,7 +195,6 @@ def polygon_from_tif(tif):
     fig = plt.figure()
     ax = fig.add_subplot(111)
     ax.plot(*zip(*max_poly_coords))
-    plt.show()
 
 def add_to_heatmap(heatmap, polygons):
     """
@@ -215,7 +221,7 @@ def add_to_heatmap(heatmap, polygons):
     # remove the temp file
     os.remove("temp.tif")
 
-def create_heatmap_from_polygons(polygons, outdir):
+def create_heatmap_from_polygons(polygons, save_file="heatmap.tif", show=False):
     if len(polygons) == 0:
         raise ValueError("No polygons found in folder")
     # Get the bounding box
@@ -226,11 +232,11 @@ def create_heatmap_from_polygons(polygons, outdir):
     # Paint the polygons onto the grid
     for poly in polygons:
         paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly)
-    plt.imshow(grid)
-    plt.show()
+    if show:
+        plt.imshow(grid)
+        plt.show()
     # Export the grid
-    filename = os.path.join(outdir, "heatmap.tif")
-    export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename=filename)
+    export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename=save_file)
 
 
 if __name__ == "__main__":

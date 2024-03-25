@@ -1,0 +1,36 @@
+# Configuration for Validation/Testing Runs
+path: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton
+weights: /Users/charliturner/Desktop/Yolov5l.pt
+
+raw_images: RawImages # Folders as downloaded from Planet (extracted zips)
+
+# Auxiliary Paths (relative to path)
+# These paths either exist (and are used) or are created (and used) by the run
+# If use_existing_auxiliaries is not empty, the corresponding folder will be ignored here
+pngs: Pngs # Pngs for the tif files
+segmented_images: images # Segmented images
+labels: labels # Labels for the images
+classifications: Classifications # Classifications for the images
+
+use_existing_auxiliaries: # use any auxilliary files found in the path (e.g SegmentedImages, Classifications, )
+  - segmented_images: images
+  - classifications: Classifications
+  - labels: labels
+
+tasks:
+  prepare: False  # Prepare for labelling
+  segment: False  # Segment images/labels
+  run_detection: True     # Run the classifier
+  analyse:
+    compare: True # Cluster and compare results to ground truth
+    plots:
+      confusion_matrix: True
+      precision_recall: True
+      roc: True
+      mAP_50: True
+      mAP_75: True
+      mAP_90: True
+    images:
+      all_mistakes: True # Collate all mistakes into images with comparison 
+      subimage_confidence: True  # Show confidence of detection for all subimages of a given boat (number of random boats to do this for)
+

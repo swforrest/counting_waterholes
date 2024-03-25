@@ -153,7 +153,7 @@ def PlanetCheckOrder(orderID:str):
     return response.json()['state']
 
 
-def PlanetDownload(orderID:str, aoi=None, date=None):
+def PlanetDownload(orderID:str, aoi=None, date=None, downloadPath="tempDL"):
     """
     Download a given order and move the tif file to the raw tiffs directory
     """
@@ -165,7 +165,6 @@ def PlanetDownload(orderID:str, aoi=None, date=None):
     links = response.json()['_links']['results']
     download_link = [link['location'] for link in links if "manifest" not in link['name']][0]
     # make the directory if it doesn't exist
-    downloadPath = os.path.join(os.getcwd(), "tempDL")
     downloadFile = os.path.join(downloadPath, f"{aoi}_{date}.zip")
     os.makedirs(downloadPath, exist_ok=True)
     # download the file
@@ -195,7 +194,10 @@ def extract_zip(downloadFile, aoi=None, date=None):
     # move the tif file to the raw tiffs directory, naming it (date)_(aoi).tif
     newfname = f"{date}_{aoi}.tif"
     tif = os.path.join(extractPath, "composite.tif")
-    os.rename(os.path.join(extractPath, tif), 
+    if not os.path.isfile(tif):
+        raise Exception(f"No tif file found in {extractPath}")
+
+    os.rename(tif, 
               os.path.join(cfg["proj_root"], "images", "RawImages", newfname))
     return newfname
 
@@ -214,15 +216,16 @@ def get_aois():
     """
     Get all the areas of interest
     """
-    return [f.split('.')[0] for f in os.listdir(cfg['planet']['polygons']) if f.endswith('json')]
+    return [f.split('.')[0] for f in os.listdir(os.path.join(cfg["proj_root"], "data", "polygons")) if f.endswith('json')]
 
 def get_polygon_file(aoi):
     """
     Get the polygon for a given area of interest
     """
-    files = os.listdir(cfg['planet']['polygons'])
+    files = os.listdir(os.path.join(cfg["proj_root"], "data", "polygons"))
+    files = [f for f in files if f.endswith('json')]
     file = [f for f in files if f.split('.')[0] == aoi][0]
-    return os.path.join(cfg['planet']['polygons'], file)
+    return os.path.join(cfg["proj_root"], "data", "polygons", file)
 
 def items_area_coverage(items, AOI):
     """

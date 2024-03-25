@@ -1,8 +1,5 @@
 """
-Utility functions for training/validation pipeline.
-Includes:
-    Preparing tif files for labelling
-    Using labelme 
+Utility functions for training/validation pipeline.  Includes: Preparing tif files for labelling Using labelme 
 """
 import os
 import shutil
@@ -11,18 +8,20 @@ import numpy as np
 import pandas as pd
 import scipy
 
-from classifier import cluster, process_clusters, read_classifications
+from .classifier import cluster, process_clusters, read_classifications
 from config import cfg
-import image_cutting_support as ics
+from . import image_cutting_support as ics
 import matplotlib.pyplot as plt
-from sklean.metrics import ConfusionMatrixDisplay
+from sklearn.metrics import ConfusionMatrixDisplay
 
-def prepare_png_from_tifs(folder):
+def prepare(run_folder, config):
     """
     Given a folder, find all the tif files are create a png for each one.
     Also rename tif files if required.
     """
-    for root, _, files in os.walk(folder):
+    img_folder = config["raw_images"] # folder with the tif files
+    save_folder = os.path.join(config["path"], config["pngs"])
+    for root, _, files in os.walk(img_folder):
         for file in files:
             if file == 'composite.tif':
                 # find the json file:
@@ -34,41 +33,45 @@ def prepare_png_from_tifs(folder):
                 os.rename(os.path.join(root, file), 
                           os.path.join(root, name))
                 # want to create a png for this
-                new_name = os.path.join(folder, f"{name.split('.')[0]}.png")
-                if not os.path.exists(os.path.join(root, f"{name.split('.')[0]}.png")):
-                    ics.create_padded_png(root, folder, name)
+                new_name = os.path.join(save_folder, f"{name.split('.')[0]}.png")
+                if not os.path.exists(new_name):
+                    ics.create_padded_png(root, save_folder, name)
             # if the file is a tif and first part is a date, don't need to rename
             elif file.endswith('tif') and file.split('_')[0].isdigit():
                 # check if we have already created a png for this
-                new_name = os.path.join(folder, f"{file.split('.')[0]}.png")
+                new_name = os.path.join(save_folder, f"{file.split('.')[0]}.png")
                 if not os.path.exists(new_name):
-                    ics.create_padded_png(root, folder, file)
+                    ics.create_padded_png(root, save_folder, file)
 
-def prepare_pngs_for_detection(folder, segment_size=416, stride=104):
+def segment(run_folder, config, segment_size=416, stride=104):
     """
     Segment (labelled) png's in the given base. 
     Places segmented images in the 'SegmentedImages' folder, and Labels in the 'Labels' folder.
     """
-    for filename in os.listdir(folder):
-        if filename.endswith(".json"):
-            # get all dir names in "SegmentedImages" folder (recursively)
-            dirs = [x[0].split(os.path.sep)[-1] for x in os.walk(os.path.join(folder, "SegmentedImages"))]
+    pngs = os.path.join(config["path"], config["pngs"])
+    im_save_folder = os.path.join(config["path"], config["segmented_images"])
+    label_save_folder = os.path.join(config["path"], config["labels"])
+    for filename in os.listdir(pngs):
+        if filename.endswith(".json"): # Grab the LabelMe Label file
+            # get all dir names in the segmentation folder (recursively)
+            dirs = [x[0].split(os.path.sep)[-1] for x in os.walk(im_save_folder)]
             if filename[:-5] in dirs:
-                # skip this file because it has already been segmented
+                # skip this file if it has already been segmented (segmenting takes a while)
                 continue
-            # a label file
             # find the corresponding image file
-            img_file = os.path.join(folder, filename[:-5] + ".png")
-            if os.path.isfile(img_file):
-                ics.segment_image(img_file, os.path.join(folder, filename), segment_size, stride, remove_empty=0, 
-                                  im_outdir=os.path.join(folder, "SegmentedImages"), labels_outdir=os.path.join(folder, "Labels"))
-    # Separate the folders
-    segregate(os.path.join(folder, "SegmentedImages"))
-    segregate(os.path.join(folder, "Labels"))
+            img_file = os.path.join(im_save_folder, filename[:-5] + ".png")
+            if os.path.isfile(img_file): # Check exists
+                ics.segment_image(img_file, os.path.join(pngs, filename), segment_size, stride, remove_empty=0, 
+                                  im_outdir=im_save_folder, labels_outdir=label_save_folder)
+            else:
+                print(f"Could not find image file for {filename}")
+    # Separate the folders into individual images for fun
+    segregate(im_save_folder)
+    segregate(label_save_folder)
     
 
 
-def run_detection(folder, img_dir = "SegmentedImages"):
+def run_detection(run_folder, run_config, img_dir = "SegmentedImages"):
     """
     Run the YoloV5 detection on the segmented images, and move 
     the detections to a sibling directory for analysis.
@@ -76,9 +79,10 @@ def run_detection(folder, img_dir = "SegmentedImages"):
     weights = cfg["weights"]
     yolo = cfg["yolo_dir"]
     python = cfg["python"]
+    classification_dir = os.path.join(run_config["path"], run_config["classifications"])
     for root, _, files in os.walk(img_dir):
         if len(files) > 0 and files[0].endswith(".png"):
-            this_classification_dir = os.path.join(folder, "Classifications", os.path.sep.join(root.split(os.path.sep)[-2:]))
+            this_classification_dir = os.path.join(classification_dir, os.path.sep.join(root.split(os.path.sep)[-2:]))
             if os.path.exists(this_classification_dir): # don't double classify
                 continue
             os.makedirs(this_classification_dir, exist_ok=True)
@@ -108,7 +112,7 @@ def summarize(folder):
     all_data = []
     for csv in csvs:
         all_data.append(pd.read_csv(csv))
-    all_data = pd.concat(all_data)
+    all_data = pd.concat(all_data) # combine all the data into one dataframke
     all_data = all_data.dropna()
     # create confusion matrix
     true = all_data["manual_class"]
