@@ -1,4 +1,4 @@
-# Configuration for Validation/Testing Runs
+# Configuration for Validation/Analysis Runs
 path: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton
 weights: /Users/charliturner/Desktop/Yolov5l.pt
 

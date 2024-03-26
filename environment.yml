@@ -1,0 +1,27 @@
+# conda env create -f environment.yml python=3.10
+name: Boats
+channels:
+  - conda-forge
+  - pytorch
+  - nvidia
+  - defaults
+dependencies:
+  - python=3.10
+  - matplotlib
+  - numpy
+  - pandas
+  - bokeh
+  - gdal
+  - Pillow
+  - pytorch 
+  - torchvision 
+  - torchaudio 
+  - pytorch-cuda=11.8
+  - yaml
+  - labelme
+  - typer
+  - rasterio
+  - pyproj
+  - pip
+  - pip:
+    - python-dotenv
