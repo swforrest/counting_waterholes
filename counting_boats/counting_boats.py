@@ -1,10 +1,12 @@
+import datetime
 import os
 import argparse
 import typer
 import utils.planet_utils as pu
 import utils.classifier as cl
+import utils.auto_helpers as ah
 from config import cfg
-from CountTheBoats import archive
+from CountTheBoats import archive, analyse
 
 """
 Ideally this becomes the one file to rule them all, currently CountTheBoats is the main file
@@ -36,13 +38,42 @@ Workflow for manual:
     Side effects: Creates classified images, updates coverage.csv file, archives zip files
 """
 
-app = typer.Typer()
+app = typer.Typer(
+    name="CountTheBoats",
+    help="Count the boats in the images",
+    no_args_is_help=True,
+)
+
+@app.command()
+def auto():
+    """
+    Run the entire pipeline automatically.
+    """
+    orders_path     = os.path.join("outputs", "AOI_history.csv")
+    archive_path    = os.path.join("outputs", "coverage.csv")
+    download_path   = os.path.join("images", "downloads")
+    # For all AOIS
+    aois = aois if aois is not None else pu.get_aois()
+    for aoi in aois:
+        options, dates = ah.search(aoi, orders_path)
+        if options is None:
+            continue
+        for items in ah.select(aoi, options, dates):
+            ah.order(aoi, items, orders_path )
+    ah.download(csv_path=orders_path, download_path=download_path)
+    ah.extract(csv_path=orders_path, download_path=download_path)
+    ah.count()    # Count the boats
+    ah.save(orders_path)                 # Save the history
+    archive(download_path, archive_path) # Archive the raw data (and save coverage info)
+    # analyse
+    analyse(orders_path, archive_path)
+    # report (per run, and overall)
+
 
 @app.command()
 def search(aoi: str, start_date: str, end_date: str, cloud_cover: str, area_cover: str):
     """
     Search for images on planet.
-    Usage: search {aoi} {start_date} {end_date} {cloud_cover} {area_cover}
     """
     # TODO: implement search functionality
     pass
@@ -51,7 +82,6 @@ def search(aoi: str, start_date: str, end_date: str, cloud_cover: str, area_cove
 def order(items: str):
     """
     Order the given images from Planet.
-    Usage: order {items.txt} | {item1} {item2} {item3}
     """
     # TODO: implement order functionality
     pass
@@ -60,7 +90,6 @@ def order(items: str):
 def download(orders: str):
     """
     Downloads the images from the orders in the input file.
-    Usage: download {orders.txt} | {order1} {order2} {order3}
     """
     # TODO: implement download functionality
     pass
@@ -69,15 +98,9 @@ def download(orders: str):
 def classify(images: str):
     """
     Run the classifier on the given images.
-    Usage: classify {images.txt} | {image1.png} {image2.png} | {zip1.zip} {zip2.zip}
     """
     # TODO: implement classify functionality
     pass
-
-# error message if no command is given
-@app.callback()
-def callback():
-    typer.echo("Welcome to CountTheBoats! Please provide a command.")
 
 
 if __name__ == "__main__":

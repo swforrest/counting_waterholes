@@ -1,18 +1,18 @@
 # Configuration for Validation/Analysis Runs
-path: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton
+path: /Users/charlieturner/Documents/CountingBoats/case_studies/TrainImages
 weights: /Users/charlieturner/Documents/CountingBoats/data/NN_weights.pt
 # weights: /Users/charlieturner/Desktop/Yolov5l.pt
 device: mps
 
-raw_images: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton/RawImages # Folders as downloaded from Planet (extracted zips)
+raw_images: /Users/charlieturner/Documents/CountingBoats/case_studies/TrainImages/RawImages # Folders as downloaded from Planet (extracted zips)
 
 
 # Auxiliary Paths (relative to run folder, or absolute if using existing)
 # These paths either exist (and are used) or are created (and used) by the run
-pngs: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton # Pngs for the tif files
-segmented_images: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton/images  # Segmented images
-labels: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton/labels  # Labels for the images
-classifications: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton/Classifications   # Classifications for the images
+pngs: /Users/charlieturner/Documents/CountingBoats/case_studies/TrainImages # Pngs for the tif files
+segmented_images: /Users/charlieturner/Documents/CountingBoats/case_studies/TrainImages/images  # Segmented images
+labels: /Users/charlieturner/Documents/CountingBoats/case_studies/TrainImages/labels  # Labels for the images
+classifications: /Users/charlieturner/Documents/CountingBoats/case_studies/TrainImages/Classifications   # Classifications for the images
 # classifications: classifications
 
 tasks:
@@ -33,6 +33,6 @@ tasks:
       mAP_75: False
       mAP_90: False
     images:
-      all_mistakes: False # Collate all mistakes into images with comparison 
+      all_mistakes: True # Collate all mistakes into images with comparison 
       subimage_confidence: False  # Show confidence of detection for all subimages of a given boat (number of random boats to do this for)
 

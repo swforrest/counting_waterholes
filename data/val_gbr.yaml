@@ -1,19 +1,19 @@
 # Configuration for Validation/Analysis Runs
-path: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton
+path: /Users/charlieturner/Documents/CountingBoats/case_studies/TestGBR
 weights: /Users/charlieturner/Documents/CountingBoats/data/NN_weights.pt
 # weights: /Users/charlieturner/Desktop/Yolov5l.pt
 device: mps
 
-raw_images: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton/RawImages # Folders as downloaded from Planet (extracted zips)
+raw_images: /Users/charlieturner/Documents/CountingBoats/case_studies/TestGBR/RawImages # Folders as downloaded from Planet (extracted zips)
 
 
-# Auxiliary Paths (relative to run folder, or absolute if using existing)
+# Auxiliary Paths (relative to run folder, or absolute if using an existing folder)
 # These paths either exist (and are used) or are created (and used) by the run
-pngs: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton # Pngs for the tif files
-segmented_images: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton/images  # Segmented images
-labels: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton/labels  # Labels for the images
-classifications: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton/Classifications   # Classifications for the images
-# classifications: classifications
+pngs: /Users/charlieturner/Documents/CountingBoats/case_studies/TestGBR # Pngs for the tif files
+segmented_images: /Users/charlieturner/Documents/CountingBoats/case_studies/TestGBR/images  # Segmented images
+labels: /Users/charlieturner/Documents/CountingBoats/case_studies/TestGBR/labels  # Labels for the images
+classifications: /Users/charlieturner/Documents/CountingBoats/case_studies/TestGBR/Classifications # Classifications for the images
+#classifications: classifications
 
 tasks:
   # These 4 are not required if have been done before (and above paths are absolute and exist)

@@ -22,6 +22,27 @@ def init_run(config_file:str):
     # return the folder
     return os.path.join("runs", "val", "val" + str(run_num))
 
+def run_tasks(tasks: dict, config: dict, level=0):
+    for task in tasks:
+        if tasks[task] == False:
+            print(f"{'  ' * level}Task '{task}' disabled, skipping...")
+            continue
+        elif tasks[task] == True:
+            try:
+                do_task = getattr(val_utils, task)  # each task is a funcion in val_utils
+                do_task(folder, config)             # Do the task, each takes the folder and config
+                # print a green checkmark
+                print(f"{'  ' * (level+1)}\033[92m" + u'\u2713' + "\033[0m" + f" {task}")
+            except AttributeError as e:
+                print(f"{'  ' * (level + 1)}\033[91m" + u'\u2717' + "\033[0m" + f" {task}")
+                # print a red X
+                print(e)
+                print(f"{'  ' * level}Task '{task}' not found, must be one of:")
+                print(f"{'  ' * level}{''.join([f'{t}, ' for t in dir(val_utils) if not t.startswith('_')])}")
+        elif type(tasks[task]) == dict:
+            print(f"{'  ' * level}Task '{task}' has subtasks, running...")
+            run_tasks(tasks[task], config, level + 1)
+
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
     argparser.description = "Cluster classifications and labels from yolo and manual annotations to compare them. File names must be identical between given arguments"
@@ -31,9 +52,5 @@ if __name__ == "__main__":
     config = yaml.load(open(args.config, 'r'), Loader=yaml.FullLoader)
     # Basically go through and complete each task
     tasks = config["tasks"]
-    for task in tasks:
-        if config["tasks"][task] == False:
-            print(f"Task '{task}' disabled, skipping...")
-            continue
-        do_task = getattr(val_utils, task)  # each task is a funcion in val_utils
-        do_task(folder, config)             # Do the task, each takes the folder and config
+    run_tasks(tasks, config)
+        

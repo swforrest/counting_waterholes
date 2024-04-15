@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import scipy
 
-from .classifier import cluster, process_clusters, read_classifications
+from .classifier import cluster, process_clusters, read_classifications, pixel2latlong
 from config import cfg
 from . import image_cutting_support as ics
 import matplotlib.pyplot as plt
@@ -21,6 +21,7 @@ def prepare(run_folder, config):
     """
     img_folder = config["raw_images"] # folder with the tif files
     save_folder = os.path.join(config["path"], config["pngs"])
+    os.makedirs(save_folder, exist_ok=True)
     for root, _, files in os.walk(img_folder):
         for file in files:
             if file == 'composite.tif':
@@ -71,61 +72,67 @@ def segment(run_folder, config, segment_size=416, stride=104):
     
 
 
-def run_detection(run_folder, run_config, img_dir = "SegmentedImages"):
+def run_detection(run_folder, run_config):
     """
     Run the YoloV5 detection on the segmented images, and move 
     the detections to a sibling directory for analysis.
     """
-    weights = cfg["weights"]
+    weights = run_config["weights"]
     yolo = cfg["yolo_dir"]
     python = cfg["python"]
-    classification_dir = os.path.join(run_config["path"], run_config["classifications"])
+    classification_dir = os.path.join(run_folder, run_config["classifications"])
+    img_dir = os.path.join(run_folder, run_config["segmented_images"])
     for root, _, files in os.walk(img_dir):
         if len(files) > 0 and files[0].endswith(".png"):
             this_classification_dir = os.path.join(classification_dir, os.path.sep.join(root.split(os.path.sep)[-2:]))
             if os.path.exists(this_classification_dir): # don't double classify
+                print(f"Already classified {this_classification_dir}")
                 continue
             os.makedirs(this_classification_dir, exist_ok=True)
-            os.system(f"{python} {yolo}/detect.py --imgsz 416 --save-txt --save-conf --weights {weights} --source {root}")
+            device = run_config.get("device", "0")
+            res = os.system(f"{python} {yolo}/detect.py --imgsz 416 --save-txt --save-conf --weights {weights} --source {root} --device {device}")
+            if res != 0:
+                raise Exception(f"Error running detection on {root}")
             latest_exp = max([int(f.split("exp")[1]) if f != "exp" else 0 for f in os.listdir(os.path.join(yolo, "runs", "detect" )) if "exp" in f]) or ""
             for file in os.listdir(os.path.join(yolo, "runs", "detect", f"exp{latest_exp}", "labels")):
                 shutil.move(os.path.join(yolo, "runs", "detect", f"exp{latest_exp}", "labels", file), this_classification_dir)
             print(f"Classified {root}, saved to {this_classification_dir}")
 
-def compare_detections_to_ground_truth(folder, labels="Labels", detections="Classifications"):
+def compare_detections_to_ground_truth(run_folder, config):
     """
     Match up labels and detections, compare them, and save the results
     """
-    label_dir = os.path.join(folder, labels)
-    detection_dir = os.path.join(folder, detections)
+    label_dir = os.path.join(config["path"], config["labels"])
+    detection_dir = os.path.join(config["path"], config["classifications"])
     for root, _, files in os.walk(detection_dir):
         if len(files) > 0 and files[0].endswith(".txt"):
             this_img = os.path.basename(root)
             data = process_image(root, label_dir)
-            comparisons_to_csv(data, os.path.join(folder, "output", this_img + ".csv"))
+            comparisons_to_csv(data, os.path.join(run_folder, this_img + ".csv"))
+    # create an overall file, with all boats in lat long
+    classifications_to_lat_long(run_folder, config)
 
-def summarize(folder):
+def confusion_matrix(run_folder, config):
     """
     Summarize the results of the comparison. Reads all csvs and creates a confusion matrix
     """
-    csvs = [os.path.join(folder, "output", f) for f in os.listdir(os.path.join(folder, "output")) if f.endswith(".csv")]
-    all_data = []
-    for csv in csvs:
-        all_data.append(pd.read_csv(csv))
-    all_data = pd.concat(all_data) # combine all the data into one dataframke
-    all_data = all_data.dropna()
+    if os.path.exists(os.path.join(run_folder, "all_boats.csv")):
+        all_data = pd.read_csv(os.path.join(run_folder, "all_boats.csv"))
+    else:
+        # read all the csvs in the run folder that start with a date (8 numbers)
+        all_data = pd.concat([pd.read_csv(os.path.join(run_folder, file)) for file in os.listdir(run_folder) if file.endswith(".csv") and file[:8].isdigit()])
     # create confusion matrix
     true = all_data["manual_class"]
     pred = all_data["ml_class"]
     # save image of confusion matrix
     acc = np.sum(true == pred) / len(true)
     ConfusionMatrixDisplay.from_predictions(y_pred=pred, y_true=true, 
-            labels=[-1, 0, 1], display_labels=["Undetected", "Static Boat", "Moving Boat"])
+            labels=[-1, 0, 1], display_labels=["Not a Boat", "Static Boat", "Moving Boat"])
     fig = plt.gcf()
-    fig.suptitle(f"{len(true[true != -1])} Labelled Boats (Accuracy: {round(acc, 3)})")
+    fig.suptitle(f"{len(true[true != -1])} Labelled Boats (Detection Accuracy: {round(acc, 3)})")
     fig.tight_layout()
     # save the confusion matrix image
-    plt.savefig(os.path.join("output", "confusion_matrix.png"))
+    plt.savefig(os.path.join(run_folder, "plots", "confusion_matrix.png"))
 
 ### Clustering Helpers
 STAT_DISTANCE_CUTOFF_PIX = 6
@@ -255,40 +262,71 @@ def comparisons_to_csv(comparisons, filename):
     Write the comparisons to a csv file
     """
     df = pd.DataFrame(comparisons, columns=["x", "y", "ml_class", "manual_class"])
-    df.to_csv(filename)
+    df.to_csv(filename, index=False)
 
 
-def classifications_to_lat_long(folder, boats, filename, date):
+def classifications_to_lat_long(run_folder, run_config):
     """
-    Convert x and y of an image to latlong AND saves it to a csv
+    Convert x and y of image classifications to lat/long and saves csv
     """
-    if os.path.exists(os.path.join(folder, "all_boats.csv")):
-        all_boats = pd.read_csv(os.path.join(folder, "all_boats.csv"))
-    else:
-        all_boats = pd.DataFrame(columns=["date", "latitude", "longitude", "ml_class", "manual_class", "filename"])
-    # find the image of the boats
-    image = None
-    for root, _, files in os.walk(os.path.join(folder, "RawImages")):
-        if f"{filename}.tif" in files:
-            image = os.path.join(root, f"{filename}.tif")
-            break
-    if image is None:
-        print(f"Could not find image {filename} at {os.path.join(folder, 'RawImages')}")
+    # Initialise dataframe
+    all_boats = pd.DataFrame(columns=["date", "latitude", "longitude", "ml_class", "manual_class", "agree", "filename"])
+    # Get all the images that are relevant
+    # Involves reading all of the output files from the detections function
+    raw_images = run_config["raw_images"]
+    for file in os.listdir(run_folder):
+        if not file.endswith(".csv"):
+            continue 
+        # try to parse the date, if not, skip
+        date = file.split("_")[0]
+        if len(date) != 8:
+            print(f"Could not parse date from {file}")
+            continue
+        date = f"{date[:4]}-{date[4:6]}-{date[6:]}"
+        image_name = file.split(".")[0]
+        boats = pd.read_csv(os.path.join(run_folder, file)).values.tolist()
+        # remove index
+        if len(boats) == 0: continue
+        im_name = image_name.split(".")[0] + ".tif"
+        image = [os.path.join(root,i) for root, dirs, files in os.walk(raw_images) for i in files if i == im_name]
+        if len(image) == 0:
+            print(f"Could not find image {im_name} for {file}")
+            continue
+        image = image[0]
+        boats = pixel2latlong(boats, image)
+        # append the boats to the 'all_boats' dataframe
+        boats = pd.DataFrame(boats, columns=["longitude", "latitude", "ml_class", "manual_class"])
+        boats["date"] = date
+        boats["filename"] = image_name
+        # Agree: -1 if disagree, 0 if agree stationary, 1 if agree moving
+        boats["agree"] = boats["ml_class"] == boats["manual_class"]
+        # boats["agree"] = boats.apply(lambda x: x["ml_class"] if x["agree"] else -1, axis=1)
+        all_boats = pd.concat([all_boats, boats]) if all_boats.size != 0 else boats
+    if all_boats.size == 0:
         return
-    crs = ics.get_crs(image)
-    for boat in boats:
-        x = boat[0]
-        y = boat[1]
-        x, y = ics.pixel2coord(x, y, image)
-        lat, long = ics.coord2latlong(x, y, crs)
-        boat[0] = lat
-        boat[1] = long
-    # append the baots to the 'all_boats' dataframe
-    boats = pd.DataFrame(boats, columns=["latitude", "longitude", "ml_class", "manual_class"])
-    boats["date"] = date
-    boats["filename"] = filename
-    all_boats = pd.concat([all_boats, boats])
-    all_boats.to_csv(os.path.join(folder, "all_boats.csv"), index=False)
+    all_boats.to_csv(os.path.join(run_folder, "all_boats.csv"), index=False)
+
+def boat_count_compare(run_folder, config):
+    """
+    Column graph with each group being one image, showing number of labelled and number of detected boats next to each other
+    """
+    if os.path.exists(os.path.join(run_folder, "all_boats.csv")):
+        all_data = pd.read_csv(os.path.join(run_folder, "all_boats.csv"))
+    else:
+        csvs = [os.path.join(run_folder, file) for file in os.listdir(run_folder) if file.endswith(".csv") and file[0:8].isdigit()]
+        # add a 'filename' column to each csv and concatenate them
+        all_data = pd.concat([pd.read_csv(csv).assign(filename=csv.split(os.path.sep)[-1].split(".")[0]) for csv in csvs])
+    # x axis should be filename
+    # y axis is count of boats
+    # one column for manual, one for ml for each image
+    all_data["manual"] = all_data["manual_class"].apply(lambda x: 1 if x != -1 else 0)
+    all_data["ml"] = all_data["ml_class"].apply(lambda x: 1 if x != -1 else 0)
+    all_data = all_data.groupby(["filename"]).agg({"manual": "sum", "ml": "sum"}).reset_index()
+    all_data.plot(x="filename", y=["manual", "ml"], kind="bar", title="Boat Counts by Image", figsize=(20, 10), fontsize=20)
+    plt.legend(fontsize=20)
+    plt.tight_layout()
+    plt.savefig(os.path.join(run_folder, "plots", "count_by_image_column.png"))
+
 
 ### Metrics Helpers
 
@@ -316,7 +354,6 @@ def plot_boats(csvs:str, imgs:str, **kwargs):
         # get the corresponding image
         img = [image for image in all_images if csv.split()[1].split(".")[0] in image]
         if len(img) == 0:
-            print(f"Could not find image for {csv}")
             continue
         img = img[0]
         # get the boats
@@ -397,14 +434,14 @@ def plot_boats(csvs:str, imgs:str, **kwargs):
         i += 1
         print(f"Plotted {i}/{len(all_images)} images", end="\r")
 
-def highlight_mistakes(folder):
+def all_mistakes(run_folder, config):
     """
     Given a summary csv, find the images where there is a mistake made.
     Since the x and y in the summary refer to the entire image, we need to 
     calculate the subimage(s) that the boat is in. save the best subimage (most central)
     to a new directory with the type of mistake (e.g "false_positive")
     """
-    output_dir = os.path.join(folder, "mistakes")
+    output_dir = os.path.join(run_folder, "mistakes")
     os.makedirs(output_dir, exist_ok=True)
     # for image:
     #   for boat:
@@ -412,8 +449,8 @@ def highlight_mistakes(folder):
     #           find the subimage
     #           draw a box around the boat
     #           save the image
-    summary_dir = os.path.join(folder, "output")
-    img_dir = os.path.join(folder, "SegmentedImages")
+    summary_dir = run_folder
+    img_dir = os.path.join(config['path'], config['segmented_images'])
     csvs = [os.path.join(summary_dir, file) for file in os.listdir(summary_dir) if file.endswith(".csv") and "summary" not in file]
     for csv in csvs:
         csv_name = os.path.basename(csv)
@@ -488,7 +525,6 @@ def highlight_mistakes(folder):
                     file.write(f"{x}, {y}, {manual}")
                 plt.close()
                 id += 1
-    print("Done")
 
 def all_possible_imgs(x, y, stride=104):
     """

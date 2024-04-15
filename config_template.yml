@@ -1,7 +1,6 @@
 # Likely Need Changing
 yolo_dir : C:\yolov5-master                             # installation directory of yolov5
 python   : C:\Users\turner30\AppData\Local\Programs\Python\Python38\python # path to python executable (probably just 'python')
-img_path : $(yolo_dir)/BoatData                         # Imgs will be saved and deleted here
 proj_root: C:\CountingBoats                             # root of project (where this file is)
 weights  : ./data/NN_weights.pt                         # yolov5 weights file
 planet :

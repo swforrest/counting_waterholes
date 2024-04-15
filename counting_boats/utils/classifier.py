@@ -1,40 +1,3 @@
-
-
-import numpy as np
-import os
-import os.path as path
-import scipy.cluster
-import scipy.spatial
-import yaml
-import utils.image_cutting_support as ics
-from config import cfg
-
-"""
-Intended usage:
-    Processes the outputs
-    Saves the results to a csv file. 
-
-Usage: python classifier.py -d <.tif directory> -o <output file name>
-"""
-
-TEMP = os.path.join(os.getcwd(), "Boat_Temp")
-""" Temporary directory for storing images """
-
-TEMP_PNG = os.path.join(os.getcwd(), "Boat_Temp_PNG")
-""" Temporary directory for storing png version of tif images """
-
-completed = [] # record of files which have been processed
-
-def main():
-    """
-    Run the classifier on each image in the directory.
-    Return the name of each directory which is successfully processed.
-    Requires 
-    """
-    classify_directory(cfg["tif_dir"])
-    remove(TEMP)
-    remove(TEMP_PNG)
-
 # Rest of the code...
 import numpy as np
 import os
@@ -59,13 +22,11 @@ TEMP = os.path.join(os.getcwd(), "Boat_Temp")
 TEMP_PNG = os.path.join(os.getcwd(), "Boat_Temp_PNG")
 """ Temporary directory for storing png version of tif images """
 
-completed = [] # record of files which have been processed
-
 def main():
     """
-    Run the classifier on each image in the directory.
+    Run the classifier on each image in the directory given in the configuration.
     Return the name of each directory which is successfully processed.
-    Requires 
+    @require cfg: The configuration file
     """
     classify_directory(cfg["tif_dir"])
     remove(TEMP)
@@ -102,8 +63,8 @@ def process_tif(
     moving_boats = process_clusters(moving_clusters)
     # convert pixel coordinates to lat/long
     # tif file should have coord details
-    static_boats = pixel2latlong(static_boats, file, cfg["tif_dir"])
-    moving_boats = pixel2latlong(moving_boats, file, cfg["tif_dir"])
+    static_boats = pixel2latlong(static_boats, os.path.join(cfg["tif_dir"], file))
+    moving_boats = pixel2latlong(moving_boats, os.path.join(cfg["tif_dir"], file))
     # add the image name to each classification (as the last column)
     static_boats = np.c_[static_boats, [file] * len(static_boats)]
     moving_boats = np.c_[moving_boats, [file] * len(moving_boats)]
@@ -391,19 +352,19 @@ def remove(path, del_folder=True):
     if del_folder:
         os.rmdir(path)
 
-def pixel2latlong(classifications, file, tif_dir):
+def pixel2latlong(classifications, tif):
     """
     Convert the given classifications from pixel coordinates to lat/long.
     :param classifications: The classifications to convert, must have x, y as first two columns.
-    :param file: The file these classifications came from.
+    :param tif: The tif file these classifications came from.
     """
-    leftPad, _, topPad, _ = ics.get_required_padding(os.path.join(os.getcwd(), tif_dir, file))
-    crs = ics.get_crs(os.path.join(os.getcwd(), tif_dir, file))
+    leftPad, _, topPad, _ = ics.get_required_padding(tif)
+    crs = ics.get_crs(tif)
     # get the crs from the tif, e.g EPSG:4326
     for c in classifications:
         x = float(c[0]) - leftPad
         y = float(c[1]) - topPad
-        xp, yp = ics.pixel2coord(x, y, os.path.join(os.getcwd(), tif_dir, file))
+        xp, yp = ics.pixel2coord(x, y, tif)
         c[0], c[1] = ics.coord2latlong(xp, yp, crs)
     return classifications
 
