@@ -90,7 +90,7 @@ def add_margin(pil_img, left, right, top, bottom, color):
     return result
 
 
-def segment_image(image, json_file, size, overlap_size, metadata_components=None, remove_empty=0.9, im_outdir=None, labels_outdir=None):
+def segment_image(image, json_file, tile_size, stride, metadata_components=None, remove_empty=0.9, im_outdir=None, labels_outdir=None):
     """
     Segments a large .tif file into smaller .png files for use in a neural network. Also created
     files in the IMGtxts directory which contain the annotations present in that sub image.
@@ -137,24 +137,24 @@ def segment_image(image, json_file, size, overlap_size, metadata_components=None
                 "Error in sorting classifications from JSON file, likely that one of the classifications is not a square")
 
     # Ensure that the image is divisible by the desired size with no remainder.
-    if width % overlap_size != 0 or height % overlap_size != 0:
+    if width % stride != 0 or height % stride != 0:
         raise Exception("The image is not exactly divisible by the desired size of subset images")
 
     # Ensure that the desired size is divisible by the desired overlap with no remainder.
-    if size % overlap_size != 0:
+    if tile_size % stride != 0:
         raise Exception("The subset image size indicated is not divisible by the input overlap size")
 
     print("Cropping Image: " + image)
 
     # Iterate over the original image and segment it into smaller images of the size specified in the parameters to
     # this function.
-    for i in range(0, (int(height / overlap_size) - (int(size / overlap_size)))):
-        for j in range(0, 1 + int(width / overlap_size) - (int(size / overlap_size))):
+    for i in range(0, (int(height / stride) - (int(tile_size / stride)))):
+        for j in range(0, 1 + int(width / stride) - (int(tile_size / stride))):
             cropImage = openImage.copy()
-            left = j * overlap_size
-            top = i * overlap_size
-            right = left + size
-            bottom = top + size
+            left = j * stride
+            top = i * stride
+            right = left + tile_size
+            bottom = top + tile_size
 
             # Track how many of the image border pixels are "empty". This means it is black/its array index value is
             # (0, 0, 0)
@@ -171,7 +171,7 @@ def segment_image(image, json_file, size, overlap_size, metadata_components=None
                 if random.uniform(0, 1) < remove_empty: 
                     continue
 
-            for f in range(0, size - 1, 8):
+            for f in range(0, tile_size - 1, 8):
                 # Iterate over the top edge of the image
                 if openImage.getpixel((left + f, top)) == (0, 0, 0):
                     percentageEmpty += 1
@@ -238,10 +238,10 @@ def segment_image(image, json_file, size, overlap_size, metadata_components=None
                                   str(((elem.get_bottom() - elem.get_top()) / 2) / 416) + "\n")
 
             outfile.close()
-        print(str("Progress: " + str(int(float(i / ((height / overlap_size) - 5)) * 100)) +
+        print(str("Progress: " + str(int(float(i / ((height / stride) - 5)) * 100)) +
                   "%"), end="\r")
 
-def segment_image_for_classification(image, data_path, size, overlap_size):
+def segment_image_for_classification(image, data_path, tile_size, stride):
     """
     Segments a large .tif file into smaller .png files for use in a neural network.
     :param image: The large .tif that is to be segmented
@@ -259,29 +259,29 @@ def segment_image_for_classification(image, data_path, size, overlap_size):
     height = int(height)
 
     # Ensure that the image is divisible by the desired size with no remainder.
-    if width % overlap_size != 0 or height % overlap_size != 0:
+    if width % stride != 0 or height % stride != 0:
         raise Exception("The image is not exactly divisible by the desired size of subset images")
 
     # Ensure that the desired size is divisible by the desired overlap with no remainder.
-    if size % overlap_size != 0:
+    if tile_size % stride != 0:
         raise Exception("The subset image size indicated is not divisible by the input overlap size")
 
     # Iterate over the original image and segment it into smaller images of the size specified in the parameters to
     # this function.
-    for i in range(0, (int(height / overlap_size) - (int(size / overlap_size)))):
-        for j in range(0, 1 + int(width / overlap_size) - (int(size / overlap_size))):
+    for i in range(0, (int(height / stride) - (int(tile_size / stride)))):
+        for j in range(0, 1 + int(width / stride) - (int(tile_size / stride))):
             cropImage = openImage.copy()
-            left = j * overlap_size
-            top = i * overlap_size
-            right = left + size
-            bottom = top + size
+            left = j * stride
+            top = i * stride
+            right = left + tile_size
+            bottom = top + tile_size
 
             # Track how many of the image border pixels are "empty". This means it is black/it's array index value is
             # (0, 0, 0)
             percentageEmpty = 0
             total = 0
 
-            for f in range(0, size - 1, 8):
+            for f in range(0, tile_size - 1, 8):
                 # Iterate over the top edge of the image
                 if openImage.getpixel((left + f, top)) == (0, 0, 0):
                     percentageEmpty += 1
@@ -321,10 +321,10 @@ def segment_image_for_classification(image, data_path, size, overlap_size):
             savePath = os.path.join(data_path, os.path.basename(image).split('.')[0])
             croppedImage.save(savePath + "_" + str(i) + "_" + str(j) + ".png", quality=100, compress_level=0)
 
-        print(str("Progress: " + str(int(float(i / ((height / overlap_size) - 5)) * 100)) +
+        print(str("Progress: " + str(int(float(i / ((height / stride) - 5)) * 100)) +
                   "%"), end="\r")
 
-def create_padded_png(raw_dir, output_dir, file_name, rename=False):
+def create_padded_png(raw_dir, output_dir, file_name, tile_size=416, stride=104, rename=False):
     """
     Creates an image which is padded for use in training/classifying within a neural network. Note: this images pads
     the images expecting that the size of sub-images created from this images will be 416x416 pixels.

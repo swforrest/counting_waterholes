@@ -129,7 +129,7 @@ def classify_directory(directory):
 
 def classify_images(images_dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE):
     """
-    Use when images are already split into 416x416 images.
+    Use when images are already split into tiled images.
     Simply runs the classifier and clusters.
     """
     dirs = [path.join(images_dir, dir) for dir in os.listdir(images_dir)]
@@ -169,20 +169,24 @@ def prepare_temp_dirs():
 
 def detect_from_tif(file, tif_dir, yolo_dir, python, weights, confidence_threshold):
     prepare_temp_dirs()
+    tile_size = cfg['TILE_SIZE']
+    stride = cfg['STRIDE']
     file_name = path.basename(file)
-    ics.create_padded_png(tif_dir, TEMP_PNG, file_name)
+    ics.create_padded_png(tif_dir, TEMP_PNG, file_name, tile_size=tile_size, stride=stride)
     png_path = path.join(os.getcwd(), TEMP_PNG, f"{file_name[0:-4]}.png")
-    ics.segment_image_for_classification(png_path, TEMP, 416, 104)
+    ics.segment_image_for_classification(png_path, TEMP, tile_size=tile_size, stride=stride)
     detect_path = path.join(yolo_dir, "detect.py")
-    os.system(f"{python} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights} --source {TEMP}")
+    img_size = cfg['TILE_SIZE']
+    os.system(f"{python} {detect_path} --imgsz {img_size} --save-txt --save-conf --weights {weights} --source {TEMP}")
     return read_classifications(yolo_dir=yolo_dir, confidence_threshold=confidence_threshold, delete_folder=True)
 
 def detect_from_dir(dir, yolo_dir, python, weights, confidence_threshold):
     """
-    Detect from a directory containing 416x416 images
+    Detect from a directory containing images
     """
     detect_path = path.join(yolo_dir, "detect.py")
-    os.system(f"{python} {detect_path} --imgsz 416 --save-txt --save-conf --weights {weights} --source {dir}")
+    img_size = cfg['TILE_SIZE']
+    os.system(f"{python} {detect_path} --imgsz {img_size} --save-txt --save-conf --weights {weights} --source {dir}")
     return read_classifications(yolo_dir=yolo_dir, confidence_threshold=confidence_threshold)
 
 def classification_file_info(file)->tuple[int, int, list[str]]:

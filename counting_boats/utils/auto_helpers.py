@@ -8,6 +8,9 @@ import os
 import datetime
 import classifier
 from . import planet_utils 
+import heatmap as hm
+import area_coverage as ac
+import json
 
 def get_history(csv_path) -> pd.DataFrame:
     if not os.path.exists(csv_path):
@@ -164,3 +167,49 @@ def save(csv_path):
             history.loc[history["order_id"] == order_id, "order_status"] = "complete"
     # save the history
     save_history(history, csv_path)
+
+def analyse(csv_path, coverage_path):
+    # Update:
+        # - coverage heatmap raster
+    for g in groups:
+        heatmap_path = os.path.join("outputs", f"{g['name']}_coverage_heatmap.tif")
+        coverage = pd.read_csv(coverage_path)
+        polygons = hm.get_polygons_from_file(coverage_path, group=g["aois"])
+        hm.create_heatmap_from_polygons(polygons, heatmap_path)
+
+def archive(path, coverage_path):
+    """
+    Deal with folder of raw data after processing
+    """
+    # We want to delete any folders, but keep zip folders
+    if not os.path.exists(coverage_path):
+        # create it
+        open(coverage_path, "w").write("date,aoi,area_coverage,polygon\n")
+    coverage = pd.read_csv(coverage_path)
+    import shutil
+    for root, dirs, files in os.walk(path):
+        for f in files:
+            if f.endswith(".zip"):
+                # NOTE:  ARCHIVE THIS ZIP
+                # This is where we could send it off to AWS, or another storage location
+                print("Sending to archive (not really, just not deleting it!)")
+                continue
+        for d in dirs:
+            # save the polygon to the coverage file
+            # load composite_metadata.json from the directory if it exists
+            if "composite_metadata.json" in os.listdir(os.path.join(root, d)):
+                meta = json.load(open(os.path.join(root, d, "composite_metadata.json")))
+                polygon = meta["geometry"]
+                aoi = "_".join(d.split("_")[0:-1])
+                date = d.split("_")[-1]
+                date = date[:4] + "-" + date[4:6] + "-" + date[6:8]
+                # check to see if exists in coverage file already
+                if len(coverage[(coverage["date"] == date) & (coverage["aoi"] == aoi)]) > 0:
+                    print(f"Already have {date}, {aoi} in coverage. Skipping.")
+                else:
+                    cov_amount, _ = ac.area_coverage_poly(planet_utils.get_polygon_file(aoi), polygon)
+                    # add to coverage
+                    coverage = pd.concat([coverage, pd.DataFrame({"aoi": [aoi], "date": [date], "area_coverage": [cov_amount], "polygon": [json.dumps(polygon)]})])
+                    # save the coverage
+                    coverage.to_csv(coverage_path, index=False)
+            shutil.rmtree(os.path.join(root, d))

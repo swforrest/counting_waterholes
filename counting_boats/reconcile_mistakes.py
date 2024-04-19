@@ -11,6 +11,7 @@ import json
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 from PIL import Image
+from config import cfg
 
 label_json_str = '''{
       "label": "boat",
@@ -42,8 +43,9 @@ def all_possible_imgs(x, y):
     """
     return a list of tuples (row, col) that would contain the given x and y coords
     """
-    row = y // 104 - 1
-    col = x // 104 - 1
+    stride = cfg["STRIDE"]
+    row = y // stride - 1
+    col = x // stride - 1
     options = []
     # NOTE: we do it like this to try to keep the 'best' subimages as highest priority
     for i in [0,-1, 1]:

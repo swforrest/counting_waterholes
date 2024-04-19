@@ -5,6 +5,7 @@ import argparse
 import counting_boats.utils.image_cutting_support as ics
 import os
 from datetime import datetime
+from config import cfg
 
 """
 usage: python plotNNoutput.py -d <detections> -i <image> 
@@ -64,7 +65,7 @@ def plot(NNcsv, NNpicture, save=False, show=True):
         path = os.path.join(temp_path, IMAGE_NAME.split(".")[0] + ".png")
         relative_dir = os.path.dirname(NNpicture)
         os.mkdir(temp_path)
-        ics.create_padded_png(relative_dir, temp_path, IMAGE_NAME)
+        ics.create_padded_png(relative_dir, temp_path, IMAGE_NAME, tile_size=cfg['TILE_SIZE'], stride=cfg['STRIDE'])
         im = Image.open(os.path.join(temp_path, IMAGE_NAME.split(".")[0] + ".png"))
     else:
         im = Image.open(NNpicture)

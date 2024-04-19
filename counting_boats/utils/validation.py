@@ -44,7 +44,7 @@ def prepare(run_folder, config):
                 if not os.path.exists(new_name):
                     ics.create_padded_png(root, save_folder, file)
 
-def segment(run_folder, config, segment_size=416, stride=104):
+def segment(run_folder, config, tile_size=416, stride=104):
     """
     Segment (labelled) png's in the given base. 
     Places segmented images in the 'SegmentedImages' folder, and Labels in the 'Labels' folder.
@@ -62,7 +62,7 @@ def segment(run_folder, config, segment_size=416, stride=104):
             # find the corresponding image file
             img_file = os.path.join(im_save_folder, filename[:-5] + ".png")
             if os.path.isfile(img_file): # Check exists
-                ics.segment_image(img_file, os.path.join(pngs, filename), segment_size, stride, remove_empty=0, 
+                ics.segment_image(img_file, os.path.join(pngs, filename), tile_size, stride, remove_empty=0, 
                                   im_outdir=im_save_folder, labels_outdir=label_save_folder)
             else:
                 print(f"Could not find image file for {filename}")
@@ -464,13 +464,14 @@ def all_mistakes(run_folder, config):
             continue
         boats = np.asarray([line.strip().split(",") for line in open(csv) if line[0] != "x"])
         id = 0
+        stride = cfg["STRIDE"]
         for boat in boats:
             if boat[2] != boat[3]:
                 x = float(boat[0])
                 y = float(boat[1])
                 # get the best subimage
-                row = max(y // 104 - 1, 1)
-                col = max(x // 104 - 1, 1)
+                row = max(y // stride - 1, 1)
+                col = max(x // stride - 1, 1)
                 # get the image
                 img_path = os.path.join(this_img_dir, csv_name.split(".")[0] + "_" + str(int(row)) + "_" + str(int(col)) + ".png")
                 if not os.path.exists(img_path):

@@ -6,7 +6,6 @@ import utils.planet_utils as pu
 import utils.classifier as cl
 import utils.auto_helpers as ah
 from config import cfg
-from CountTheBoats import archive, analyse
 
 """
 Ideally this becomes the one file to rule them all, currently CountTheBoats is the main file
@@ -64,9 +63,9 @@ def auto():
     ah.extract(csv_path=orders_path, download_path=download_path)
     ah.count()    # Count the boats
     ah.save(orders_path)                 # Save the history
-    archive(download_path, archive_path) # Archive the raw data (and save coverage info)
+    ah.archive(download_path, archive_path) # Archive the raw data (and save coverage info)
     # analyse
-    analyse(orders_path, archive_path)
+    ah.analyse(orders_path, archive_path)
     # report (per run, and overall)
 
 
@@ -99,7 +98,14 @@ def classify(images: str):
     """
     Run the classifier on the given images.
     """
-    # TODO: implement classify functionality
+    # Images can be either:
+        # A .txt file with a list of zip files of tif images
+        # A .txt file with a list of png images
+        # A list of the above
+        # A path to a folder with the above
+    # if is folder
+    if os.path.isdir(images):
+        cl.classify_directory(images)
     pass
 
 
