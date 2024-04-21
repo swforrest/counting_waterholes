@@ -4,7 +4,7 @@ import yaml
 import json
 from utils.config import cfg
 from dotenv import load_dotenv
-from . import area_coverage
+from utils import area_coverage
 import zipfile
 load_dotenv()
 

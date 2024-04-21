@@ -6,11 +6,11 @@ from utils.config import cfg
 import pandas as pd
 import os
 import datetime
-import classifier
-from . import planet_utils 
-import heatmap as hm
-import area_coverage as ac
 import json
+from utils import classifier
+from utils import planet_utils 
+from utils import heatmap as hm
+from utils import area_coverage as ac
 
 def get_history(csv_path) -> pd.DataFrame:
     if not os.path.exists(csv_path):

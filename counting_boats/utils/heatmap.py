@@ -22,8 +22,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from osgeo import gdal, ogr, osr
 
-from .area_coverage import polygons_to_32756
-from .image_cutting_support import coord2latlong
+from utils.area_coverage import polygons_to_32756
+from utils.image_cutting_support import coord2latlong
 
 gdal.UseExceptions()
 
