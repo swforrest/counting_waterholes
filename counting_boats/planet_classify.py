@@ -45,13 +45,12 @@ app = typer.Typer(
 )
 
 @app.command()
-def auto():
+def auto(
+    skip_order: bool = typer.Option(False, help="Skip ordering images"),
+):
     """
     Run the entire pipeline automatically.
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--no_order", action="store_true", help="Skip ordering images")
-    skip_order = parser.parse_args().no_order
     orders_path     = os.path.join(cfg["output_dir"], "AOI_history.csv")
     archive_path    = os.path.join(cfg["output_dir"], "coverage.csv")
     download_path   = os.path.join("images", "downloads")
