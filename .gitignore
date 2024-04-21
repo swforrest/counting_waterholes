@@ -8,3 +8,5 @@ YoloV8_Test
 runs
 config.yaml
 .DS_Store
+*Temp*
+
