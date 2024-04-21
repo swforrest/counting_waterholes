@@ -2,7 +2,7 @@
 Functions to help with the automatic pipeline.
 """
 import traceback
-from config import cfg
+from utils.config import cfg
 import pandas as pd
 import os
 import datetime

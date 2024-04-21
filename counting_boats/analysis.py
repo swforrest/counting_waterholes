@@ -5,7 +5,7 @@ import utils.heatmap as hm
 import plotly.express as px
 import plotly.express as px
 import json
-from config import cfg
+from utils.config import cfg
 import os
 
 import matplotlib.pyplot as plt

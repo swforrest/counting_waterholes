@@ -1,8 +1,8 @@
 import requests
-import os
+import os 
 import yaml
 import json
-from config import cfg
+from utils.config import cfg
 from dotenv import load_dotenv
 from . import area_coverage
 import zipfile

@@ -9,7 +9,7 @@ import pandas as pd
 import scipy
 
 from .classifier import cluster, process_clusters, read_classifications, pixel2latlong
-from config import cfg
+from utils.config import cfg
 from . import image_cutting_support as ics
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay

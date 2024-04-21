@@ -11,7 +11,7 @@ import json
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 from PIL import Image
-from config import cfg
+from utils.config import cfg
 
 label_json_str = '''{
       "label": "boat",

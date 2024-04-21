@@ -5,7 +5,7 @@ import typer
 import utils.planet_utils as pu
 import utils.classifier as cl
 import utils.auto_helpers as ah
-from config import cfg
+from utils.config import cfg
 
 """
 Ideally this becomes the one file to rule them all, currently CountTheBoats is the main file

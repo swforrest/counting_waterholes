@@ -2,10 +2,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 import argparse
-import counting_boats.utils.image_cutting_support as ics
+import utils.image_cutting_support as ics
 import os
 from datetime import datetime
-from config import cfg
+from counting_boats.utils.config import cfg
 
 """
 usage: python plotNNoutput.py -d <detections> -i <image> 

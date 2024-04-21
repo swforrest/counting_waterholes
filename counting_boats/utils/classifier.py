@@ -6,7 +6,7 @@ import scipy.cluster
 import scipy.spatial
 import yaml
 import utils.image_cutting_support as ics
-from config import cfg
+from utils.config import cfg
 
 """
 Intended usage:
