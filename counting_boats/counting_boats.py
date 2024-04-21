@@ -48,8 +48,8 @@ def auto():
     """
     Run the entire pipeline automatically.
     """
-    orders_path     = os.path.join("outputs", "AOI_history.csv")
-    archive_path    = os.path.join("outputs", "coverage.csv")
+    orders_path     = os.path.join(cfg["output_dir"], "AOI_history.csv")
+    archive_path    = os.path.join(cfg["output_dir"], "coverage.csv")
     download_path   = os.path.join("images", "downloads")
     # For all AOIS
     aois = aois if aois is not None else pu.get_aois()

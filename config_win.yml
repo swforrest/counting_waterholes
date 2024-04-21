@@ -1,7 +1,7 @@
 # Likely Need Changing
-yolo_dir  : /Users/charlieturner/yolov5                   # installation directory of yolov5
+yolo_dir  : C:\\yolov5-master                             # installation directory of yolov5
 python    : python                                        # path to python executable (probably just 'python')
-proj_root : /Users/charlieturner/Documents/CountingBoats  # root of project (probably where this file is)
+proj_root : C:\\CountingBoats                             # root of project (probably where this file is)
 weights   : ./data/NN_weights.pt                          # yolov5 weights file
 planet:
   api_key   : ENV                                         # If 'ENV', use env file (so doesn't go to version control)

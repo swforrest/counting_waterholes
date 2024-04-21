@@ -331,7 +331,7 @@ def condense(cluster:np.ndarray):
 def write_to_csv(classifications, day, file):
     # Write to output csv
     # Create output csv if it doesn't exist
-    file = os.path.join(cfg["proj_root"], "outputs", file)
+    file = os.path.join(cfg["output_dir"], file)
     if not os.path.isfile(f"{file}.csv"):
         with open(f"{file}.csv", "a+") as outFile:
             outFile.writelines("date,class,images,latitude,longitude,confidence,w,h\n")

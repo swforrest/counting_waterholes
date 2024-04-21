@@ -168,14 +168,20 @@ def save(csv_path):
     # save the history
     save_history(history, csv_path)
 
+groups = [
+    {"name": "moreton_bay", "aois": ["peel", "tangalooma", "bribie"]},
+    {"name": "gbr", "aois": ["whitsundays", "keppel", "capricorn", "haymen", "heron"]},
+]
+
+
 def analyse(csv_path, coverage_path):
     # Update:
         # - coverage heatmap raster
     for g in groups:
-        heatmap_path = os.path.join("outputs", f"{g['name']}_coverage_heatmap.tif")
+        heatmap_path = os.path.join(cfg["output_dir"], f"{g['name']}_coverage_heatmap.tif")
         coverage = pd.read_csv(coverage_path)
         polygons = hm.get_polygons_from_file(coverage_path, group=g["aois"])
-        hm.create_heatmap_from_polygons(polygons, heatmap_path)
+        hm.create_heatmap_from_polygons(polygons=polygons, save_file=heatmap_path)
 
 def archive(path, coverage_path):
     """

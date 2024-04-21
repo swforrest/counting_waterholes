@@ -32,7 +32,7 @@ label_json_str = '''{
     }'''
 
 folder = input("Enter img folder: ")
-labels = input("Enter labels root: ")
+labels = input("Enter labels root folder: ")
 
 fig, ax = plt.subplots()
 plt.subplots_adjust(bottom=0.2)

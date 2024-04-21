@@ -37,7 +37,7 @@ def run_tasks(tasks: dict, config: dict, level=0):
                 print(f"{'  ' * (level + 1)}\033[91m" + u'\u2717' + "\033[0m" + f" {task}")
                 # print a red X
                 print(e)
-                print(f"{'  ' * level}Task '{task}' not found, must be one of:")
+                print(f"{'  ' * level}Task '{task}' not found, task must be one of:")
                 print(f"{'  ' * level}{''.join([f'{t}, ' for t in dir(val_utils) if not t.startswith('_')])}")
         elif type(tasks[task]) == dict:
             print(f"{'  ' * level}Task '{task}' has subtasks, running...")
@@ -53,4 +53,6 @@ if __name__ == "__main__":
     # Basically go through and complete each task
     tasks = config["tasks"]
     run_tasks(tasks, config)
+
+
         

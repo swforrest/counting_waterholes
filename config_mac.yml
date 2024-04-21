@@ -1,7 +1,10 @@
 # Likely Need Changing
-yolo_dir  : /Users/charlieturner/yolov5                   # installation directory of yolov5
-python    : python                                        # path to python executable (probably just 'python')
-proj_root : /Users/charlieturner/Documents/CountingBoats  # root of project (probably where this file is)
+# yolo_dir : C:\yolov5-master                             # installation directory of yolov5
+# python   : C:\Users\turner30\AppData\Local\Programs\Python\Python38\python # path to python executable (probably just 'python')
+yolo_dir  : /Users/charlieturner/yolov5
+python    : python
+# proj_root : C:\CountingBoats                            # root of project (where this file is)
+proj_root : /Users/charlieturner/Documents/CountingBoats                             # root of project (where this file is)
 weights   : ./data/NN_weights.pt                          # yolov5 weights file
 planet:
   api_key   : ENV                                         # If 'ENV', use env file (so doesn't go to version control)
@@ -9,9 +12,9 @@ planet:
 output_dir: ./outputs
 
 # Technical Configuration
-TILE_SIZE                       : 416 # Size of tiles to split images into for processing
+TILE_SIZE                       : 832 # Size of tiles to split images into for processing
                                           # I do beleive YOLO will resize images to work, but this should be the same as the YOLO model expects for best results
-STRIDE                          : 104     # Stride for overlapping tiles
+STRIDE                          : 208     # Stride for overlapping tiles
 
 CONFIDENCE_THRESHOLD            : 0.5     
 STAT_DISTANCE_CUTOFF_PIX        : 6

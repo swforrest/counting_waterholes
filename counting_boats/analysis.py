@@ -147,8 +147,8 @@ def create_and_show_heatmap(coverage_file, data):
     fig = map_scatter(data)
     # create the heatmap
     polygons = hm.get_polygons_from_file(coverage_file)
-    hm.create_heatmap_from_polygons(polygons, os.path.join(cfg["root_dir"], "outputs", "heatmap.tif")) 
-    geojson = os.path.join(cfg["root_dir"], "outputs", "heatmap.geojson")
+    hm.create_heatmap_from_polygons(polygons, os.path.join(cfg["output_dir"], "coverage_heatmap.tif")) 
+    geojson = os.path.join(cfg["output_dir"], "coverage_heatmap.geojson")
     fig = chloro_coverage(fig, geojson)
     fig.show()
 
