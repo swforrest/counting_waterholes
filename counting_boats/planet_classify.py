@@ -1,6 +1,7 @@
 import datetime
 import os
 import argparse
+import time
 import typer
 import utils.planet_utils as pu
 import utils.classifier as cl
@@ -48,17 +49,24 @@ def auto():
     """
     Run the entire pipeline automatically.
     """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--no_order", action="store_true", help="Skip ordering images")
+    skip_order = parser.parse_args().no_order
     orders_path     = os.path.join(cfg["output_dir"], "AOI_history.csv")
     archive_path    = os.path.join(cfg["output_dir"], "coverage.csv")
     download_path   = os.path.join("images", "downloads")
     # For all AOIS
-    aois = aois if aois is not None else pu.get_aois()
-    for aoi in aois:
-        options, dates = ah.search(aoi, orders_path)
-        if options is None:
-            continue
-        for items in ah.select(aoi, options, dates):
-            ah.order(aoi, items, orders_path )
+    if not skip_order:
+        print("Ordering images")
+        # pause for 3 seconds
+        time.sleep(3)
+        aois = pu.get_aois()
+        for aoi in aois:
+            options, dates = ah.search(aoi, orders_path)
+            if options is None:
+                continue
+            for items in ah.select(aoi, options, dates):
+                ah.order(aoi, items, orders_path )
     ah.download(csv_path=orders_path, download_path=download_path)
     ah.extract(csv_path=orders_path, download_path=download_path)
     ah.count()    # Count the boats
