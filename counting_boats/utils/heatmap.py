@@ -223,7 +223,8 @@ def add_to_heatmap(heatmap, polygons):
 
 def create_heatmap_from_polygons(polygons, save_file="heatmap.tif", show=False):
     if len(polygons) == 0:
-        raise ValueError("No polygons found in folder")
+        print("No polygons to create heatmap from")
+        return
     # Get the bounding box
     x_min, x_max, y_min, y_max = get_bbox(polygons)
     print(x_min, x_max, y_min, y_max)

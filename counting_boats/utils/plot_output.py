@@ -39,7 +39,9 @@ def plot(NNcsv, NNpicture, save=False, show=True):
             if IMAGE_NAME in line:
                 matches.append(line)
     print("Converting coordinates...")
-    leftPad, rightPad, topPad, bottomPad = ics.get_required_padding(NNpicture)
+    tile_size = cfg['TILE_SIZE']
+    stride = cfg['STRIDE']
+    leftPad, rightPad, topPad, bottomPad = ics.get_required_padding(NNpicture, tile_size, stride)
     coords = []
     for match in matches:
         match = match.split(',')

@@ -22,6 +22,9 @@ TEMP = os.path.join(os.getcwd(), "Boat_Temp")
 TEMP_PNG = os.path.join(os.getcwd(), "Boat_Temp_PNG")
 """ Temporary directory for storing png version of tif images """
 
+TILE_SIZE = cfg['TILE_SIZE']
+STRIDE = cfg['STRIDE']
+
 def main():
     """
     Run the classifier on each image in the directory given in the configuration.
@@ -111,7 +114,7 @@ def classify_directory(directory):
     :return: None
     """
     days = {ics.get_date_from_filename(file) for file in os.listdir(directory)}
-    days.remove(None)
+    days.discard(None)
     allFiles = os.listdir(directory)
     # list of files, and the day they belong to
     daily_data = (( [file for file in allFiles 
@@ -124,8 +127,8 @@ def classify_directory(directory):
                      for i, (files, day) in enumerate(daily_data))
     # write to csv
     for static_boats, moving_boats, day in daily_results:
-        write_to_csv(static_boats, day, f"{cfg['OUTFILE']}")
-        write_to_csv(moving_boats, day, f"{cfg['OUTFILE']}")
+        write_to_csv(static_boats, day, "boat_detections")
+        write_to_csv(moving_boats, day, "boat_detections")
 
 def classify_images(images_dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE):
     """
@@ -169,15 +172,12 @@ def prepare_temp_dirs():
 
 def detect_from_tif(file, tif_dir, yolo_dir, python, weights, confidence_threshold):
     prepare_temp_dirs()
-    tile_size = cfg['TILE_SIZE']
-    stride = cfg['STRIDE']
     file_name = path.basename(file)
-    ics.create_padded_png(tif_dir, TEMP_PNG, file_name, tile_size=tile_size, stride=stride)
+    ics.create_padded_png(tif_dir, TEMP_PNG, file_name, tile_size=TILE_SIZE, stride=STRIDE)
     png_path = path.join(os.getcwd(), TEMP_PNG, f"{file_name[0:-4]}.png")
-    ics.segment_image_for_classification(png_path, TEMP, tile_size=tile_size, stride=stride)
+    ics.segment_image_for_classification(png_path, TEMP, tile_size=TILE_SIZE, stride=STRIDE)
     detect_path = path.join(yolo_dir, "detect.py")
-    img_size = cfg['TILE_SIZE']
-    os.system(f"{python} {detect_path} --imgsz {img_size} --save-txt --save-conf --weights {weights} --source {TEMP}")
+    os.system(f"{python} {detect_path} --imgsz {TILE_SIZE} --save-txt --save-conf --weights {weights} --source {TEMP} --device cpu")
     return read_classifications(yolo_dir=yolo_dir, confidence_threshold=confidence_threshold, delete_folder=True)
 
 def detect_from_dir(dir, yolo_dir, python, weights, confidence_threshold):
@@ -185,8 +185,7 @@ def detect_from_dir(dir, yolo_dir, python, weights, confidence_threshold):
     Detect from a directory containing images
     """
     detect_path = path.join(yolo_dir, "detect.py")
-    img_size = cfg['TILE_SIZE']
-    os.system(f"{python} {detect_path} --imgsz {img_size} --save-txt --save-conf --weights {weights} --source {dir}")
+    os.system(f"{python} {detect_path} --imgsz {TILE_SIZE} --save-txt --save-conf --weights {weights} --source {dir}")
     return read_classifications(yolo_dir=yolo_dir, confidence_threshold=confidence_threshold)
 
 def classification_file_info(file)->tuple[int, int, list[str]]:
@@ -200,8 +199,8 @@ def classification_file_info(file)->tuple[int, int, list[str]]:
     fname= fname.split(".txt")[0].split("_")
     row = int(fname[-2])
     col = int(fname[-1])
-    across = col * 104
-    down = row * 104
+    across = col * STRIDE
+    down = row * STRIDE
     with open(file) as f:
         lines = [line.rstrip() for line in f]
     return across, down, lines
@@ -234,11 +233,11 @@ def parse_classifications(file) -> np.ndarray:
     # convert to float
     classifications = classifications.astype(np.float64)
     # adjust x and y for the full image
-    classifications[:, 0] = classifications[:, 0] * 416.0 + across
-    classifications[:, 1] = classifications[:, 1] * 416.0 + down
+    classifications[:, 0] = classifications[:, 0] * TILE_SIZE + across
+    classifications[:, 1] = classifications[:, 1] * TILE_SIZE + down
     # adjust width and height for the full image
-    classifications[:, 4] = classifications[:, 4] * 416.0
-    classifications[:, 5] = classifications[:, 5] * 416.0
+    classifications[:, 4] = classifications[:, 4] * TILE_SIZE
+    classifications[:, 5] = classifications[:, 5] * TILE_SIZE
     return classifications
 
 def remove_low_confidence(classifications:np.ndarray, confidence_threshold:float):
@@ -362,7 +361,7 @@ def pixel2latlong(classifications, tif):
     :param classifications: The classifications to convert, must have x, y as first two columns.
     :param tif: The tif file these classifications came from.
     """
-    leftPad, _, topPad, _ = ics.get_required_padding(tif)
+    leftPad, _, topPad, _ = ics.get_required_padding(tif, TILE_SIZE, STRIDE)
     crs = ics.get_crs(tif)
     # get the crs from the tif, e.g EPSG:4326
     for c in classifications:

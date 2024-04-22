@@ -258,6 +258,8 @@ def segment_image_for_classification(image, data_path, tile_size, stride):
     width = int(width)
     height = int(height)
 
+    print(width, height)
+
     # Ensure that the image is divisible by the desired size with no remainder.
     if width % stride != 0 or height % stride != 0:
         raise Exception("The image is not exactly divisible by the desired size of subset images")
@@ -353,13 +355,13 @@ def create_padded_png(raw_dir, output_dir, file_name, tile_size=416, stride=104,
     width, height = colourImage.size
 
     # Calculate required padding to make image divisible by 416
-    subImageSize = 416
-    overlapAmount = 104
+    subImageSize = tile_size
+    overlapAmount = stride
 
     # Calculate vertical and horizontal padding
     pad = subImageSize - overlapAmount
-    widthPadding = (math.ceil(width / 104) * 104) - width
-    heightPadding = (math.ceil(height / 104) * 104) - height
+    widthPadding = (math.ceil(width / stride) * stride) - width
+    heightPadding = (math.ceil(height / stride) * stride) - height
 
     # Calculate individual padding for each edge
     leftPad = math.floor(widthPadding / 2)
@@ -406,7 +408,7 @@ def create_unpadded_png(raw_dir, output_dir, file_name):
                    os.path.join(rawImageDirectory, file_name),
                    options=opsString2)
 
-def get_required_padding(filepath):
+def get_required_padding(filepath, tilesize=416, stride=104):
     """
     Determines how much padding is required on each edge of an image so that the image lengths and widths will be
     divisible by 416 and that each part of the images will be seen by the neural networm 16 times in either training
@@ -425,14 +427,10 @@ def get_required_padding(filepath):
     height = int(metadata_components[2].split(',')[1])
     width = int(metadata_components[2].split(',')[0].split(' ')[2])
 
-    # Calculate required padding to make image divisible by 416
-    subImageSize = 416
-    overlapAmount = 104
-
     # Calculate individual padding for each edge
-    pad = subImageSize - overlapAmount
-    widthPadding = (math.ceil(width / 104) * 104) - width
-    heightPadding = (math.ceil(height / 104) * 104) - height
+    pad = tilesize - stride
+    widthPadding = (math.ceil(width / stride) * stride) - width
+    heightPadding = (math.ceil(height / stride) * stride) - height
 
     leftPad = math.floor(widthPadding / 2)
     rightPad = math.ceil(widthPadding / 2)

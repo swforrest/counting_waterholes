@@ -66,12 +66,16 @@ def auto(
                 continue
             for items in ah.select(aoi, options, dates):
                 ah.order(aoi, items, orders_path )
+    print("Downloading Images")
     ah.download(csv_path=orders_path, download_path=download_path)
-    ah.extract(csv_path=orders_path, download_path=download_path)
+    # ah.extract(csv_path=orders_path, download_path=download_path)
+    print("Classifying Images")
     ah.count()    # Count the boats
     ah.save(orders_path)                 # Save the history
+    print("Archiving Images")
     ah.archive(download_path, archive_path) # Archive the raw data (and save coverage info)
     # analyse
+    print("Analysing Images")
     ah.analyse(orders_path, archive_path)
     # report (per run, and overall)
 
