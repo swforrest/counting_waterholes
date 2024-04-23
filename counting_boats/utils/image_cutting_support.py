@@ -166,7 +166,7 @@ def segment_image(image, json_file, tile_size, stride, metadata_components=None,
             subsetClassifications = [classification for classification in allImageClassifications if
                                      classification.in_bounds(left, right, top, bottom)]
 
-            if remove_empty>0 and (subsetClassifications is None or subsetClassifications == []):
+            if remove_empty > 0 and (subsetClassifications is None or subsetClassifications == []):
                 subsetClassifications = []
                 if random.uniform(0, 1) < remove_empty: 
                     continue
@@ -198,6 +198,7 @@ def segment_image(image, json_file, tile_size, stride, metadata_components=None,
                     total += 1
 
             # If more than 93% of the edge of the image is empty/black do NOT create a smaller image.
+            # NOTE: This is a magic number and I have no idea why it is this value
             if percentageEmpty / total > 0.93:
                 continue
 
@@ -337,6 +338,7 @@ def create_padded_png(raw_dir, output_dir, file_name, tile_size=416, stride=104,
     :return: None.
     """
     rawImageDirectory = os.path.join(os.getcwd(), raw_dir)
+    os.makedirs(output_dir, exist_ok=True)
     PNGpath = output_dir
 
     # Set the options for the gdal.Translate() call

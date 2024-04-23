@@ -4,7 +4,6 @@ import os
 import os.path as path
 import scipy.cluster
 import scipy.spatial
-import yaml
 import utils.image_cutting_support as ics
 from utils.config import cfg
 
@@ -40,7 +39,7 @@ def main():
 def process_tif(
         file, 
         stat_cutoff, 
-        moving_cutoff) -> tuple[np.ndarray, np.ndarray]:
+        moving_cutoff):
     """
     Processes a single tif file
     :param file: The tif file to process
@@ -177,7 +176,7 @@ def detect_from_tif(file, tif_dir, yolo_dir, python, weights, confidence_thresho
     png_path = path.join(os.getcwd(), TEMP_PNG, f"{file_name[0:-4]}.png")
     ics.segment_image_for_classification(png_path, TEMP, tile_size=TILE_SIZE, stride=STRIDE)
     detect_path = path.join(yolo_dir, "detect.py")
-    os.system(f"{python} {detect_path} --imgsz {TILE_SIZE} --save-txt --save-conf --weights {weights} --source {TEMP} --device cpu")
+    os.system(f"{python} {detect_path} --imgsz {TILE_SIZE} --save-txt --save-conf --weights {weights} --source {TEMP}")
     return read_classifications(yolo_dir=yolo_dir, confidence_threshold=confidence_threshold, delete_folder=True)
 
 def detect_from_dir(dir, yolo_dir, python, weights, confidence_threshold):
@@ -188,7 +187,7 @@ def detect_from_dir(dir, yolo_dir, python, weights, confidence_threshold):
     os.system(f"{python} {detect_path} --imgsz {TILE_SIZE} --save-txt --save-conf --weights {weights} --source {dir}")
     return read_classifications(yolo_dir=yolo_dir, confidence_threshold=confidence_threshold)
 
-def classification_file_info(file)->tuple[int, int, list[str]]:
+def classification_file_info(file):
     """
     Get information and data from a small png file
     The file-name is in the format: <.*>_<row>_<col>.txt
@@ -248,7 +247,7 @@ def remove_low_confidence(classifications:np.ndarray, confidence_threshold:float
     classifications = classifications[classifications[:, 2] >= confidence_threshold]
     return classifications, low_confidence
 
-def read_classifications(yolo_dir=None, class_folder=None, confidence_threshold:float=0.5, delete_folder=False) -> tuple[np.ndarray, np.ndarray]:
+def read_classifications(yolo_dir=None, class_folder=None, confidence_threshold:float=0.5, delete_folder=False):
     """
     Read classifications from either the given directory, or the latest detection from yolo.
     Classifications are per-image, this function reads all files and returns a single list.

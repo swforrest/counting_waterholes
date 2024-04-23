@@ -197,8 +197,10 @@ def extract_zip(downloadFile, aoi=None, date=None):
     if not os.path.isfile(tif):
         raise Exception(f"No tif file found in {extractPath}")
 
-    os.rename(tif, 
-              os.path.join(cfg["proj_root"], "images", "RawImages", newfname))
+    os.replace(tif, 
+              os.path.join(cfg["proj_root"], "images", "RawImages", newfname),
+
+              )
     return newfname
 
 def get_orders():

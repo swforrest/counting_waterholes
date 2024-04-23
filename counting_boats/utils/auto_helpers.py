@@ -11,6 +11,7 @@ from utils import classifier
 from utils import planet_utils 
 from utils import heatmap as hm
 from utils import area_coverage as ac
+from utils import planet_utils
 
 def get_history(csv_path) -> pd.DataFrame:
     if not os.path.exists(csv_path):
@@ -135,6 +136,16 @@ def download(csv_path, download_path="tempDL"):
             history.loc[history["order_id"] == order["id"], "order_status"] = "downloaded"
             save_history(history, csv_path)
 
+def extract(download_path):
+    """
+    Extract any downloaded images we haven't processed
+    """
+    for root, dirs, files in os.walk(download_path):
+        for f in files:
+            if f.endswith(".zip"):
+                planet_utils.extract_zip(os.path.join(root, f))
+
+
 def count():
     """
     Process any downloaded images
@@ -149,7 +160,7 @@ def save(csv_path):
     history = get_history(csv_path)
     new = history[history["order_status"] == "downloaded"]
     if len(new) == 0:
-        print("No new orders this run. Exiting.")
+        print("Save: No new orders this run.")
     # make a list of new file names (row["date"]_row["aoi"] for each row in new)
     new_files = [f"{row['date'].replace('-','')}_{row['aoi']}" for _, row in new.iterrows()]
     # update to complete if file does not exist in rawimages.
@@ -196,9 +207,9 @@ def archive(path, coverage_path):
     for root, dirs, files in os.walk(path):
         for f in files:
             if f.endswith(".zip"):
-                # NOTE:  ARCHIVE THIS ZIP
-                # This is where we could send it off to AWS, or another storage location
-                print("Sending to archive (not really, just not deleting it!)")
+                # Move to ../archive/{whatever}
+                print("Sending to archive (not really, just moving to ./archive !)")
+                os.rename(os.path.join(root, f), os.path.join("images", "archive", f))
                 continue
         for d in dirs:
             # save the polygon to the coverage file

@@ -140,7 +140,7 @@ MOVING_DISTANCE_CUTOFF_PIX = 10
 COMPARE_DISTANCE_CUTOFF_PIX = 8
 CONF_THRESHOLD = 0.5
 
-def process_image(detections, labels_root) -> list[list]:
+def process_image(detections, labels_root):
     """
     :return list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]
     """

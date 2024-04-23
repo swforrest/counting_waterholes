@@ -68,7 +68,7 @@ def auto(
                 ah.order(aoi, items, orders_path )
     print("Downloading Images")
     ah.download(csv_path=orders_path, download_path=download_path)
-    # ah.extract(csv_path=orders_path, download_path=download_path)
+    ah.extract(download_path=download_path)
     print("Classifying Images")
     ah.count()    # Count the boats
     ah.save(orders_path)                 # Save the history
