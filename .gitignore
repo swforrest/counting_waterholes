@@ -2,6 +2,8 @@
 case_studies
 documents
 outputs
+training
+*test
 images
 *pycache*
 YoloV8_Test
