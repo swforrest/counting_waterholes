@@ -1,0 +1,17 @@
+yolo_dir: C:\yolov5-master
+python: python
+raw_images: ./images/RawImages
+output_dir: ./training
+weights: yolov5s.pt
+cache: disk
+
+# yaml config describing the training data and classes
+# NOTE: could definitely automate this after splitting images later
+data: ./data/training_boats.yaml
+workers: 2
+
+BATCH_SIZE: 16
+EPOCHS : 1
+
+TILE_SIZE: 800
+STRIDE: 200

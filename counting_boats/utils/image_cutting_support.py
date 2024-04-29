@@ -233,14 +233,15 @@ def segment_image(image, json_file, tile_size, stride, metadata_components=None,
                     else:
                         classLabel = 1
                     outfile.write(str(classLabel) + " " +
-                                  str((((elem.get_left()+elem.get_right())/2)-j*104)/416) + " " +
-                                  str((((elem.get_top()+elem.get_bottom())/2)-i*104)/416) + " " +
-                                  str((((elem.get_right()) - (elem.get_left())) / 2) / 416) + " " +
-                                  str(((elem.get_bottom() - elem.get_top()) / 2) / 416) + "\n")
+                                  str((((elem.get_left()+elem.get_right())/2)-j*stride)/tile_size) + " " +
+                                  str((((elem.get_top()+elem.get_bottom())/2)-i*stride)/tile_size) + " " +
+                                  str((((elem.get_right()) - (elem.get_left())) / 2) / tile_size) + " " +
+                                  str(((elem.get_bottom() - elem.get_top()) / 2) / tile_size) + "\n")
 
             outfile.close()
         print(str("Progress: " + str(int(float(i / ((height / stride) - 5)) * 100)) +
                   "%"), end="\r")
+    print()
 
 def segment_image_for_classification(image, data_path, tile_size, stride):
     """

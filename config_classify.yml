@@ -1,0 +1,33 @@
+# Likely Need Changing
+yolo_dir  : C:\yolov5-master                              # installation directory of yolov5
+python    : python                                        # path to python executable (probably just 'python')
+proj_root : C:\ML_Software                                # root of project (probably where this file is)
+raw_images: ./images/raw_images
+pngs      : ./images/pngs
+weights   : ./data/NN_weights.pt                          # yolov5 weights file
+planet:
+  api_key   : ENV                                         # If 'ENV', use env file (so doesn't go to version control)
+    # If api_key is 'ENV', there must be a '.env' file in the same directory as this file with PLANET_API_KEY={your_api_key}
+output_dir: ./outputs
+
+# Technical Configuration
+TILE_SIZE                       : 416 # Size of tiles to split images into for processing
+                                      # I do beleive YOLO will resize images to work, but this should be the same as the YOLO model expects for best results
+
+STRIDE                          : 104 # Stride for overlapping tiles
+
+CONFIDENCE_THRESHOLD            : 0.5     
+STAT_DISTANCE_CUTOFF_PIX        : 6
+MOVING_DISTANCE_CUTOFF_PIX      : 10
+
+# The lat/long cutoff should be roughly related to the resolution of the images
+# For 3m resolution, 10 pix is roughly 30m. At approx -27 deg lat, this is approx 0.0003 degrees.
+STAT_DISTANCE_CUTOFF_LATLONG    : 0.00025
+MOVING_DISTANCE_CUTOFF_LATLONG  : 0.0003
+
+# Automation Configuration
+ALLOWED_CLOUD_COVER             : 0.1     # Fraction of image which can be covered by clouds
+MINIMUM_AREA_COVERAGE           : 0       # Fraction of interest area which must be present to download
+HISTORY_LENGTH                  : 28      # Days in the past to try to fetch (new) imagery for 
+AOIS                            : "all"   # Specific AOIs to fetch imagery for (comma separated names of polygons) or "all" for all AOIs in data/polygons
+
