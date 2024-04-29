@@ -1,4 +1,4 @@
-# conda env create -f environment.yml python=3.10
+# conda env create -f environment.yaml python=3.10
 name: Boats
 channels:
   - conda-forge

@@ -19,6 +19,7 @@ Extendable to any images from any area, the reccommended pipeline runs as follow
 ## Usage
 
 ### Installation
+
 #### Yolov5
 
 Clone [YoloV5](https://github.com/ultralytics/yolov5). This is used for the Neural Network detections.
@@ -28,7 +29,7 @@ It's reccommended to install a conda-based package manager such as [Miniconda](h
 Running the following will then install all required dependencies:
 
 ```
-conda create --name CountingBoats --file requirements.txt
+conda create --name CountingBoats --file environment.yaml
 ```
 
 Activate the environment (if not already) with `conda activate CountingBoats`, and you should be good to go.
@@ -36,12 +37,29 @@ Activate the environment (if not already) with `conda activate CountingBoats`, a
 ### Setup
 
 #### Configuration
-Set the variables in `config.yml` to align with your environment and preferences.
-
-####
+Set the variables in `config.yaml` to align with your environment and preferences.
+Similarly for 'config_train.yaml' and 'config_inference' in `config.yaml`.
 
 ### Running
 
-#### Full-Auto With
+From the root directory, run the following commands:
+
+#### Training
+```
+python counting_boats/train.py {prepare|segment|train} --config config_train.yaml
+```
+
+#### Testing
+```
+python counting_boats/testing.py --config config_test.yaml
+```
+
+#### Deployment
+
+```
+python counting_boats/classify.py --config config_classify.yaml
+```
+
 
 ## Acknowledgements
+

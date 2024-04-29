@@ -1,7 +1,7 @@
 import os
 import yaml
 
-config_path = os.path.join(os.getcwd(), 'config.yml')
+config_path = os.path.join(os.getcwd(), 'config.yaml')
 
 with open(config_path, 'r') as ymlfile:
     cfg = yaml.load(ymlfile, Loader=yaml.FullLoader)
