@@ -8,7 +8,7 @@ images
 *pycache*
 YoloV8_Test
 runs
-config.yaml
+.comet*
 .DS_Store
 *Temp*
 
