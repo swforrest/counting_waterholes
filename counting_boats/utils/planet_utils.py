@@ -21,9 +21,15 @@ def PlanetSearch(
         ):
     """
     Search a given area of interest for Planet imagery
-    :param search_path: path to a json file containing search body
-    :requires: Planet API key be set in environment variable
-    :return: a list of Planet items (json result from API)
+
+    Args:
+        search_path: path to a json file containing search body
+        
+    Requires:
+        Planet API key be set in environment variable
+
+    Returns:
+        a list of Planet items (json result from API)
     """
     # get the polygon
     polygon = None
@@ -47,11 +53,15 @@ def PlanetSearch(
 def PlanetSelect(items:list, polygon:str, date:str|None=None, area_coverage:float=0.9):
     """
     Select a subset of items from a search result
-    :param items: the list of items to select from
-    :param polygon: the area of interest to check coverage against (polygon file)
-    :param date: the date to select
-    :param area_coverage: the minimum area coverage to select
-    :return: list of selected items
+
+    Args:
+        items: the list of items to select from
+        polygon: the area of interest to check coverage against (polygon file)
+        date: the date to select
+        area_coverage: the minimum area coverage to select
+
+    Returns:
+        list of selected items
     """
     selected = None
     if date is None:
@@ -82,12 +92,15 @@ def PlanetSelect(items:list, polygon:str, date:str|None=None, area_coverage:floa
 def PlanetOrder(items:list, polygon_file:str, name:str):
     """
     Order a given search result.
-    :param itemIDs: a list of item IDs to order
-    :param polygon_file: a geojson file containing the area of interest to clip to
-        must be of format: {"type": "Polygon", "coordinates": [[[lon, lat], ...]]}
-    :param name: the name of the order
-    :requires: Planet API key be set in environment variable
-    :return: a list of order IDs
+
+    Args:
+        itemIDs: a list of item IDs to order
+        polygon_file: a geojson file containing the area of interest to clip to
+            must be of format: {"type": "Polygon", "coordinates": [[[lon, lat], ...]]}
+        name: the name of the order
+
+    Returns:
+        a list of order IDs
     """
     pids = [item['id'] for item in items]
     products = [{
@@ -144,9 +157,12 @@ def PlanetOrder(items:list, polygon_file:str, name:str):
 def PlanetCheckOrder(orderID:str):
     """
     Check the status of a given order
-    :param orderID: the order ID to check
-    :requires: Planet API key be set in environment variable
-    :return: the status of the order
+
+    Args:
+        orderID: the order ID to check
+
+    Returns:
+        the status of the order
     """
     uri = f"https://api.planet.com/compute/ops/orders/v2/{orderID}"
     response = requests.get(uri, auth=(API_KEY, ''))
@@ -156,6 +172,15 @@ def PlanetCheckOrder(orderID:str):
 def PlanetDownload(orderID:str, aoi=None, date=None, downloadPath="tempDL"):
     """
     Download a given order and move the tif file to the raw tiffs directory
+
+    Args:
+        orderID: the order ID to download
+        aoi: the area of interest
+        date: the date of the image
+        downloadPath: the path to download the file to
+
+    Returns:
+        the name of the tif file after extracting
     """
     uri = f"https://api.planet.com/compute/ops/orders/v2/{orderID}"
     response = requests.get(uri, auth=(API_KEY, ''))
@@ -181,6 +206,17 @@ def PlanetDownload(orderID:str, aoi=None, date=None, downloadPath="tempDL"):
     return extract_zip(downloadFile, aoi, date)
 
 def extract_zip(downloadFile, aoi=None, date=None):
+    """
+    Extract the zip file and move the tif file to the raw tiffs directory
+
+    Args:
+        downloadFile: the path to the zip file
+        aoi: the area of interest
+        date: the date of the image
+
+    Returns:
+        the name of the tif file after extracting
+    """
     if aoi is None or date is None:
         try:
             seps = os.path.basename(downloadFile).split('.')[0].split('_')
@@ -206,6 +242,9 @@ def extract_zip(downloadFile, aoi=None, date=None):
 def get_orders():
     """
     Get all orders from the Planet API
+
+    Returns:
+        a list of orders which are dictionaries. Contains the order ID, state, etc.
     """
     uri = f"https://api.planet.com/compute/ops/orders/v2"
     response = requests.get(uri, auth=(API_KEY, ''))
@@ -217,27 +256,44 @@ def get_orders():
 def get_aois():
     """
     Get all the areas of interest
+
+    Returns:
+        a list of area of interest names
     """
     return [f.split('.')[0] for f in os.listdir(os.path.join(cfg["proj_root"], "data", "polygons")) if f.endswith('json')]
 
 def get_polygon_file(aoi):
     """
     Get the polygon for a given area of interest
+
+    Args:
+        aoi: the area of interest name
+
+    Returns:
+        the path to the polygon file
+
     """
     files = os.listdir(os.path.join(cfg["proj_root"], "data", "polygons"))
     files = [f for f in files if f.endswith('json')]
     file = [f for f in files if f.split('.')[0] == aoi][0]
     return os.path.join(cfg["proj_root"], "data", "polygons", file)
 
-def items_area_coverage(items, AOI):
+def items_area_coverage(items, AOI) -> float:
     """
     Given all the items for a particular day, and a polygon, compute the area coverage
+
+    Args:
+        items: a list of items
+        AOI: the area of interest polygon
+
+    Returns:
+        the area coverage as a float
     """
     item_polys = [item['geometry'] for item in items]
     # combine the polygons
     combined = area_coverage.combine_polygons(item_polys)
     # get the coverage
-    coverage, _ = area_coverage.area_coverage_poly(AOI, combined)
+    coverage = area_coverage.area_coverage_poly(AOI, combined)
     return coverage
 
 

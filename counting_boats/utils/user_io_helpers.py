@@ -68,7 +68,7 @@ def archive(path, coverage_path):
                 if len(coverage[(coverage["date"] == date) & (coverage["aoi"] == aoi)]) > 0:
                     print(f"Already have {date}, {aoi} in coverage. Skipping.")
                 else:
-                    cov_amount, _ = ac.area_coverage_poly(planet_utils.get_polygon_file(aoi), polygon)
+                    cov_amount = ac.area_coverage_poly(planet_utils.get_polygon_file(aoi), polygon)
                     # add to coverage
                     coverage = pd.concat([coverage, pd.DataFrame({"aoi": [aoi], "date": [date], "area_coverage": [cov_amount], "polygon": [json.dumps(polygon)]})])
                     # save the coverage

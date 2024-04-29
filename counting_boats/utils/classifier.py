@@ -37,16 +37,21 @@ def main():
 
 
 def process_tif(
-        file, 
-        stat_cutoff, 
-        moving_cutoff):
+        file: str, 
+        stat_cutoff: int, 
+        moving_cutoff: int) -> tuple[np.ndarray, np.ndarray]:
     """
     Processes a single tif file
-    :param file: The tif file to process
-    :param img_path: The path to the directory to store the data in
-    :param stat_cutoff: The cutoff for static boats (pixels)
-    :param moving_cutoff: The cutoff for moving boats (pixels)
-    :return: A tuple of the static boats and moving boats
+
+    Args:
+        file: The tif file to process
+        img_path: The path to the directory to store the data in
+        stat_cutoff: The cutoff for static boats (pixels)
+        moving_cutoff: The cutoff for moving boats (pixels)
+
+    Returns:
+        A tuple of the static boats and moving boats
+        With boats as a list of: [x, y, filename]
     """
     classifications, _ = detect_from_tif(file, cfg["tif_dir"], 
                                          cfg["yolo_dir"], cfg["python"], 
@@ -75,18 +80,29 @@ def process_tif(
     os.rename(path.join(cfg["tif_dir"], file), path.join(cfg["tif_dir"], "processed", file))
     return static_boats, moving_boats
 
-def process_day(files, stat_cutoff, moving_cutoff, day, i, n_days):
+def process_day(
+        files: list[str], 
+        stat_cutoff: int, 
+        moving_cutoff: int, 
+        day: str, 
+        i: int, 
+        n_days: int) -> tuple[np.ndarray, np.ndarray, str]:
     """
     Process a day's images. Runs process_tif for each of the given files, 
     and then clusters and processes the results.
-    :param files: The files to process
-    :param img_path: The path to the directory to store the data in
-    :param stat_cutoff: The cutoff for static boats (pixels)
-    :param moving_cutoff: The cutoff for moving boats (pixels)
-    :param day: The day to process
-    :param i: The index of the day
-    :param n_days: The total number of days
-    :return: A tuple of the static boats, moving boats, and the day
+
+    Args:
+        files: The files to process
+        img_path: The path to the directory to store the data in
+        stat_cutoff: The cutoff for static boats (pixels)
+        moving_cutoff: The cutoff for moving boats (pixels)
+        day: The day to process
+        i: The index of the day
+        n_days: The total number of days
+    
+    Returns:
+        A tuple of the static boats, moving boats, and the day
+        With boats as a list of: [x, y, confidence, class, width, height, filename]
     """
     print(f"Classifying day {i+1} of {n_days} - {day} ({i/n_days*100:.2f}%)")
 
@@ -109,8 +125,13 @@ def process_day(files, stat_cutoff, moving_cutoff, day, i, n_days):
 def classify_directory(directory):
     """
     Use for directory of tiff images. Preprocesses, classifies, clusters.
-    :param directory: The directory to classify
-    :return: None
+    Writes the results to a csv file called boat_detections.csv in the output directory
+
+    Args:
+        directory: The directory to classify
+    
+    Returns:
+        None
     """
     days = {ics.get_date_from_filename(file) for file in os.listdir(directory)}
     days.discard(None)
@@ -133,6 +154,14 @@ def classify_images(images_dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE):
     """
     Use when images are already split into tiled images.
     Simply runs the classifier and clusters.
+
+    Args:
+        images_dir: The directory containing the images
+        STAT_DISTANCE_CUTOFF_PIX: The cutoff for static boats (pixels)
+        OUTFILE: The output file name
+
+    Returns:
+        None
     """
     dirs = [path.join(images_dir, dir) for dir in os.listdir(images_dir)]
     # read a day of images at a time
@@ -154,6 +183,14 @@ def classify_text(dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE):
     """
     If images have been classified and the text files are available, use this.
     Clusters and collates from yolov5 text files.
+
+    Args:
+        dir: The directory containing the text files
+        STAT_DISTANCE_CUTOFF_PIX: The cutoff for static boats (pixels)
+        OUTFILE: The output file name
+
+    Returns:
+        None
     """
     classifications, _ = read_classifications("prerun", class_folder=dir)
     # cluster
@@ -169,7 +206,22 @@ def prepare_temp_dirs():
     os.mkdir(TEMP) 
     os.mkdir(TEMP_PNG)
 
-def detect_from_tif(file, tif_dir, yolo_dir, python, weights, confidence_threshold):
+def detect_from_tif(file, tif_dir, yolo_dir, python, weights, confidence_threshold)-> tuple[np.ndarray, np.ndarray]:
+    """
+    Detect from a tif file
+
+    Args:
+        file: The tif file to detect from
+        tif_dir: The directory containing the tif file
+        yolo_dir: The directory containing yolo
+        python: The python executable to use
+        weights: The weights to use for the NN
+        confidence_threshold: The confidence threshold to use where if confidence < threshold, it is considered low confidence
+
+    Returns:
+        A tuple of the classifications and low confidence classifications
+        With boats as a list of: [x, y, confidence, class, width, height]
+    """
     prepare_temp_dirs()
     file_name = path.basename(file)
     ics.create_padded_png(tif_dir, TEMP_PNG, file_name, tile_size=TILE_SIZE, stride=STRIDE)
@@ -179,20 +231,35 @@ def detect_from_tif(file, tif_dir, yolo_dir, python, weights, confidence_thresho
     os.system(f"{python} {detect_path} --imgsz {TILE_SIZE} --save-txt --save-conf --weights {weights} --source {TEMP}")
     return read_classifications(yolo_dir=yolo_dir, confidence_threshold=confidence_threshold, delete_folder=True)
 
-def detect_from_dir(dir, yolo_dir, python, weights, confidence_threshold):
+def detect_from_dir(dir, yolo_dir, python, weights, confidence_threshold) -> tuple[np.ndarray, np.ndarray]:
     """
     Detect from a directory containing images
+
+    Args:
+        dir: The directory containing the images
+        yolo_dir: The directory containing yolo
+        python: The python executable to use
+        weights: The weights to use for the NN
+        confidence_threshold: The confidence threshold to use where if confidence < threshold, it is considered low confidence
+
+    Returns:
+        A tuple of the classifications and low confidence classifications
+        With boats as a list of: [x, y, confidence, class, width, height]
     """
     detect_path = path.join(yolo_dir, "detect.py")
     os.system(f"{python} {detect_path} --imgsz {TILE_SIZE} --save-txt --save-conf --weights {weights} --source {dir}")
     return read_classifications(yolo_dir=yolo_dir, confidence_threshold=confidence_threshold)
 
-def classification_file_info(file):
+def classification_file_info(file: str) -> tuple[int, int, list[str]]:
     """
     Get information and data from a small png file
     The file-name is in the format: <.*>_<row>_<col>.txt
-    :param file: The file path to get information from
-    :return tuple: The across, down, and data from the file
+
+    Args:
+        file: The file path to get information from
+
+    Returns:
+        The across, down, and data from the file
     """
     fname = os.path.basename(file)
     fname= fname.split(".txt")[0].split("_")
@@ -204,12 +271,16 @@ def classification_file_info(file):
         lines = [line.rstrip() for line in f]
     return across, down, lines
 
-def parse_classifications(file) -> np.ndarray:
+def parse_classifications(file: str) -> np.ndarray:
     """
     parse a single text file of classifications into the desired format 
-    :param file: path to text file
-    :return:     array of classifications from the file in the form:
-                 x, y, confidence, class, width, height
+
+    Args:
+        file: path to text file
+    
+    Returns:
+        array of classifications from the file in the form:
+        x, y, confidence, class, width, height
     """
     across, down, lines = classification_file_info(file)
     if len(lines) == 0:
@@ -239,23 +310,34 @@ def parse_classifications(file) -> np.ndarray:
     classifications[:, 5] = classifications[:, 5] * TILE_SIZE
     return classifications
 
-def remove_low_confidence(classifications:np.ndarray, confidence_threshold:float):
+def remove_low_confidence(classifications:np.ndarray, confidence_threshold:float) -> tuple[np.ndarray, np.ndarray]:
     """
     Remove all classifications with confidence < confidence_threshold
+
+    Args:
+        classifications: The classifications to remove low confidence from. Confidence is the third column.
+        confidence_threshold: The threshold to remove below
+
+    Returns:
+        The same classifications as a tuple, with the first element being the high confidence classifications
     """
     low_confidence  = classifications[classifications[:, 2] < confidence_threshold]
     classifications = classifications[classifications[:, 2] >= confidence_threshold]
     return classifications, low_confidence
 
-def read_classifications(yolo_dir=None, class_folder=None, confidence_threshold:float=0.5, delete_folder=False):
+def read_classifications(yolo_dir=None, class_folder=None, confidence_threshold:float=0.5, delete_folder=False) -> tuple[np.ndarray, np.ndarray]:
     """
     Read classifications from either the given directory, or the latest detection from yolo.
     Classifications are per-image, this function reads all files and returns a single list.
-    :param yolo_dir: The directory where yolo is installed, used to find the latest detection.
-    :param class_folder: The folder to read classifications from. If None, reads from the latest detection in yolo.
-    :param confidence_threshold = 0.5: The confidence threshold to use when separating low confidence classifications.
-    :param delete_folder: Whether to delete the classification folder after reading.
-    :return tuple[classifications, low_conf]: where each is in the form (x, y, conf, class, w, h)
+
+    Args:
+        yolo_dir: The directory where yolo is installed, used to find the latest detection.
+        class_folder: The folder to read classifications from. If None, reads from the latest detection in yolo.
+        confidence_threshold = 0.5: The confidence threshold to use when separating low confidence classifications.
+        delete_folder: Whether to delete the classification folder after reading.
+    
+    Returns:
+        tuple[classifications, low_conf]: where each is in the form (x, y, conf, class, w, h)
     """
     latest_exp = None
     if class_folder is None:
@@ -284,6 +366,14 @@ def read_classifications(yolo_dir=None, class_folder=None, confidence_threshold:
 def cluster(classifications:np.ndarray, cutoff:float) -> np.ndarray:
     """
     Cluster the given classifications using the given cutoff.
+
+    Args:
+        classifications: The classifications to cluster, in the form x, y, ...
+        cutoff: The cutoff to use for clustering
+
+    Returns:
+        The classifications with an additional column for the cluster number
+
     """
     if classifications.shape[0] < 2:
         # add cluster = 1 to point
@@ -300,8 +390,12 @@ def cluster(classifications:np.ndarray, cutoff:float) -> np.ndarray:
 def process_clusters(classifications_with_clusters:np.ndarray) -> np.ndarray:
     """
     Process the given classifications with clusters. Condenses each cluster into a single point.
-    :param classifications_with_clusters: The classifications as x, y, confidence, class, width, height, filename, cluster
-    :return: An array of the condensed classifications in the form: x, y, confidence, class, width, height, filenames
+
+    Args:
+        classifications_with_clusters: The classifications as x, y, confidence, class, width, height, filename, cluster
+    
+    Return:
+        An array of the condensed classifications in the form: x, y, confidence, class, width, height, filenames
     """
     boats = np.array([], dtype=np.float64).reshape(0, 6)
     if len(classifications_with_clusters) == 0:
@@ -312,7 +406,17 @@ def process_clusters(classifications_with_clusters:np.ndarray) -> np.ndarray:
     return np.asarray(boats)
 
 
-def condense(cluster:np.ndarray):
+def condense(cluster:np.ndarray) -> np.ndarray:
+    """
+    Given a cluster, condense it into a single point.
+    Uses the mean of x, y, w, and h - the most common class, and the maximum confidence.
+
+    Args:
+        cluster: The cluster to condense
+
+    Returns:
+        The condensed cluster in the form x, y, confidence, class, width, height, filenames
+    """
     # remove cluster number
     thisBoat = np.asarray(cluster)[:, [0, 1, 2, 3, 4, 5]].astype(np.float64)
     thisBoatMean = np.mean(thisBoat, axis=0)
@@ -326,7 +430,18 @@ def condense(cluster:np.ndarray):
         return np.append(thisBoatMean.astype(str), " ".join(files))
     return thisBoatMean
 
-def write_to_csv(classifications, day, file):
+def write_to_csv(classifications, day, file) -> None:
+    """
+    Write the given classifications to a csv file.
+
+    Args:
+        classifications: The classifications to write
+        day: The day the classifications are from
+        file: The file to write to
+
+    Returns:
+        None
+    """
     # Write to output csv
     # Create output csv if it doesn't exist
     file = os.path.join(cfg["output_dir"], file)
@@ -339,9 +454,16 @@ def write_to_csv(classifications, day, file):
     with open(f"{file}.csv", "a+") as outFile:
         outFile.writelines(lines)
 
-def remove(path, del_folder=True):
+def remove(path: str, del_folder=True) -> None:
     """
     Removes all files in a folder and the folder itself.
+
+    Args:
+        path: The path to remove
+        del_folder: Whether to remove the folder itself
+
+    Returns: 
+        None
     """
     if not os.path.exists(path):
         return
@@ -354,11 +476,16 @@ def remove(path, del_folder=True):
     if del_folder:
         os.rmdir(path)
 
-def pixel2latlong(classifications, tif):
+def pixel2latlong(classifications, tif) -> np.ndarray:
     """
     Convert the given classifications from pixel coordinates to lat/long.
-    :param classifications: The classifications to convert, must have x, y as first two columns.
-    :param tif: The tif file these classifications came from.
+
+    Args: 
+        classifications: The classifications to convert, must have x, y as first two columns.
+        tif: The tif file these classifications came from.
+    
+    Returns:
+        The same classifications with x, y converted to lat/long
     """
     leftPad, _, topPad, _ = ics.get_required_padding(tif, TILE_SIZE, STRIDE)
     crs = ics.get_crs(tif)

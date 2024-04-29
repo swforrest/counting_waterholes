@@ -19,11 +19,13 @@ class Classification(object):
     def __init__(self, left, right, top, bottom, label):
         """
         Instantiate the object.
-        :param left: The left edge of the classification
-        :param right: The right edge of the classification
-        :param top: The top edge of the classification
-        :param bottom: The bottom edge of the classification
-        :param label: The label assigned to the classification
+
+        Args:
+            left: The left edge of the classification
+            right: The right edge of the classification
+            top: The top edge of the classification
+            bottom: The bottom edge of the classification
+            label: The label assigned to the classification
         """
         self._left = left
         self._right = right
@@ -46,14 +48,18 @@ class Classification(object):
     def get_label(self):
         return self._label
 
-    def in_bounds(self, left, right, top, bottom):
+    def in_bounds(self, left: float, right: float, top:float, bottom: float):
         """
         Check if this classification is within a larger bounding box defined by the parameters of this function
-        :param left: The left edge of the classification
-        :param right: The right edge of the classification
-        :param top: The top edge of the classification
-        :param bottom: The bottom edge of the classification
-        :return: True if the classification is within the bounding box specified; false otherwise.
+
+        Args:
+            left: The left edge of the classification
+            right: The right edge of the classification
+            top: The top edge of the classification
+            bottom: The bottom edge of the classification
+        
+        Returns
+            True if the classification is within the bounding box specified; false otherwise.
         """
         if (self.get_bottom() < bottom and self.get_top() > top and
                 self.get_left() > left and self.get_right() < right):
@@ -71,16 +77,20 @@ class Classification(object):
         }
 
 
-def add_margin(pil_img, left, right, top, bottom, color):
+def add_margin(pil_img: Image , left: int, right: int, top: int, bottom: int, color: tuple) -> Image:
     """
     Pads an OPEN PIL (pillow/python imaging library) image on each edge by the amount specified.
-    :param pil_img: The open PIL image to pad.
-    :param left: The number of pixels to pad the left edge of the image by.
-    :param right: The number of pixels to pad the right edge of the image by.
-    :param top: The number of pixels to pad the top edge of the image by.
-    :param bottom: The number of pixels to pad the bottom edge of the image by.
-    :param color: What colour the padding should be as a tuple (0, 0, 0) for black (255, 255, 255) for white.
-    :return: The open PIL image after the padding has been applied
+
+    Args:
+        pil_img: The open PIL image to pad.
+        left: The number of pixels to pad the left edge of the image by.
+        right: The number of pixels to pad the right edge of the image by.
+        top: The number of pixels to pad the top edge of the image by.
+        bottom: The number of pixels to pad the bottom edge of the image by.
+        color: What colour the padding should be as a tuple (0, 0, 0) for black (255, 255, 255) for white.
+    
+    Returns:
+        The open PIL image after the padding has been applied
     """
     width, height = pil_img.size
     new_width = width + right + left
@@ -94,13 +104,17 @@ def segment_image(image, json_file, tile_size, stride, metadata_components=None,
     """
     Segments a large .tif file into smaller .png files for use in a neural network. Also created
     files in the IMGtxts directory which contain the annotations present in that sub image.
-    :param image: The large .tif that is to be segmented
-    :param json_file: The json file that contains all the classifications for the image that were made in labelme.
-    :param size: The desired size (both length and width) of the segmented images.
-    :param overlap_size: The desired amount of overlap that the segmented images should have
-    :param metadata_components: The metadata of the image - useful if the metadata is stripped out in a previous
-    operation on the image/file.
-    :return: None.
+
+    Args:
+        image: The large .tif that is to be segmented
+        json_file: The json file that contains all the classifications for the image that were made in labelme.
+        size: The desired size (both length and width) of the segmented images.
+        overlap_size: The desired amount of overlap that the segmented images should have
+        metadata_components: The metadata of the image - useful if the metadata is stripped out in a previous
+            operation on the image/file.
+
+    Returns:
+        None
     """
     # Open the image with tifffile - this reads the image in as a 2d array
     openImage = Image.open(image)
@@ -246,11 +260,14 @@ def segment_image(image, json_file, tile_size, stride, metadata_components=None,
 def segment_image_for_classification(image, data_path, tile_size, stride):
     """
     Segments a large .tif file into smaller .png files for use in a neural network.
-    :param image: The large .tif that is to be segmented
-    :param size: The desired size (both length and width) of the segmented images.
-    :param overlap_size: The desired amount of overlap that the segmented images should have
-    operation on the image/file.
-    :return: None.
+
+    Args:
+        image: The large .tif that is to be segmented
+        size: The desired size (both length and width) of the segmented images.
+        overlap_size: The desired amount of overlap that the segmented images should have
+    
+    Returns:
+        None
     """
     # Open the image with pillow - this reads the image in as a 2d array
     openImage = Image.open(image)
@@ -332,11 +349,14 @@ def create_padded_png(raw_dir, output_dir, file_name, tile_size=416, stride=104,
     """
     Creates an image which is padded for use in training/classifying within a neural network. Note: this images pads
     the images expecting that the size of sub-images created from this images will be 416x416 pixels.
-    :param raw_dir: Directory where raw .tif files downloaded from Planet are located
-    :param output_dir: The name of the directory where the padded .png files will be created.
-    :param file_name: The name of the .tif file that is to be padded.
-    operation on the image/file.
-    :return: None.
+
+    Args:
+        raw_dir: Directory where raw .tif files downloaded from Planet are located
+        output_dir: The name of the directory where the padded .png files will be created.
+        file_name: The name of the .tif file that is to be padded.
+
+    Returns:
+        None
     """
     rawImageDirectory = os.path.join(os.getcwd(), raw_dir)
     os.makedirs(output_dir, exist_ok=True)
@@ -394,11 +414,14 @@ def create_padded_png(raw_dir, output_dir, file_name, tile_size=416, stride=104,
 def create_unpadded_png(raw_dir, output_dir, file_name):
     """
     Creates an image which is NOT padded but converts raw .tif to .png files.
-    :param raw_dir: Directory where raw .tif files downloaded from Planet are located
-    :param output_dir: The name of the directory where the padded .png files will be created.
-    :param file_name: The name of the .tif file that is to be padded.
-    operation on the image/file.
-    :return: None.
+
+    Args:
+        raw_dir: Directory where raw .tif files downloaded from Planet are located
+        output_dir: The name of the directory where the padded .png files will be created.
+        file_name: The name of the .tif file that is to be padded.
+
+    Returns:
+        None
     """
     rawImageDirectory = os.path.join(os.getcwd(), raw_dir)
     PNGpath = output_dir
@@ -416,9 +439,13 @@ def get_required_padding(filepath, tilesize=416, stride=104):
     Determines how much padding is required on each edge of an image so that the image lengths and widths will be
     divisible by 416 and that each part of the images will be seen by the neural networm 16 times in either training
     or classification.
-    :param filepath: The path of the file to evaluate.
-    :return: (L, R, T, B) - A tuple containing the padding required on the left (L), right (R), top (T), and bottom (b)
-    of the images to make it suitable for use in the neural network.
+
+    Args:
+        filepath: The path of the file to evaluate.
+    
+    Returns:
+        (L, R, T, B) - A tuple containing the padding required on the left (L), right (R), top (T), and bottom (b)
+            of the images to make it suitable for use in the neural network.
     """
     ds = gdal.Open(filepath)
 
@@ -441,9 +468,15 @@ def get_required_padding(filepath, tilesize=416, stride=104):
     bottomPad = math.ceil(heightPadding / 2)
     return leftPad + pad, rightPad + pad, topPad + pad, bottomPad + pad
 
-def get_crs(filepath):
+def get_crs(filepath: str) -> int:
     """
     Get the EPSG code of the coordinate reference system of a .tif file.
+
+    Args:
+        filepath: The path of the file to evaluate.
+
+    Returns:
+        The EPSG code of the coordinate reference system of the .tif file.
     """
     ds = gdal.Open(filepath)
     metadata = gdal.Info(ds, format='json')
@@ -454,14 +487,18 @@ def get_crs(filepath):
     except:
         raise Exception("The coordinate reference system does not exist in the metadata")
 
-def pixel2coord(x, y, original_image_path):
+def pixel2coord(x: int, y:int, original_image_path: str) -> tuple[float, float]:
     """
     Returns global coordinates to pixel center using base-0 raster index
-    :param x: The x coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
-    :param y: The y coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
-    :param original_image_path: The path of the file to evaluate - a .tif files should be located here. This file will
-    also need geospatial metadata. Images obtained from Planet have the required metadata.
-    :return: (xp, yp) - A tuple containing the global coordinates of the provided pixel coordinates.
+
+    Args:
+        x: The x coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
+        y: The y coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
+        original_image_path: The path of the file to evaluate - a .tif files should be located here. This file will
+            also need geospatial metadata. Images obtained from Planet have the required metadata.
+e
+    Returns:
+        (xp, yp) - A tuple containing the global coordinates of the provided pixel coordinates.
     """
     ds = gdal.Open(original_image_path)
     c, a, b, f, d, e = ds.GetGeoTransform()
@@ -469,14 +506,18 @@ def pixel2coord(x, y, original_image_path):
     yp = d * x + e * y + d * 0.5 + e * 0.5 + f
     return(xp, yp)
 
-def coord2pixel(x, y, original_image_path):
+def coord2pixel(x: float, y: float, original_image_path: str) -> tuple[int, int]:
     """
     Returns pixel coordinates to pixel center using base-0 raster index
-    :param x: The x coordinate (global coordinates) of the object in the image to be converted to pixel coordinates.
-    :param y: The y coordinate (global coordinates) of the object in the image to be converted to pixel coordinates.
-    :param original_image_path: The path of the file to evaluate - a .tif files should be located here. This file will
-    also need geospatial metadata. Images obtained from Planet have the required metadata.
-    :return: (xp, yp) - A tuple containing the pixel coordinates of the provided global coordinates.
+
+    Args:
+        x: The x coordinate (global coordinates) of the object in the image to be converted to pixel coordinates.
+        y: The y coordinate (global coordinates) of the object in the image to be converted to pixel coordinates.
+        original_image_path: The path of the file to evaluate - a .tif files should be located here. This file will
+            also need geospatial metadata. Images obtained from Planet have the required metadata.
+
+    Returns:
+        (xp, yp) - A tuple containing the pixel coordinates of the provided global coordinates.
     """
     ds = gdal.Open(original_image_path)
     c, a, b, f, d, e = ds.GetGeoTransform()
@@ -484,30 +525,45 @@ def coord2pixel(x, y, original_image_path):
     yp =  (y - d*x - d * 0.5 - e * 0.5 - f) / e
     return(xp, yp)
 
-def coord2latlong(x, y, crs=32756):
+def coord2latlong(x: float, y: float, crs: int=32756) -> tuple[float, float]:
     """
     Converts global coordinates to latitude/longitude coordinates
-    :param x: The x coordinate in a pair of global coordinates.
-    :param y: The y coordinate in a pair of global coordinates.
-    :return: (long, lat) - A tuple containing the longitude and latitude at the provided global coordinates.
+
+    Args:
+        x: The x coordinate in a pair of global coordinates.
+        y: The y coordinate in a pair of global coordinates.
+
+    Returns:
+        (long, lat) - A tuple containing the longitude and latitude at the provided global coordinates.
     """
     proj = pyproj.Transformer.from_crs(crs, 4326, always_xy=True)
     long, lat = proj.transform(x, y)
     return long, lat
 
-def latlong2coord(lat, long, crs=32756):
+def latlong2coord(lat: float, long: float, crs: int=32756) -> tuple[float, float]:
     """
     Converts latitude/longitude coordinates to global coordinates
-    :param long: The longitude coordinate in a pair of latitude/longitude coordinates.
-    :param lat: The latitude coordinate in a pair of latitude/longitude coordinates.
-    :return: (x, y) - A tuple containing the global coordinates at the provided latitude/longitude coordinates.
+    
+    Args:
+        long: The longitude coordinate in a pair of latitude/longitude coordinates.
+        lat: The latitude coordinate in a pair of latitude/longitude coordinates.
+
+    Returns:
+        (x, y) - A tuple containing the global coordinates at the provided latitude/longitude coordinates.
     """
     proj = pyproj.Transformer.from_crs(4326, crs)
     x, y = proj.transform(long, lat)
     return x, y
 
-def get_date_from_filename(filename):
+def get_date_from_filename(filename: str):
     """
+    Get the date from a file. The file must have a date in the format "yyyymmdd_" at the start of the filename .
+first 
+    Args:
+        filename: The name of the file to extract the date from.
+
+    Returns:
+        The date in the format "dd/mm/yyyy" from the filename.
     """
     str_date = filename.split("_")[0]
     if len(str_date) != 8:
@@ -517,11 +573,15 @@ def get_date_from_filename(filename):
     day = str_date[6:8]
     return f"{day}/{month}/{year}"
 
-def get_cartesian_top_left(metadata_components):
+def get_cartesian_top_left(metadata_components: list[str]) -> tuple[float, float]:
     """
     Calculates the lat long at the top left point of a given satellite image
-    :param metadata_components: The metadata components stripped from a .tif file
-    :return: (long, lat) - A tuple containing the longitude and latitude at the top left point of the satellite image.
+
+    Args:
+        metadata_components: The metadata components stripped from a .tif file
+
+    Returns: 
+        (long, lat) - A tuple containing the longitude and latitude at the top left point of the satellite image.
     """
     for component in metadata_components:
         if len(component) > 20 and component[0:10] == "Upper Left":
@@ -575,11 +635,15 @@ def get_cartesian_top_right(metadata_components):
     raise Exception("The top right corner coordinates do not exist in the metadata")
 
 
-def get_cartesian_bottom_left(metadata_components):
+def get_cartesian_bottom_left(metadata_components: list[str]) -> tuple[float, float]:
     """
     Calculates the lat long at the bottom left point of a given satellite image
-    :param metadata_components: The metadata components stripped from a .tif file
-    :return: (long, lat) - A tuple containing the longitude and latitude at the bottom left point of the satellite image
+
+    Args:
+        metadata_components: The metadata components stripped from a .tif file
+
+    Returns: 
+        (long, lat) - A tuple containing the longitude and latitude at the bottom left point of the satellite image
     """
     for component in metadata_components:
         if len(component) > 20 and component[0:10] == "Lower Left":
@@ -603,13 +667,16 @@ def get_cartesian_bottom_left(metadata_components):
             pass
     raise Exception("The bottom left corner coordinates do not exist in the metadata")
 
-
-def get_cartesian_bottom_right(metadata_components):
+def get_cartesian_bottom_right(metadata_components: list[str]) -> tuple[float, float]:
     """
     Calculates the lat long at the bottom right point of a given satellite image
-    :param metadata_components: The metadata components stripped from a .tif file
-    :return: (long, lat) - A tuple containing the longitude and latitude at the bottom right point of the
-    satellite image.
+
+    Args:
+        metadata_components: The metadata components stripped from a .tif file
+
+    Returns:
+        (long, lat) - A tuple containing the longitude and latitude at the bottom right point of the
+            satellite image.
     """
     for component in metadata_components:
         if len(component) > 20 and component[0:11] == "Lower Right":
@@ -634,11 +701,15 @@ def get_cartesian_bottom_right(metadata_components):
     raise Exception("The bottom right corner coordinates do not exist in the metadata")
 
 
-def metadata_get_w_h(metadata_components):
+def metadata_get_w_h(metadata_components: list[str]) -> tuple[int, int]:
     """
     Obtains the width and height of a given satellite image
-    :param metadata_components: The metadata components stripped from a .tif file
-    :return: (width, height) - A tuple containing the width and height of a given satellite image.
+
+    Args:
+        metadata_components: The metadata components stripped from a .tif file
+
+    Returns: 
+        (width, height) - A tuple containing the width and height of a given satellite image.
     """
     for component in metadata_components:
         if component[0:4] == "Size":

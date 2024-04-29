@@ -22,8 +22,10 @@ tasks:
   run_detection: False  # Run the classifier
 
   analyse:
+    # Main analysis step: cluster and compare
     compare_detections_to_ground_truth: True # Cluster and compare results to ground truth (have to do this for all analysis below)
 
+    # Supplementary analysis, not all implemented
     plots:
       confusion_matrix: True
       boat_count_compare: True

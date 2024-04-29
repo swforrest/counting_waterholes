@@ -18,6 +18,13 @@ def prepare(run_folder, config):
     """
     Given a folder, find all the tif files are create a png for each one.
     Also rename tif files if required.
+
+    Args:
+        run_folder (str): The folder to prepare
+        config (dict): The configuration dictionary
+
+    Returns:
+        None
     """
     img_folder = config["raw_images"] # folder with the tif files
     save_folder = os.path.join(config["path"], config["pngs"])
@@ -48,6 +55,15 @@ def segment(run_folder, config, tile_size=416, stride=104):
     """
     Segment (labelled) png's in the given base. 
     Places segmented images in the 'SegmentedImages' folder, and Labels in the 'Labels' folder.
+
+    Args:
+        run_folder (str): The folder to segment
+        config (dict): The configuration dictionary
+        tile_size (int): The size of the tiles to segment
+        stride (int): The stride of the segmentation
+        
+    Returns:
+        None
     """
     pngs = os.path.join(config["path"], config["pngs"])
     im_save_folder = os.path.join(config["path"], config["segmented_images"])
@@ -76,6 +92,16 @@ def run_detection(run_folder, run_config):
     """
     Run the YoloV5 detection on the segmented images, and move 
     the detections to a sibling directory for analysis.
+
+    Args:
+        run_folder (str): The folder to run detection on.
+        run_config (dict): The configuration dictionary.
+
+    Raises:
+        Exception: If there is an error running detection on a directory.
+
+    Returns:
+        None
     """
     weights = run_config["weights"]
     yolo = cfg["yolo_dir"]
@@ -102,6 +128,14 @@ def run_detection(run_folder, run_config):
 def compare_detections_to_ground_truth(run_folder, config):
     """
     Match up labels and detections, compare them, and save the results
+
+    Args:
+        run_folder (str): The folder to run detection on.
+        config (dict): The configuration dictionary.
+
+    Returns:
+        None
+
     """
     label_dir = os.path.join(config["path"], config["labels"])
     detection_dir = os.path.join(config["path"], config["classifications"])
@@ -116,6 +150,13 @@ def compare_detections_to_ground_truth(run_folder, config):
 def confusion_matrix(run_folder, config):
     """
     Summarize the results of the comparison. Reads all csvs and creates a confusion matrix
+
+    Args:
+        run_folder (str): The folder to run detection on.
+        config (dict): The configuration dictionary.
+
+    Returns:
+        None
     """
     if os.path.exists(os.path.join(run_folder, "all_boats.csv")):
         all_data = pd.read_csv(os.path.join(run_folder, "all_boats.csv"))
@@ -143,7 +184,14 @@ CONF_THRESHOLD = 0.5
 
 def process_image(detections, labels_root):
     """
-    :return list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]
+    Compare the detections and labels for a single image
+
+    Args:
+        detections (str): The directory of detections for the iamge
+        labels_root (str): The root directory of labels
+
+    Returns:
+        list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]
     """
     # labels will be in a parallel directory to detections
     # e.g detections = "Detections/b/../d", labels = "Labels/b/../d"
@@ -186,9 +234,13 @@ def compare(ml:np.ndarray, manual:np.ndarray, cutoff):
     given two lists of clusters, compare them (cluster them and note the results)
     e.g if ml has the point (52, 101), and manual has (51.8, 101.2), they should be clustered together
     , and this boat should be noted as being in both sets
-    :param ml: list of clusters in form [x, y, confidence, class, width, height, filename]
-    :param manual: list of clusters in form [x, y, confidence, class, width, height, filename]
-    :return list of clusters in form [x, y, ml_class, manual_class]
+
+    Args:
+        ml: list of clusters in form [x, y, confidence, class, width, height, filename]
+        manual: list of clusters in form [x, y, confidence, class, width, height, filename]
+
+    Returns:
+        list of clusters in form [x, y, ml_class, manual_class]
     """
     all_clusters, all_points = combine_detections_and_labels(ml, manual)
     if len(all_points) < 2:
@@ -238,6 +290,13 @@ def compare(ml:np.ndarray, manual:np.ndarray, cutoff):
 def combine_detections_and_labels(ml, manual):
     """
     Combine the detections and labels into one list of annotated clusters for comparison
+
+    Args:
+        ml: list of clusters in form [x, y, confidence, class, width, height, filename]
+        manual: list of clusters in form [x, y, confidence, class, width, height, filename]
+
+    Returns:
+        list of clusters in form [x, y, confidence, class, width, height, filename, source]
     """
     # add "ml" to the end of each ml cluster
     if len(ml) > 0:
@@ -261,6 +320,14 @@ def combine_detections_and_labels(ml, manual):
 def comparisons_to_csv(comparisons, filename):
     """
     Write the comparisons to a csv file
+
+    Args:
+        comparisons: list of clusters in form [x, y, ml_class, manual_class]
+        filename: the name of the file to write to
+
+    Returns:    
+        None
+
     """
     df = pd.DataFrame(comparisons, columns=["x", "y", "ml_class", "manual_class"])
     df.to_csv(filename, index=False)
@@ -269,6 +336,13 @@ def comparisons_to_csv(comparisons, filename):
 def classifications_to_lat_long(run_folder, run_config):
     """
     Convert x and y of image classifications to lat/long and saves csv
+
+    Args:
+        run_folder (str): The folder to run detection on.
+        run_config (dict): The configuration dictionary.
+
+    Returns:
+        None
     """
     # Initialise dataframe
     all_boats = pd.DataFrame(columns=["date", "latitude", "longitude", "ml_class", "manual_class", "agree", "filename"])
@@ -310,6 +384,13 @@ def classifications_to_lat_long(run_folder, run_config):
 def boat_count_compare(run_folder, config):
     """
     Column graph with each group being one image, showing number of labelled and number of detected boats next to each other
+
+    Args:
+        run_folder (str): The folder to run detection on.
+        config (dict): The configuration dictionary.
+
+    Returns:
+        None
     """
     if os.path.exists(os.path.join(run_folder, "all_boats.csv")):
         all_data = pd.read_csv(os.path.join(run_folder, "all_boats.csv"))
@@ -334,8 +415,13 @@ def boat_count_compare(run_folder, config):
 def plot_boats(csvs:str, imgs:str, **kwargs):
     """
     given a directory of csvs, plot the boats on the images and save the images
-    :param csvs: directory containing csvs. Must be of form: x, y, ml_class, manual_class
-    :param imgs: base folder with the images (png), or a folder with subfolders with images (stitched.png)
+
+    Args:
+        csvs: directory containing csvs. Must be of form: x, y, ml_class, manual_class
+        imgs: base folder with the images (png), or a folder with subfolders with images (stitched.png)
+
+    Returns:
+        None
     """
     if "outdir" in kwargs:
         outdir = kwargs["outdir"]
@@ -441,6 +527,13 @@ def all_mistakes(run_folder, config):
     Since the x and y in the summary refer to the entire image, we need to 
     calculate the subimage(s) that the boat is in. save the best subimage (most central)
     to a new directory with the type of mistake (e.g "false_positive")
+
+    Args:
+        run_folder (str): The folder to run detection on.
+        config (dict): The configuration dictionary.
+
+    Returns:
+        None
     """
     output_dir = os.path.join(run_folder, "mistakes")
     os.makedirs(output_dir, exist_ok=True)
@@ -531,6 +624,14 @@ def all_mistakes(run_folder, config):
 def all_possible_imgs(x, y, stride=104):
     """
     return a list of tuples (row, col) that would contain the given x and y coords
+
+    Args:
+        x: x coord
+        y: y coord
+        stride: stride of the images
+
+    Returns:
+        list of tuples (row, col)
     """
     row = y // stride - 1
     col = x // stride - 1
@@ -548,6 +649,13 @@ def all_possible_imgs(x, y, stride=104):
 ### Preparation Helpers
 
 def segregate(directory):
+    """
+    Segregate the directory by day and image
+
+    Args:
+        directory (str): The directory to segregate
+
+    """
     # separate by day
     days = segregate_by_day(directory)
     # separate by image
@@ -556,7 +664,15 @@ def segregate(directory):
 
 def segregate_by_day(directory, into=None):
     """
-    Bunch of files in a directory, need to separate into days.
+    Separate files in a directory into subdirectories by day.
+    Files must have the date as the last part of the filename.
+
+    Args:
+        directory (str): The directory to segregate
+        into (str): The directory to move the files into
+
+    Returns:
+        list of directories
     """
     if into is None:
         into = directory
@@ -579,7 +695,15 @@ def segregate_by_day(directory, into=None):
 
 def segregate_by_image(directory, into=None):
     """
-    Bunch of files in a directory, need to separate into same image.
+    Separate files in a directory into subdirectories by image.
+    Files must have the image name as the middle part of the filename.
+
+    Args:
+        directory (str): The directory to segregate
+        into (str): The directory to move the files into
+
+    Returns:
+        list of directories
     """
     if into is None:
         into = directory

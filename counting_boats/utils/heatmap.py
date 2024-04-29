@@ -22,7 +22,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from osgeo import gdal, ogr, osr
 
-from utils.area_coverage import polygons_to_32756
+from utils.area_coverage import polygon_latlong2crs
 from utils.image_cutting_support import coord2latlong
 
 gdal.UseExceptions()
@@ -30,7 +30,9 @@ gdal.UseExceptions()
 def get_bbox(polygons):
     """
     Get the bounding box of a list of polygons.
-    :param polygons: List of polygons, converted to 32756 global coords
+
+    Args:
+        polygons: List of polygons, must be in global coordinate system (not latlong)
     """
     x_min = np.inf
     x_max = -np.inf
@@ -45,23 +47,40 @@ def get_bbox(polygons):
     return x_min, x_max, y_min, y_max
 
 def get_polygons_from_folder(folder, name=None):
+    """
+    Get the polygons from a folder of json files.
+
+    Args:
+        folder: Path to folder
+        name: Optional, name of file to search for
+
+    Returns:
+        List of polygons in global coordinate system
+    """
     polygons = []
     for root, _, files in os.walk(folder): 
         for file in files:
             if name is None:
                 if file.endswith(".json"):
                     with open(os.path.join(root, file), "r") as f:
-                        polygons.extend(polygons_to_32756(json.load(f)))
+                        polygons.extend(polygon_latlong2crs(json.load(f)))
             else:
                 if name in file:
                     with open(os.path.join(root, file), "r") as f:
-                        polygons.extend(polygons_to_32756(json.load(f)))
+                        polygons.extend(polygon_latlong2crs(json.load(f)))
     return polygons
 
 def get_polygons_from_file(csv_path, group=None):
     """
     Get the polygons from a csv file with 'polygon' column.
     Group optionally is a group of aois to use
+
+    Args:
+        csv_path: Path to csv file
+        group: Optional, list of aois to use
+
+    Returns:    
+        List of polygons in global coordinate system
     """
     df = pd.read_csv(csv_path)
     # filter where df[aoi] is in group
@@ -71,12 +90,25 @@ def get_polygons_from_file(csv_path, group=None):
         raise ValueError("No column named 'polygon' in file")
     polygons = []
     for poly in df["polygon"]:
-        polygons.append(polygons_to_32756(poly)[0])
+        polygons.append(polygon_latlong2crs(poly)[0])
     return polygons
 
-def create_grid(x_min, x_max, y_min, y_max, size=1000):
+def create_grid(x_min, x_max, y_min, y_max, size=1000) -> tuple[np.ndarray, float, float]:
     """
     Create's a grid of pixels that covers the area of the bounding box.
+
+    Args:
+        x_min: Minimum x value
+        x_max: Maximum x value
+        y_min: Minimum y value
+        y_max: Maximum y value
+        size: Size of each pixel in meters
+
+    Returns:
+        A tuple of:
+            grid: 2D numpy array of zeros
+            x_step: Size of each pixel in x direction
+            y_step: Size of each pixel in y direction
     """
     # make the grid using (size x size)m^2 sized pixels
     x_range = x_max - x_min
@@ -92,7 +124,20 @@ def create_grid(x_min, x_max, y_min, y_max, size=1000):
 
 def paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly):
     """
-    Populate the grid as per whether each pixel's center is covered by the polygon.
+    Populate the given grid as per whether each pixel's center is covered by the polygon.
+
+    Args:
+        grid: 2D numpy array of zeros
+        x_min: Minimum x value
+        x_max: Maximum x value
+        y_min: Minimum y value
+        y_max: Maximum y value
+        x_step: Size of each pixel in x direction
+        y_step: Size of each pixel in y direction
+        poly: Polygon to paint onto the grid
+
+    Returns:
+        None
     """
     for x in np.arange(x_min, x_max, x_step):
         for y in np.arange(y_min, y_max, y_step):
@@ -101,9 +146,23 @@ def paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly):
             if point is not None and poly.Contains(point):
                 grid[int((x - x_min) / x_step), int((y - y_min) / y_step)] += 1
 
-def export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="heatmap.tif", geojson=True):
+def export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="heatmap.tif", geojson=True) -> None:
     """
     Export the grid as a GEOTIFF.
+
+    Args:
+        grid: 2D numpy array of zeros
+        x_min: Minimum x value
+        x_max: Maximum x value
+        y_min: Minimum y value
+        y_max: Maximum y value
+        x_step: Size of each pixel in x direction
+        y_step: Size of each pixel in y direction
+        filename: Name of file to save
+        geojson: Whether to save a geojson file as well
+
+    Returns:
+        None
     """
     driver = gdal.GetDriverByName('GTiff')
     rows, cols = grid.shape
@@ -130,7 +189,22 @@ def export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="heat
 
 def grid_to_geojson(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="heatmap.geojson"):
     """
-    Convert the grid to a geojson file.
+    Convert the grid to a geojson file, where each feature is a square in the grid and has:
+    - id: The id of the square
+    - value: The value of the square (number of times this square was painted on)
+
+    Args:
+        grid: 2D numpy array of zeros
+        x_min: Minimum x value
+        x_max: Maximum x value
+        y_min: Minimum y value
+        y_max: Maximum y value
+        x_step: Size of each pixel in x direction
+        y_step: Size of each pixel in y direction
+        filename: Name of file to save
+
+    Returns:    
+        None
     """
     features = []
     # transform grid into coordinates
@@ -168,9 +242,15 @@ def grid_to_geojson(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="
         }, f)
 
 
-def polygon_from_tif(tif):
+def polygon_from_tif(tif) -> None:
     """
     Get the coordinates of a polygon from a tif file.
+
+    Args:
+        tif: Path to tif file
+
+    Returns:
+        None
     """
     ds = gdal.Open(tif)
     # polygonize the raster
@@ -196,13 +276,18 @@ def polygon_from_tif(tif):
     ax = fig.add_subplot(111)
     ax.plot(*zip(*max_poly_coords))
 
-def add_to_heatmap(heatmap, polygons):
+def add_to_heatmap(heatmap: str, polygons: list):
     """
     Add polygons to the heatmap. Does this by creating a new raster, 
     then adding the polygons to the raster, and then adding the rasters
     together.
-    @param heatmap: Path to raster file e.g. 'heatmap.tif'
-    @param polygons: List of polygons
+
+    Args:
+        heatmap: Path to raster file e.g. 'heatmap.tif'
+        polygons: List of polygons as ogr polygons 
+    
+    Returns:
+        None
     """
     x_min, x_max, y_min, y_max = get_bbox(polygons)
     grid, x_step, y_step = create_grid(x_min, x_max, y_min, y_max)
@@ -222,6 +307,17 @@ def add_to_heatmap(heatmap, polygons):
     os.remove("temp.tif")
 
 def create_heatmap_from_polygons(polygons, save_file="heatmap.tif", show=False):
+    """
+    Create and save a heatmap from a list of polygons.
+
+    Args:
+        polygons: List of polygons
+        save_file: Name of file to save
+        show: Whether to show the heatmap
+
+    Returns:
+        None
+    """
     if len(polygons) == 0:
         print("No polygons to create heatmap from")
         return
