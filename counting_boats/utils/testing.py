@@ -621,6 +621,28 @@ def all_mistakes(run_folder, config):
                 plt.close()
                 id += 1
 
+import utils.heatmap as hm
+
+def coverage_heatmap(run_folder, config):
+    """
+    Generate the coverage heatmap for all TIF files used in the run
+    """
+    tif_dir = config['raw_images']
+    # walk
+    tifs = [os.path.join(root, file) for root, dirs, files in os.walk(tif_dir) for file in files if file.endswith(".tif")]
+    tifs = [tif for tif in tifs if "composite" not in tif]
+    tifs = tifs[0:1]
+
+    polygons = [hm.polygons_from_tif(tif) for tif in tifs]
+    # flatten
+    polygons = [poly for sublist in polygons for poly in sublist]
+    # convert to 
+    # get the coverage
+    hm.create_heatmap_from_polygons(polygons, os.path.join(run_folder, "images", "heatmap.tif"))
+
+
+    
+
 def all_possible_imgs(x, y, stride=104):
     """
     return a list of tuples (row, col) that would contain the given x and y coords

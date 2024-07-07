@@ -27,6 +27,7 @@ from utils.image_cutting_support import coord2latlong
 
 gdal.UseExceptions()
 
+
 def get_bbox(polygons):
     """
     Get the bounding box of a list of polygons.
@@ -39,12 +40,15 @@ def get_bbox(polygons):
     y_min = np.inf
     y_max = -np.inf
     for poly in polygons:
+        if poly is None:
+            continue
         env = poly.GetEnvelope()
         x_min = min(x_min, env[0])
         x_max = max(x_max, env[1])
         y_min = min(y_min, env[2])
         y_max = max(y_max, env[3])
     return x_min, x_max, y_min, y_max
+
 
 def get_polygons_from_folder(folder, name=None):
     """
@@ -58,7 +62,7 @@ def get_polygons_from_folder(folder, name=None):
         List of polygons in global coordinate system
     """
     polygons = []
-    for root, _, files in os.walk(folder): 
+    for root, _, files in os.walk(folder):
         for file in files:
             if name is None:
                 if file.endswith(".json"):
@@ -69,6 +73,7 @@ def get_polygons_from_folder(folder, name=None):
                     with open(os.path.join(root, file), "r") as f:
                         polygons.extend(polygon_latlong2crs(json.load(f)))
     return polygons
+
 
 def get_polygons_from_file(csv_path, group=None):
     """
@@ -83,6 +88,14 @@ def get_polygons_from_file(csv_path, group=None):
         List of polygons in global coordinate system
     """
     df = pd.read_csv(csv_path)
+    return get_polygons_from_df(df, group)
+
+
+def get_polygons_from_df(df, group=None) -> list[ogr.Geometry]:
+    """
+    Get the polygons from a dataframe with 'polygon' column.
+    Group optionally is a group of aois to use
+    """
     # filter where df[aoi] is in group
     if group is not None:
         df = df[df["aoi"].isin(group)]
@@ -90,7 +103,7 @@ def get_polygons_from_file(csv_path, group=None):
         raise ValueError("No column named 'polygon' in file")
     polygons = []
     for poly in df["polygon"]:
-        polygons.append(polygon_latlong2crs(poly)[0])
+        polygons.extend(polygon_latlong2crs(poly)[0])
     return polygons
 
 def create_grid(x_min, x_max, y_min, y_max, size=1000) -> tuple[np.ndarray, float, float]:
@@ -111,16 +124,17 @@ def create_grid(x_min, x_max, y_min, y_max, size=1000) -> tuple[np.ndarray, floa
             y_step: Size of each pixel in y direction
     """
     # make the grid using (size x size)m^2 sized pixels
-    x_range = x_max - x_min
-    y_range = y_max - y_min
-    cols = math.ceil(x_range / size) 
+    x_range = x_max - x_min  # in meters
+    y_range = y_max - y_min  # in meters
+    cols = math.ceil(x_range / size)
     rows = math.ceil(y_range / size)
     # make the grid
     grid = np.zeros((cols, rows))
     print(grid.shape)
-    x_step = x_range / cols
-    y_step = y_range / rows
+    x_step = x_range / cols  # in meters
+    y_step = y_range / rows  # in meters
     return grid, x_step, y_step
+
 
 def paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly):
     """
@@ -139,12 +153,14 @@ def paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly):
     Returns:
         None
     """
-    for x in np.arange(x_min, x_max, x_step):
-        for y in np.arange(y_min, y_max, y_step):
+    for col in range(grid.shape[0]):
+        for row in range(grid.shape[1]):
+            x = x_min + col * x_step
+            y = y_min + row * y_step
             point = ogr.Geometry(ogr.wkbPoint)
             point.AddPoint(x + x_step / 2, y + y_step / 2)
             if point is not None and poly.Contains(point):
-                grid[int((x - x_min) / x_step), int((y - y_min) / y_step)] += 1
+                grid[col, row] += 1
 
 def export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="heatmap.tif", geojson=True) -> None:
     """
@@ -164,7 +180,7 @@ def export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="heat
     Returns:
         None
     """
-    driver = gdal.GetDriverByName('GTiff')
+    driver = gdal.GetDriverByName("GTiff")
     rows, cols = grid.shape
     new_raster = driver.Create(filename, cols, rows, 1, gdal.GDT_Float32)
     # set origin and pixel size
@@ -185,9 +201,21 @@ def export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="heat
     if geojson:
         # save GeoJSON file where each feature has either an id field or some identifying value in properties
         # where each feature is a square in the grid
-        grid_to_geojson(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename=filename.replace(".tif", ".geojson"))
+        grid_to_geojson(
+            grid,
+            x_min,
+            x_max,
+            y_min,
+            y_max,
+            x_step,
+            y_step,
+            filename=filename.replace(".tif", ".geojson"),
+        )
 
-def grid_to_geojson(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="heatmap.geojson"):
+
+def grid_to_geojson(
+    grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="heatmap.geojson"
+):
     """
     Convert the grid to a geojson file, where each feature is a square in the grid and has:
     - id: The id of the square
@@ -207,6 +235,8 @@ def grid_to_geojson(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="
         None
     """
     features = []
+    # rotate the grid back
+    grid = np.rot90(grid, k=3)
     # transform grid into coordinates
     x_min, y_min = coord2latlong(x_min, y_min)
     x_max, y_max = coord2latlong(x_max, y_max)
@@ -216,30 +246,26 @@ def grid_to_geojson(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="
         for j in range(grid.shape[1]):
             x = x_min + i * x_step
             y = y_min + j * y_step
-            features.append({
-                "type": "Feature",
-                "geometry": {
-                    "type": "Polygon",
-                    "coordinates": [
-                        [
-                            [x, y],
-                            [x + x_step, y],
-                            [x + x_step, y + y_step],
-                            [x, y + y_step],
-                            [x, y]
-                        ]
-                    ]
-                },
-                "properties": {
-                    "id": f"{i}_{j}",
-                    "value": grid[i, j]
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [
+                            [
+                                [x, y],
+                                [x + x_step, y],
+                                [x + x_step, y + y_step],
+                                [x, y + y_step],
+                                [x, y],
+                            ]
+                        ],
+                    },
+                    "properties": {"id": f"{i}_{j}", "value": grid[i, j]},
                 }
-            })
+            )
     with open(filename, "w") as f:
-        json.dump({
-            "type": "FeatureCollection",
-            "features": features
-        }, f)
+        json.dump({"type": "FeatureCollection", "features": features}, f)
 
 
 def polygon_from_tif(tif) -> None:
@@ -253,32 +279,38 @@ def polygon_from_tif(tif) -> None:
         None
     """
     ds = gdal.Open(tif)
+    print("Getting polygons from: ", tif, end="")
     # polygonize the raster
-    srcband = ds.GetRasterBand(1)
-    srs = osr.SpatialReference()
-    srs.ImportFromWkt(ds.GetProjection())
-    dst_layername = "polygonized"
-    drv = ogr.GetDriverByName("Memory")
-    dst_ds = drv.CreateDataSource(dst_layername)
-    dst_layer = dst_ds.CreateLayer(dst_layername, srs=srs)
-    gdal.Polygonize(srcband, None, dst_layer, -1, [], callback=None)
-    # get the largest polygon
-    max_area = 0
-    max_poly_coords = None
-    for feature in dst_layer:
-        poly = feature.GetGeometryRef()
-        if poly.GetArea() > max_area:
-            max_area = poly.GetArea()
-            for ring in poly:
-                max_poly_coords = ring.GetPoints()
+    #   consider red, green, and blue bands as one
+    # Get the source band
+    polygons = []
+    src_band = ds.GetRasterBand(1)
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax.plot(*zip(*max_poly_coords))
+    src = osr.SpatialReference()
+    src.ImportFromWkt(ds.GetProjection())
+    driver = ogr.GetDriverByName("Memory")
+    dst_ds = driver.CreateDataSource("temp")
+    out_layer = dst_ds.CreateLayer("temp", srs=src)
+
+    if out_layer is None:
+        print("Failed to create layer.")
+        exit(1)
+
+    # Call the Polygonize function
+    gdal.Polygonize(src_band, None, out_layer, -1, [], None, None)
+    # Get the polygons
+    for feature in out_layer:
+        geom = feature.GetGeometryRef()
+        polygons.append(geom)
+
+    print(len(polygons))
+    exit()
+    return polygons
+
 
 def add_to_heatmap(heatmap: str, polygons: list):
     """
-    Add polygons to the heatmap. Does this by creating a new raster, 
+    Add polygons to the heatmap. Does this by creating a new raster,
     then adding the polygons to the raster, and then adding the rasters
     together.
 
@@ -293,7 +325,7 @@ def add_to_heatmap(heatmap: str, polygons: list):
     grid, x_step, y_step = create_grid(x_min, x_max, y_min, y_max)
     for poly in polygons:
         paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly)
-    grid = np.rot90(grid)
+    grid = np.rot90(grid)  # Grid has to be rotated for some reason
     export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="temp.tif")
     # add the rasters together
     ds1 = gdal.Open(heatmap, gdal.GA_Update)
@@ -306,7 +338,7 @@ def add_to_heatmap(heatmap: str, polygons: list):
     # remove the temp file
     os.remove("temp.tif")
 
-def create_heatmap_from_polygons(polygons, save_file="heatmap.tif", show=False):
+def create_heatmap_from_polygons(polygons, save_file="heatmap.tif", show=False, size=1000):
     """
     Create and save a heatmap from a list of polygons.
 
@@ -323,15 +355,17 @@ def create_heatmap_from_polygons(polygons, save_file="heatmap.tif", show=False):
         return
     # Get the bounding box
     x_min, x_max, y_min, y_max = get_bbox(polygons)
-    print(x_min, x_max, y_min, y_max)
     # Get the grid
-    grid, x_step, y_step = create_grid(x_min, x_max, y_min, y_max, size=1000)
+    grid, x_step, y_step = create_grid(x_min, x_max, y_min, y_max, size=size)
     # Paint the polygons onto the grid
+    print("Painting polygons onto grid")
     for poly in polygons:
+        # print the polygon's coordinates
         paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly)
     if show:
         plt.imshow(grid)
         plt.show()
+    grid = np.rot90(grid)  # Grid has to be rotated for some reason for the tif file
     # Export the grid
     export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename=save_file)
 
@@ -339,6 +373,5 @@ def create_heatmap_from_polygons(polygons, save_file="heatmap.tif", show=False):
 if __name__ == "__main__":
     # Load the polygons
     folder = input("Enter the folder with the polygons: ")
-    polygons = get_polygons_from_folder(folder, name="composite_metadata.json") 
+    polygons = get_polygons_from_folder(folder, name="composite_metadata.json")
     create_heatmap_from_polygons(polygons, os.getcwd())
-

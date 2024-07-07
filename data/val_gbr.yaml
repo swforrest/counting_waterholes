@@ -35,4 +35,5 @@ tasks:
     images:
       all_mistakes: False # Collate all mistakes into images with comparison 
       subimage_confidence: False  # Show confidence of detection for all subimages of a given boat (number of random boats to do this for)
+      coverage_heatmap: True
 

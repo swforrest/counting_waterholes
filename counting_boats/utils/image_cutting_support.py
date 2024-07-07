@@ -454,8 +454,13 @@ def get_required_padding(filepath, tilesize=416, stride=104):
     metadata_components = metadata.split("\n")
 
     # Get new width and height in preparation of paddingthe image
-    height = int(metadata_components[2].split(',')[1])
-    width = int(metadata_components[2].split(',')[0].split(' ')[2])
+    size = filter(lambda x: "Size is" in x, metadata_components)
+    if not size:
+        print(metadata)
+        raise Exception("Size is not in the metadata")
+    size = list(size)[0]
+    height = int(size.split(',')[1])
+    width = int(size.split(',')[0].split(' ')[-1])
 
     # Calculate individual padding for each edge
     pad = tilesize - stride

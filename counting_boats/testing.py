@@ -10,17 +10,18 @@ def init_run(config_file:str):
     run_num = 0
     while os.path.exists(os.path.join("runs", "val", "val" + str(run_num))):
         run_num += 1
-    os.makedirs(os.path.join("runs", "val", "val" + str(run_num)))
+    run_folder = os.path.join("runs", "val", "val" + str(run_num))
+    os.makedirs(run_folder)
     # make a "imgs" and "plots" folder
-    os.makedirs(os.path.join("runs", "val", "val" + str(run_num), "imgs"))
-    os.makedirs(os.path.join("runs", "val", "val" + str(run_num), "plots"))
+    os.makedirs(os.path.join(run_folder, "imgs"))
+    os.makedirs(os.path.join(run_folder, "plots"))
     # copy the config file to the folder
     with open(config_file, 'r') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
-    with open(os.path.join("runs", "val", "val" + str(run_num), "config.yaml"), 'w') as f:
+    with open(os.path.join(run_folder, "config.yaml"), 'w') as f:
         yaml.dump(config, f)
     # return the folder
-    return os.path.join("runs", "val", "val" + str(run_num))
+    return run_folder
 
 def run_tasks(tasks: dict, config: dict, level=0):
     for task in tasks:

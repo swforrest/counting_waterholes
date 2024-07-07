@@ -20,11 +20,12 @@ import rasterio
 
 from . import image_cutting_support as ics
 
-def area_coverage_tif(polygon:str, tif:str) -> tuple[float, float, float]:
+
+def area_coverage_tif(polygon: str, tif: str) -> tuple[float, float, float]:
     """
     Calculate the intersection of a polygon and a tif, as a percentage of the polygon area.
     To be used when calculating the coverage of a tif file for an AOI, after the TIF has already
-    been obtained. Assumes the tif is clipped to the polygon (does not check whether the tif is 
+    been obtained. Assumes the tif is clipped to the polygon (does not check whether the tif is
     actually inside the polygon, just calculates the areas).
 
     Args:
@@ -32,13 +33,13 @@ def area_coverage_tif(polygon:str, tif:str) -> tuple[float, float, float]:
         tif     : path to tif file (from Planet)
 
     Returns:
-        A tuple containing, a float (proportion of polygon covered by tif), 
+        A tuple containing, a float (proportion of polygon covered by tif),
         float (area of polygon, m2), float (area of tif, m2)
     """
-# Area of polygon:
+    # Area of polygon:
     poly = polygon_latlong2crs(polygon)[0]
     area = poly.Area()
-# Same idea with the tif. Get the area of the tif
+    # Same idea with the tif. Get the area of the tif
     with rasterio.open(tif) as src:
         array = src.read()
         meta = gdal.Info(tif)
@@ -56,10 +57,11 @@ def area_coverage_tif(polygon:str, tif:str) -> tuple[float, float, float]:
         array[array > 0] = 1
         # get the area of the tif (taking into account the real world size)
         tif_area = np.sum(array) * real_w * real_h / array.shape[0] / array.shape[1]
-        coverage = tif_area/area
+        coverage = tif_area / area
     return coverage, area, tif_area
 
-def area_coverage_poly(reference: str, polygon:str) -> float:
+
+def area_coverage_poly(reference: str, polygon: str) -> float:
     """
     Computes the intersection of a polygon and a reference polygon, as a percentage of the reference polygon area.
 
@@ -80,8 +82,9 @@ def area_coverage_poly(reference: str, polygon:str) -> float:
     # area of reference polygon
     ref_area = ref_poly.Area()
     # coverage
-    coverage = area/ref_area
+    coverage = area / ref_area
     return coverage, intersection
+
 
 def combine_polygons(polygons: list[str]) -> ogr.Geometry:
     """
@@ -110,7 +113,10 @@ def combine_polygons(polygons: list[str]) -> ogr.Geometry:
         raise ValueError("Polygons do not intersect")
     return poly
 
-def polygon_latlong2crs(polygon:str|dict|ogr.Geometry, crs=32756) -> list[ogr.Geometry]:
+
+def polygon_latlong2crs(
+    polygon: str | dict | ogr.Geometry, crs=32756
+) -> list[ogr.Geometry]:
     """
     Converts a polygon from lat long to a coordinate system (default EPSG:32756).
     Often polygons will be in geojson, which uses latitude and longitude.
@@ -120,15 +126,21 @@ def polygon_latlong2crs(polygon:str|dict|ogr.Geometry, crs=32756) -> list[ogr.Ge
         crs: the coordinate system to convert to (default EPSG:32756)
 
     Returns:
-        The same polygon, converted to the specified coordinate system.
+        The same polygon, converted to the specified coordinate system, or EPSG:32756 by default
     """
     if type(polygon) == ogr.Geometry:
         return [polygon]
-    geoJSON:dict = {}
+    geoJSON: dict = {}
     if type(polygon) != str and type(polygon) != dict:
-        raise ValueError("polygons_to_32756: Received polygon of type {}, must be string or dict to convert".format(type(polygon)))
+        raise ValueError(
+            "polygons_to_32756: Received polygon of type {}, must be string or dict to convert".format(
+                type(polygon)
+            )
+        )
     # check if the polygon is a string or a path
-    if type(polygon) == str and polygon[0] == "{": # } <- obligatory bracket to fix linting
+    if (
+        type(polygon) == str and polygon[0] == "{"
+    ):  # } <- obligatory bracket to fix linting
         # if string, convert to json
         geoJSON = json.loads(polygon)
     elif type(polygon) == str:
@@ -137,32 +149,32 @@ def polygon_latlong2crs(polygon:str|dict|ogr.Geometry, crs=32756) -> list[ogr.Ge
             geoJSON = json.load(f)
     elif type(polygon) == dict:
         geoJSON = polygon
-# convert from lat long to EPSG:32756
-    if 'geometry' in geoJSON:
-        geoJSON = geoJSON['geometry']
+    # convert from lat long to EPSG:32756
+    if "geometry" in geoJSON:
+        geoJSON = geoJSON["geometry"]
     polygons = []
-    for i, poly in enumerate(geoJSON['coordinates']):
-        if geoJSON['type'] == "MultiPolygon":
-            poly = poly[0]
-        poly_dict = {
-                "coordinates": [[None] * len(poly)],
-                "type": "Polygon"
-                }
+    for i, poly in enumerate(geoJSON["coordinates"]):
+        if geoJSON["type"] == "MultiPolygon":
+            poly = poly[0]  # Multipologons are nested once more bit
+        poly_dict = {"coordinates": [[None] * len(poly)], "type": "Polygon"}
         for i, val in enumerate(poly):
             lat, long = val
             x, y = ics.latlong2coord(lat, long)
-            poly_dict['coordinates'][0][i] = [x, y]
+            poly_dict["coordinates"][0][i] = [x, y]
         polygons.append(ogr.CreateGeometryFromJson(json.dumps(poly_dict)))
     return polygons
 
 
-
-
-
-
-
-
-
-
-
-
+def is_inside(polygon, point):
+    """
+    Check if a point is inside a polygon
+    :param polygon: path to polygon file (geojson format)
+    :param point: (lat, long)
+    :return: True if point is inside polygon, False otherwise
+    """
+    poly = polygon_latlong2crs(polygon)[0]
+    point_obj = ogr.Geometry(ogr.wkbPoint)
+    point_obj.AddPoint(point[0], point[1])
+    # point is in lat long, convert to EPSG:32756
+    point_obj.TransformTo("EPSG:32756")
+    return poly.Contains(point_obj)
