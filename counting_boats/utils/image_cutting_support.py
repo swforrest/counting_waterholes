@@ -11,6 +11,7 @@ from osgeo import gdal
 
 gdal.UseExceptions()
 
+
 class Classification(object):
     """
     This class is used to reference each of the classifications made using labelme that are stored in the output csv
@@ -48,7 +49,7 @@ class Classification(object):
     def get_label(self):
         return self._label
 
-    def in_bounds(self, left: float, right: float, top:float, bottom: float):
+    def in_bounds(self, left: float, right: float, top: float, bottom: float):
         """
         Check if this classification is within a larger bounding box defined by the parameters of this function
 
@@ -57,12 +58,16 @@ class Classification(object):
             right: The right edge of the classification
             top: The top edge of the classification
             bottom: The bottom edge of the classification
-        
+
         Returns
             True if the classification is within the bounding box specified; false otherwise.
         """
-        if (self.get_bottom() < bottom and self.get_top() > top and
-                self.get_left() > left and self.get_right() < right):
+        if (
+            self.get_bottom() < bottom
+            and self.get_top() > top
+            and self.get_left() > left
+            and self.get_right() < right
+        ):
             return True
         else:
             return False
@@ -73,11 +78,13 @@ class Classification(object):
             "bottom": self.get_bottom(),
             "left": self.get_left(),
             "right": self.get_right(),
-            "label": self.get_label()
+            "label": self.get_label(),
         }
 
 
-def add_margin(pil_img: Image , left: int, right: int, top: int, bottom: int, color: tuple) -> Image:
+def add_margin(
+    pil_img: Image, left: int, right: int, top: int, bottom: int, color: tuple
+) -> Image:
     """
     Pads an OPEN PIL (pillow/python imaging library) image on each edge by the amount specified.
 
@@ -88,7 +95,7 @@ def add_margin(pil_img: Image , left: int, right: int, top: int, bottom: int, co
         top: The number of pixels to pad the top edge of the image by.
         bottom: The number of pixels to pad the bottom edge of the image by.
         color: What colour the padding should be as a tuple (0, 0, 0) for black (255, 255, 255) for white.
-    
+
     Returns:
         The open PIL image after the padding has been applied
     """
@@ -100,7 +107,16 @@ def add_margin(pil_img: Image , left: int, right: int, top: int, bottom: int, co
     return result
 
 
-def segment_image(image, json_file, tile_size, stride, metadata_components=None, remove_empty=0.9, im_outdir=None, labels_outdir=None):
+def segment_image(
+    image,
+    json_file,
+    tile_size,
+    stride,
+    metadata_components=None,
+    remove_empty=0.9,
+    im_outdir=None,
+    labels_outdir=None,
+):
     """
     Segments a large .tif file into smaller .png files for use in a neural network. Also created
     files in the IMGtxts directory which contain the annotations present in that sub image.
@@ -126,11 +142,11 @@ def segment_image(image, json_file, tile_size, stride, metadata_components=None,
 
     # Open the json classifications file so create a Classification class object for each classification
     if os.path.isfile(json_file):
-        with open(json_file, 'r') as f:
+        with open(json_file, "r") as f:
             data = json.load(f)
 
     # Extract the classifications and nothing else
-    classifications = data['shapes']
+    classifications = data["shapes"]
 
     # Create an empty array which the Classification objects will be added to.
     allImageClassifications = []
@@ -138,25 +154,32 @@ def segment_image(image, json_file, tile_size, stride, metadata_components=None,
     # Iterate through each classification and transform them into Classification class objects.
     for classification in classifications:
         try:
-            x1, y1 = classification['points'][0]
-            x2, y2 = classification['points'][1]
+            x1, y1 = classification["points"][0]
+            x2, y2 = classification["points"][1]
             top = round(min(y1, y2))
             left = round(min(x1, x2))
             bottom = round(max(y1, y2))
             right = round(max(x1, x2))
-            label = classification['label']
-            allImageClassifications.append(Classification(left, right, top, bottom, label))
+            label = classification["label"]
+            allImageClassifications.append(
+                Classification(left, right, top, bottom, label)
+            )
         except:
             raise Exception(
-                "Error in sorting classifications from JSON file, likely that one of the classifications is not a square")
+                "Error in sorting classifications from JSON file, likely that one of the classifications is not a square"
+            )
 
     # Ensure that the image is divisible by the desired size with no remainder.
     if width % stride != 0 or height % stride != 0:
-        raise Exception("The image is not exactly divisible by the desired size of subset images")
+        raise Exception(
+            "The image is not exactly divisible by the desired size of subset images"
+        )
 
     # Ensure that the desired size is divisible by the desired overlap with no remainder.
     if tile_size % stride != 0:
-        raise Exception("The subset image size indicated is not divisible by the input overlap size")
+        raise Exception(
+            "The subset image size indicated is not divisible by the input overlap size"
+        )
 
     print("Cropping Image: " + image)
 
@@ -177,12 +200,17 @@ def segment_image(image, json_file, tile_size, stride, metadata_components=None,
 
             # Get all classifications in the original image that would be in the smaller image that has just been
             # created.
-            subsetClassifications = [classification for classification in allImageClassifications if
-                                     classification.in_bounds(left, right, top, bottom)]
+            subsetClassifications = [
+                classification
+                for classification in allImageClassifications
+                if classification.in_bounds(left, right, top, bottom)
+            ]
 
-            if remove_empty > 0 and (subsetClassifications is None or subsetClassifications == []):
+            if remove_empty > 0 and (
+                subsetClassifications is None or subsetClassifications == []
+            ):
                 subsetClassifications = []
-                if random.uniform(0, 1) < remove_empty: 
+                if random.uniform(0, 1) < remove_empty:
                     continue
 
             for f in range(0, tile_size - 1, 8):
@@ -224,38 +252,69 @@ def segment_image(image, json_file, tile_size, stride, metadata_components=None,
 
             # Save image
             path = os.path.join(im_outdir, os.path.basename(image).split(".")[0])
-            croppedImage.save(path + "_" + str(i) + "_" + str(j) + ".png", quality=100, compress_level=0)
+            croppedImage.save(
+                path + "_" + str(i) + "_" + str(j) + ".png",
+                quality=100,
+                compress_level=0,
+            )
 
             # Write all of these classifications to a master set containing each time a classification appears in a
             # smaller/segmented image.
-            im_name = os.path.basename(image).split(".")[0] + "_" + str(i) + "_" + str(j) + ".txt"
+            im_name = (
+                os.path.basename(image).split(".")[0]
+                + "_"
+                + str(i)
+                + "_"
+                + str(j)
+                + ".txt"
+            )
 
             if labels_outdir is None:
                 labels_outdir = os.path.join(os.getcwd(), "Labels")
 
             path = os.path.join(labels_outdir, im_name)
-            outfile = open(path, 'a+')
+            outfile = open(path, "a+")
 
             if len(subsetClassifications) > 0:
                 for elem in subsetClassifications:
                     if type(elem) == type(1):
                         continue
-                    if elem.get_label() == 'tanker':
+                    if elem.get_label() == "tanker":
                         continue
-                    if elem.get_label() == 'boat':
+                    if elem.get_label() == "boat":
                         classLabel = 0
                     else:
                         classLabel = 1
-                    outfile.write(str(classLabel) + " " +
-                                  str((((elem.get_left()+elem.get_right())/2)-j*stride)/tile_size) + " " +
-                                  str((((elem.get_top()+elem.get_bottom())/2)-i*stride)/tile_size) + " " +
-                                  str((((elem.get_right()) - (elem.get_left())) / 2) / tile_size) + " " +
-                                  str(((elem.get_bottom() - elem.get_top()) / 2) / tile_size) + "\n")
+                    outfile.write(
+                        str(classLabel)
+                        + " "
+                        + str(
+                            (((elem.get_left() + elem.get_right()) / 2) - j * stride)
+                            / tile_size
+                        )
+                        + " "
+                        + str(
+                            (((elem.get_top() + elem.get_bottom()) / 2) - i * stride)
+                            / tile_size
+                        )
+                        + " "
+                        + str(
+                            (((elem.get_right()) - (elem.get_left())) / 2) / tile_size
+                        )
+                        + " "
+                        + str(((elem.get_bottom() - elem.get_top()) / 2) / tile_size)
+                        + "\n"
+                    )
 
             outfile.close()
-        print(str("Progress: " + str(int(float(i / ((height / stride) - 5)) * 100)) +
-                  "%"), end="\r")
+        print(
+            str(
+                "Progress: " + str(int(float(i / ((height / stride) - 5)) * 100)) + "%"
+            ),
+            end="\r",
+        )
     print()
+
 
 def segment_image_for_classification(image, data_path, tile_size, stride):
     """
@@ -265,7 +324,7 @@ def segment_image_for_classification(image, data_path, tile_size, stride):
         image: The large .tif that is to be segmented
         size: The desired size (both length and width) of the segmented images.
         overlap_size: The desired amount of overlap that the segmented images should have
-    
+
     Returns:
         None
     """
@@ -281,11 +340,15 @@ def segment_image_for_classification(image, data_path, tile_size, stride):
 
     # Ensure that the image is divisible by the desired size with no remainder.
     if width % stride != 0 or height % stride != 0:
-        raise Exception("The image is not exactly divisible by the desired size of subset images")
+        raise Exception(
+            "The image is not exactly divisible by the desired size of subset images"
+        )
 
     # Ensure that the desired size is divisible by the desired overlap with no remainder.
     if tile_size % stride != 0:
-        raise Exception("The subset image size indicated is not divisible by the input overlap size")
+        raise Exception(
+            "The subset image size indicated is not divisible by the input overlap size"
+        )
 
     # Iterate over the original image and segment it into smaller images of the size specified in the parameters to
     # this function.
@@ -339,13 +402,24 @@ def segment_image_for_classification(image, data_path, tile_size, stride):
             # make sure data_path exists
             if not os.path.exists(data_path):
                 os.makedirs(data_path)
-            savePath = os.path.join(data_path, os.path.basename(image).split('.')[0])
-            croppedImage.save(savePath + "_" + str(i) + "_" + str(j) + ".png", quality=100, compress_level=0)
+            savePath = os.path.join(data_path, os.path.basename(image).split(".")[0])
+            croppedImage.save(
+                savePath + "_" + str(i) + "_" + str(j) + ".png",
+                quality=100,
+                compress_level=0,
+            )
 
-        print(str("Progress: " + str(int(float(i / ((height / stride) - 5)) * 100)) +
-                  "%"), end="\r")
+        print(
+            str(
+                "Progress: " + str(int(float(i / ((height / stride) - 5)) * 100)) + "%"
+            ),
+            end="\r",
+        )
 
-def create_padded_png(raw_dir, output_dir, file_name, tile_size=416, stride=104, rename=False):
+
+def create_padded_png(
+    raw_dir, output_dir, file_name, tile_size=416, stride=104, rename=False
+):
     """
     Creates an image which is padded for use in training/classifying within a neural network. Note: this images pads
     the images expecting that the size of sub-images created from this images will be 416x416 pixels.
@@ -363,15 +437,21 @@ def create_padded_png(raw_dir, output_dir, file_name, tile_size=416, stride=104,
     PNGpath = output_dir
 
     # Set the options for the gdal.Translate() call
-    opsString2 = "-ot UInt16 -of png -b 3 -b 2 -b 1 -scale_1 0 2048 0 65535 -scale_2 0 2048 0 65535 -scale_3 0 2048 0 " \
-                 "65535"
+    opsString2 = (
+        "-ot UInt16 -of png -b 3 -b 2 -b 1 -scale_1 0 2048 0 65535 -scale_2 0 2048 0 65535 -scale_3 0 2048 0 "
+        "65535"
+    )
     # Translate original from tif into png
-    gdal.Translate(os.path.join(PNGpath,f"colorCorrected{file_name.split('.')[0]}.png"),
-                   os.path.join(rawImageDirectory, file_name),
-                   options=opsString2)
+    gdal.Translate(
+        os.path.join(PNGpath, f"colorCorrected{file_name.split('.')[0]}.png"),
+        os.path.join(rawImageDirectory, file_name),
+        options=opsString2,
+    )
 
     # Open the new color corrected PNG we have just made.
-    colorImagePath = os.path.join(PNGpath, f"colorCorrected{file_name.split('.')[0]}.png")
+    colorImagePath = os.path.join(
+        PNGpath, f"colorCorrected{file_name.split('.')[0]}.png"
+    )
     colourImage = PIL.Image.open(colorImagePath)
 
     # Get new width and height in preparation of paddingthe image
@@ -393,13 +473,20 @@ def create_padded_png(raw_dir, output_dir, file_name, tile_size=416, stride=104,
     bottomPad = math.ceil(heightPadding / 2)
 
     # Pad the edges (add_margin is a function in imageCuttingSupport.py that adds a margin to an opened PIL image.)
-    im_new = add_margin(colourImage, pad + leftPad, pad + rightPad, pad + topPad, pad + bottomPad, (0, 0, 0))
+    im_new = add_margin(
+        colourImage,
+        pad + leftPad,
+        pad + rightPad,
+        pad + topPad,
+        pad + bottomPad,
+        (0, 0, 0),
+    )
 
     # Save the padded image which is now ready for classification
     if rename != False and type(rename) == str:
         savePath = os.path.join(PNGpath, rename + ".png")
     else:
-        savePath = os.path.join(PNGpath, file_name.split('.')[0]+ ".png")
+        savePath = os.path.join(PNGpath, file_name.split(".")[0] + ".png")
     im_new.save(savePath, quality=100, compress_level=0)
 
     # Close loose file descriptors
@@ -410,6 +497,7 @@ def create_padded_png(raw_dir, output_dir, file_name, tile_size=416, stride=104,
     for filename in os.listdir(PNGpath):
         if filename[0:5] == "color":
             os.remove(os.path.join(PNGpath, filename))
+
 
 def create_unpadded_png(raw_dir, output_dir, file_name):
     """
@@ -427,12 +515,17 @@ def create_unpadded_png(raw_dir, output_dir, file_name):
     PNGpath = output_dir
 
     # Set the options for the gdal.Translate() call
-    opsString2 = "-ot UInt16 -of png -b 3 -b 2 -b 1 -scale_1 0 2048 0 65535 -scale_2 0 2048 0 65535 -scale_3 0 2048 0 " \
-                 "65535"
+    opsString2 = (
+        "-ot UInt16 -of png -b 3 -b 2 -b 1 -scale_1 0 2048 0 65535 -scale_2 0 2048 0 65535 -scale_3 0 2048 0 "
+        "65535"
+    )
     # Translate original from tif into png
-    gdal.Translate(os.path.join(PNGpath, file_name.split('.')[0] + ".png"),
-                   os.path.join(rawImageDirectory, file_name),
-                   options=opsString2)
+    gdal.Translate(
+        os.path.join(PNGpath, file_name.split(".")[0] + ".png"),
+        os.path.join(rawImageDirectory, file_name),
+        options=opsString2,
+    )
+
 
 def get_required_padding(filepath, tilesize=416, stride=104):
     """
@@ -442,7 +535,7 @@ def get_required_padding(filepath, tilesize=416, stride=104):
 
     Args:
         filepath: The path of the file to evaluate.
-    
+
     Returns:
         (L, R, T, B) - A tuple containing the padding required on the left (L), right (R), top (T), and bottom (b)
             of the images to make it suitable for use in the neural network.
@@ -459,8 +552,8 @@ def get_required_padding(filepath, tilesize=416, stride=104):
         print(metadata)
         raise Exception("Size is not in the metadata")
     size = list(size)[0]
-    height = int(size.split(',')[1])
-    width = int(size.split(',')[0].split(' ')[-1])
+    height = int(size.split(",")[1])
+    width = int(size.split(",")[0].split(" ")[-1])
 
     # Calculate individual padding for each edge
     pad = tilesize - stride
@@ -473,6 +566,7 @@ def get_required_padding(filepath, tilesize=416, stride=104):
     bottomPad = math.ceil(heightPadding / 2)
     return leftPad + pad, rightPad + pad, topPad + pad, bottomPad + pad
 
+
 def get_crs(filepath: str) -> int:
     """
     Get the EPSG code of the coordinate reference system of a .tif file.
@@ -484,32 +578,36 @@ def get_crs(filepath: str) -> int:
         The EPSG code of the coordinate reference system of the .tif file.
     """
     ds = gdal.Open(filepath)
-    metadata = gdal.Info(ds, format='json')
+    metadata = gdal.Info(ds, format="json")
     ds = None
     try:
-        crs = metadata['stac']['proj:projjson']['id']['code']
+        crs = metadata["stac"]["proj:projjson"]["id"]["code"]
         return crs
     except:
-        raise Exception("The coordinate reference system does not exist in the metadata")
+        raise Exception(
+            "The coordinate reference system does not exist in the metadata"
+        )
 
-def pixel2coord(x: int, y:int, original_image_path: str) -> tuple[float, float]:
+
+def pixel2coord(x: int, y: int, original_image_path: str) -> tuple[float, float]:
     """
-    Returns global coordinates to pixel center using base-0 raster index
+        Returns global coordinates to pixel center using base-0 raster index
 
-    Args:
-        x: The x coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
-        y: The y coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
-        original_image_path: The path of the file to evaluate - a .tif files should be located here. This file will
-            also need geospatial metadata. Images obtained from Planet have the required metadata.
-e
-    Returns:
-        (xp, yp) - A tuple containing the global coordinates of the provided pixel coordinates.
+        Args:
+            x: The x coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
+            y: The y coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
+            original_image_path: The path of the file to evaluate - a .tif files should be located here. This file will
+                also need geospatial metadata. Images obtained from Planet have the required metadata.
+    e
+        Returns:
+            (xp, yp) - A tuple containing the global coordinates of the provided pixel coordinates.
     """
     ds = gdal.Open(original_image_path)
     c, a, b, f, d, e = ds.GetGeoTransform()
     xp = a * x + b * y + a * 0.5 + b * 0.5 + c
     yp = d * x + e * y + d * 0.5 + e * 0.5 + f
-    return(xp, yp)
+    return (xp, yp)
+
 
 def coord2pixel(x: float, y: float, original_image_path: str) -> tuple[int, int]:
     """
@@ -526,11 +624,12 @@ def coord2pixel(x: float, y: float, original_image_path: str) -> tuple[int, int]
     """
     ds = gdal.Open(original_image_path)
     c, a, b, f, d, e = ds.GetGeoTransform()
-    xp =  (x - b*y - a * 0.5 - b * 0.5 - c) / a
-    yp =  (y - d*x - d * 0.5 - e * 0.5 - f) / e
-    return(xp, yp)
+    xp = (x - b * y - a * 0.5 - b * 0.5 - c) / a
+    yp = (y - d * x - d * 0.5 - e * 0.5 - f) / e
+    return (xp, yp)
 
-def coord2latlong(x: float, y: float, crs: int=32756) -> tuple[float, float]:
+
+def coord2latlong(x: float, y: float, crs: int = 32756) -> tuple[float, float]:
     """
     Converts global coordinates to latitude/longitude coordinates
 
@@ -545,10 +644,11 @@ def coord2latlong(x: float, y: float, crs: int=32756) -> tuple[float, float]:
     long, lat = proj.transform(x, y)
     return long, lat
 
-def latlong2coord(lat: float, long: float, crs: int=32756) -> tuple[float, float]:
+
+def latlong2coord(lat: float, long: float, crs: int = 32756) -> tuple[float, float]:
     """
     Converts latitude/longitude coordinates to global coordinates
-    
+
     Args:
         long: The longitude coordinate in a pair of latitude/longitude coordinates.
         lat: The latitude coordinate in a pair of latitude/longitude coordinates.
@@ -560,15 +660,16 @@ def latlong2coord(lat: float, long: float, crs: int=32756) -> tuple[float, float
     x, y = proj.transform(long, lat)
     return x, y
 
+
 def get_date_from_filename(filename: str):
     """
-    Get the date from a file. The file must have a date in the format "yyyymmdd_" at the start of the filename .
-first 
-    Args:
-        filename: The name of the file to extract the date from.
+        Get the date from a file. The file must have a date in the format "yyyymmdd_" at the start of the filename .
+    first
+        Args:
+            filename: The name of the file to extract the date from.
 
-    Returns:
-        The date in the format "dd/mm/yyyy" from the filename.
+        Returns:
+            The date in the format "dd/mm/yyyy" from the filename.
     """
     str_date = filename.split("_")[0]
     if len(str_date) != 8:
@@ -578,6 +679,7 @@ first
     day = str_date[6:8]
     return f"{day}/{month}/{year}"
 
+
 def get_cartesian_top_left(metadata_components: list[str]) -> tuple[float, float]:
     """
     Calculates the lat long at the top left point of a given satellite image
@@ -585,7 +687,7 @@ def get_cartesian_top_left(metadata_components: list[str]) -> tuple[float, float
     Args:
         metadata_components: The metadata components stripped from a .tif file
 
-    Returns: 
+    Returns:
         (long, lat) - A tuple containing the longitude and latitude at the top left point of the satellite image.
     """
     for component in metadata_components:
@@ -593,17 +695,19 @@ def get_cartesian_top_left(metadata_components: list[str]) -> tuple[float, float
             longdms, latdms = component.split("(")[-1][0:-1].split(", ")
             longd = longdms.split("d")[0]
             longm = longdms.split("d")[1].split("'")[0]
-            longs = longdms.split("\"")[0].split("'")[1]
-            longdirec = longdms.split("\"")[1]
+            longs = longdms.split('"')[0].split("'")[1]
+            longdirec = longdms.split('"')[1]
             latd = latdms.split("d")[0]
             latm = latdms.split("d")[1].split("'")[0]
-            lats = latdms.split("\"")[0].split("'")[1]
-            latdirec = latdms.split("\"")[1]
-            long = ((int(longd) * 60 * 60) + (int(longm) * 60) + float(longs)) / (60 * 60)
+            lats = latdms.split('"')[0].split("'")[1]
+            latdirec = latdms.split('"')[1]
+            long = ((int(longd) * 60 * 60) + (int(longm) * 60) + float(longs)) / (
+                60 * 60
+            )
             lat = ((int(latd) * 60 * 60) + (int(latm) * 60) + float(lats)) / (60 * 60)
-            if longdirec == 'S':
+            if longdirec == "S":
                 long = long * -1
-            if latdirec == 'W':
+            if latdirec == "W":
                 lat = lat * -1
             return long, lat
         else:
@@ -622,17 +726,19 @@ def get_cartesian_top_right(metadata_components):
             longdms, latdms = component.split("(")[-1][0:-1].split(", ")
             longd = longdms.split("d")[0]
             longm = longdms.split("d")[1].split("'")[0]
-            longs = longdms.split("\"")[0].split("'")[1]
-            longdirec = longdms.split("\"")[1]
+            longs = longdms.split('"')[0].split("'")[1]
+            longdirec = longdms.split('"')[1]
             latd = latdms.split("d")[0]
             latm = latdms.split("d")[1].split("'")[0]
-            lats = latdms.split("\"")[0].split("'")[1]
-            latdirec = latdms.split("\"")[1]
-            long = ((int(longd) * 60 * 60) + (int(longm) * 60) + float(longs)) / (60 * 60)
+            lats = latdms.split('"')[0].split("'")[1]
+            latdirec = latdms.split('"')[1]
+            long = ((int(longd) * 60 * 60) + (int(longm) * 60) + float(longs)) / (
+                60 * 60
+            )
             lat = ((int(latd) * 60 * 60) + (int(latm) * 60) + float(lats)) / (60 * 60)
-            if longdirec == 'S':
+            if longdirec == "S":
                 long = long * -1
-            if latdirec == 'W':
+            if latdirec == "W":
                 lat = lat * -1
             return long, lat
         else:
@@ -647,7 +753,7 @@ def get_cartesian_bottom_left(metadata_components: list[str]) -> tuple[float, fl
     Args:
         metadata_components: The metadata components stripped from a .tif file
 
-    Returns: 
+    Returns:
         (long, lat) - A tuple containing the longitude and latitude at the bottom left point of the satellite image
     """
     for component in metadata_components:
@@ -655,22 +761,25 @@ def get_cartesian_bottom_left(metadata_components: list[str]) -> tuple[float, fl
             longdms, latdms = component.split("(")[-1][0:-1].split(", ")
             longd = longdms.split("d")[0]
             longm = longdms.split("d")[1].split("'")[0]
-            longs = longdms.split("\"")[0].split("'")[1]
-            longdirec = longdms.split("\"")[1]
+            longs = longdms.split('"')[0].split("'")[1]
+            longdirec = longdms.split('"')[1]
             latd = latdms.split("d")[0]
             latm = latdms.split("d")[1].split("'")[0]
-            lats = latdms.split("\"")[0].split("'")[1]
-            latdirec = latdms.split("\"")[1]
-            long = ((int(longd) * 60 * 60) + (int(longm) * 60) + float(longs)) / (60 * 60)
+            lats = latdms.split('"')[0].split("'")[1]
+            latdirec = latdms.split('"')[1]
+            long = ((int(longd) * 60 * 60) + (int(longm) * 60) + float(longs)) / (
+                60 * 60
+            )
             lat = ((int(latd) * 60 * 60) + (int(latm) * 60) + float(lats)) / (60 * 60)
-            if longdirec == 'S':
+            if longdirec == "S":
                 long = long * -1
-            if latdirec == 'W':
+            if latdirec == "W":
                 lat = lat * -1
             return long, lat
         else:
             pass
     raise Exception("The bottom left corner coordinates do not exist in the metadata")
+
 
 def get_cartesian_bottom_right(metadata_components: list[str]) -> tuple[float, float]:
     """
@@ -688,17 +797,19 @@ def get_cartesian_bottom_right(metadata_components: list[str]) -> tuple[float, f
             longdms, latdms = component.split("(")[-1][0:-1].split(", ")
             longd = longdms.split("d")[0]
             longm = longdms.split("d")[1].split("'")[0]
-            longs = longdms.split("\"")[0].split("'")[1]
-            longdirec = longdms.split("\"")[1]
+            longs = longdms.split('"')[0].split("'")[1]
+            longdirec = longdms.split('"')[1]
             latd = latdms.split("d")[0]
             latm = latdms.split("d")[1].split("'")[0]
-            lats = latdms.split("\"")[0].split("'")[1]
-            latdirec = latdms.split("\"")[1]
-            long = ((int(longd) * 60 * 60) + (int(longm) * 60) + float(longs)) / (60 * 60)
+            lats = latdms.split('"')[0].split("'")[1]
+            latdirec = latdms.split('"')[1]
+            long = ((int(longd) * 60 * 60) + (int(longm) * 60) + float(longs)) / (
+                60 * 60
+            )
             lat = ((int(latd) * 60 * 60) + (int(latm) * 60) + float(lats)) / (60 * 60)
-            if longdirec == 'S':
+            if longdirec == "S":
                 long = long * -1
-            if latdirec == 'W':
+            if latdirec == "W":
                 lat = lat * -1
             return long, lat
         else:
@@ -706,14 +817,14 @@ def get_cartesian_bottom_right(metadata_components: list[str]) -> tuple[float, f
     raise Exception("The bottom right corner coordinates do not exist in the metadata")
 
 
-def metadata_get_w_h(metadata_components: list[str]) -> tuple[int, int]:
+def metadata_get_w_h(metadata_components: list[str]) -> tuple[int, int]|None:
     """
     Obtains the width and height of a given satellite image
 
     Args:
         metadata_components: The metadata components stripped from a .tif file
 
-    Returns: 
+    Returns:
         (width, height) - A tuple containing the width and height of a given satellite image.
     """
     for component in metadata_components:
@@ -721,3 +832,4 @@ def metadata_get_w_h(metadata_components: list[str]) -> tuple[int, int]:
             width = int(component.split(" ")[2].split(",")[0])
             height = int(component.split(" ")[3])
             return width, height
+    return None

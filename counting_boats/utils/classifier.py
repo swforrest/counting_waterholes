@@ -633,8 +633,8 @@ def pixel2latlong(classifications, tif) -> np.ndarray:
     crs = ics.get_crs(tif)
     # get the crs from the tif, e.g EPSG:4326
     for c in classifications:
-        x = float(c[0]) - leftPad
-        y = float(c[1]) - topPad
+        x = int(c[0]) - leftPad
+        y = int(c[1]) - topPad
         xp, yp = ics.pixel2coord(x, y, tif)
         c[0], c[1] = ics.coord2latlong(xp, yp, crs)
     return classifications

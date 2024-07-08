@@ -28,7 +28,7 @@ from utils.image_cutting_support import coord2latlong
 gdal.UseExceptions()
 
 
-def get_bbox(polygons):
+def get_bbox(polygons: list[ogr.Geometry | None]):
     """
     Get the bounding box of a list of polygons.
 
@@ -84,14 +84,14 @@ def get_polygons_from_file(csv_path, group=None):
         csv_path: Path to csv file
         group: Optional, list of aois to use
 
-    Returns:    
+    Returns:
         List of polygons in global coordinate system
     """
     df = pd.read_csv(csv_path)
     return get_polygons_from_df(df, group)
 
 
-def get_polygons_from_df(df, group=None) -> list[ogr.Geometry]:
+def get_polygons_from_df(df, group=None) -> list[ogr.Geometry | None]:
     """
     Get the polygons from a dataframe with 'polygon' column.
     Group optionally is a group of aois to use
@@ -103,10 +103,13 @@ def get_polygons_from_df(df, group=None) -> list[ogr.Geometry]:
         raise ValueError("No column named 'polygon' in file")
     polygons = []
     for poly in df["polygon"]:
-        polygons.extend(polygon_latlong2crs(poly)[0])
+        polygons.extend(polygon_latlong2crs(poly))
     return polygons
 
-def create_grid(x_min, x_max, y_min, y_max, size=1000) -> tuple[np.ndarray, float, float]:
+
+def create_grid(
+    x_min, x_max, y_min, y_max, size=1000
+) -> tuple[np.ndarray, float, float]:
     """
     Create's a grid of pixels that covers the area of the bounding box.
 
@@ -162,7 +165,18 @@ def paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly):
             if point is not None and poly.Contains(point):
                 grid[col, row] += 1
 
-def export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="heatmap.tif", geojson=True) -> None:
+
+def export_data(
+    grid,
+    x_min,
+    x_max,
+    y_min,
+    y_max,
+    x_step,
+    y_step,
+    filename="heatmap.tif",
+    geojson=True,
+) -> None:
     """
     Export the grid as a GEOTIFF.
 
@@ -231,7 +245,7 @@ def grid_to_geojson(
         y_step: Size of each pixel in y direction
         filename: Name of file to save
 
-    Returns:    
+    Returns:
         None
     """
     features = []
@@ -316,8 +330,8 @@ def add_to_heatmap(heatmap: str, polygons: list):
 
     Args:
         heatmap: Path to raster file e.g. 'heatmap.tif'
-        polygons: List of polygons as ogr polygons 
-    
+        polygons: List of polygons as ogr polygons
+
     Returns:
         None
     """
@@ -338,7 +352,10 @@ def add_to_heatmap(heatmap: str, polygons: list):
     # remove the temp file
     os.remove("temp.tif")
 
-def create_heatmap_from_polygons(polygons, save_file="heatmap.tif", show=False, size=1000):
+
+def create_heatmap_from_polygons(
+    polygons: list[ogr.Geometry | None], save_file="heatmap.tif", show=False, size=1000
+):
     """
     Create and save a heatmap from a list of polygons.
 

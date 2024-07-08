@@ -83,7 +83,7 @@ def area_coverage_poly(reference: str, polygon: str) -> float:
     ref_area = ref_poly.Area()
     # coverage
     coverage = area / ref_area
-    return coverage, intersection
+    return coverage
 
 
 def combine_polygons(polygons: list[str]) -> ogr.Geometry:

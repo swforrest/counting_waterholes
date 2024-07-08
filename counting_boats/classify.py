@@ -7,6 +7,7 @@ import utils.planet_utils as pu
 import utils.classifier as cl
 import utils.auto_helpers as ah
 import pandas as pd
+import numpy as np
 import math
 from utils.config import cfg
 
@@ -105,13 +106,25 @@ def auto(
         ah.analyse(orders_path, coverage_path)
         # report (per run, and overall)
     elif cfg["AUTO_MODE"] == "batch":  # --------------- BATCH MODE ----------------
-        batch_mode(history_len=history_len, aois=aois, orders_path=orders_path, download_path=download_path, coverage_path=coverage_path)
+        batch_mode(
+            history_len=history_len,
+            aois=aois,
+            orders_path=orders_path,
+            download_path=download_path,
+            coverage_path=coverage_path,
+        )
     else:
         raise ValueError("Invalid AUTO_MODE in config")
     print("Auto complete. Results in", cfg["output_dir"])
 
 
-def batch_mode(history_len: int, aois: list[str], orders_path: str, download_path: str, coverage_path: str):
+def batch_mode(
+    history_len: int,
+    aois: list[str],
+    orders_path: str,
+    download_path: str,
+    coverage_path: str,
+):
     batch_size = cfg["BATCH_SIZE"]
     # set start date to today - history length
     start_date = datetime.datetime.now() - datetime.timedelta(days=(history_len - 1))
@@ -136,26 +149,28 @@ def batch_mode(history_len: int, aois: list[str], orders_path: str, download_pat
     )
     time.sleep(3)
     # for each batch
+    ordered_batches = np.zeros(n_batches)
+    is_batch_ordered = lambda i: ordered_batches[i] == 1
     for i in range(n_batches):
         print(
             COLORS.OKBLUE,
             f"Batch {i + 1}: {start_date.strftime('%d/%m/%Y')} to {end_date.strftime('%d/%m/%Y')} (inclusive)",
             COLORS.ENDC,
         )
-        # search
+        # search and order
+        # Here we order the following batch, because orders take time to fulfil
+        next_start_date = end_date + datetime.timedelta(days=1)
+        next_end_date = next_start_date + datetime.timedelta(days=batch_size)
+        print(COLORS.OKCYAN, "Searching and Ordering Images", COLORS.ENDC)
         for aoi in aois:
-            options, dates = ah.search(
-                aoi=aoi,
-                start_date=start_date,
-                end_date=end_date,
-                orders_csv_path=orders_path,
-            )
-            if options is None:
-                continue
-            # select
-            for items in ah.select(aoi, options, dates):
-                ah.order(aoi, items, orders_path)
-        # download
+            if i == 0:  # First batch, order this and next batch
+                batch_search_and_order(aoi, start_date, end_date, orders_path)
+                batch_search_and_order(aoi, next_start_date, next_end_date, orders_path)
+            if i == n_batches - 1:  # Last batch, don't order anything
+                pass
+            else:  # order next batch
+                batch_search_and_order(aoi, next_start_date, next_end_date, orders_path)
+        # download the current batch
         print(COLORS.OKCYAN, "Downloading Images", COLORS.ENDC)
         batch_download_with_wait(orders_path, download_path, start_date, end_date)
         # classify -> We will save coverage during archive step.
@@ -180,6 +195,20 @@ def batch_mode(history_len: int, aois: list[str], orders_path: str, download_pat
             end_date = datetime.datetime.now()
         print(COLORS.OKGREEN, "Batch", i + 1, "complete", COLORS.ENDC)
         time.sleep(3)
+
+
+def batch_search_and_order(aoi, start_date, end_date, orders_path):
+    options, dates = ah.search(
+        aoi=aoi,
+        start_date=start_date,
+        end_date=end_date,
+        orders_csv_path=orders_path,
+    )
+    if options is None:
+        return
+    # select
+    for items in ah.select(aoi, options, dates):
+        ah.order(aoi, items, orders_path)
 
 
 def batch_download_with_wait(orders_path, download_path, start_date, end_date):
@@ -221,6 +250,7 @@ def batch_download_with_wait(orders_path, download_path, start_date, end_date):
         remaining_orders = ah.download(
             csv_path=orders_path, download_path=download_path
         )
+        remaining_orders["date"] = pd.to_datetime(remaining_orders["date"])
         remaining_orders = remaining_orders.loc[
             (remaining_orders["date"] >= start_date)
             & (remaining_orders["date"] <= end_date)

@@ -33,7 +33,6 @@ def get_history(csv_path: str) -> pd.DataFrame:
         DataFrame of the csv file, or a new DataFrame with the header if the file does not exist.
 
     """
-
     if not os.path.exists(csv_path):
         # write the header line "order_id, AOI, date, order_status, area_coverage, cloud_coverage"
         os.makedirs(os.path.dirname(csv_path), exist_ok=True)
@@ -41,7 +40,6 @@ def get_history(csv_path: str) -> pd.DataFrame:
             "order_id,aoi,date,order_status,area_coverage,cloud_coverage\n"
         )
     history = pd.read_csv(csv_path)
-
     return history
 
 
@@ -77,6 +75,9 @@ def search(aoi, orders_csv_path, days=14, start_date=None, end_date=None):
     dates = [d for d in daterange if d not in dates_we_have]
     # search for images
     polygon = planet_utils.get_polygon_file(aoi)
+    if polygon is None:
+        print("Could not find polygon file for", aoi)
+        exit(1)
     options = []
     try:
         options = planet_utils.PlanetSearch(
@@ -109,17 +110,14 @@ def select(aoi: str, options: list, dates: list) -> list[list]:
         list of items which
     """
     polygon = planet_utils.get_polygon_file(aoi)
+    if polygon is None:
+        print("Could not find polygon file for", aoi)
+        exit(1)
     # Select images for each date and return them
     items = []
     for date in dates:
         try:
             it = planet_utils.PlanetSelect(
-                items=options,
-                polygon=polygon,
-                date=date,
-                area_coverage=cfg["MINIMUM_AREA_COVERAGE"],
-            )
-            items = planet_utils.PlanetSelect(
                 items=options,
                 polygon=polygon,
                 date=date,
@@ -148,6 +146,9 @@ def order(aoi: str, items: list, csv_path: str) -> str:
         order_id: the ID of the order placed
     """
     polygon = planet_utils.get_polygon_file(aoi)
+    if polygon is None:
+        print("Could not find polygon file for", aoi)
+        exit(1)
     date = items[0]["properties"]["acquired"][:10]
     fs_date = "".join(date.split("-"))  # filesafe date
     try:
@@ -157,7 +158,7 @@ def order(aoi: str, items: list, csv_path: str) -> str:
     except Exception as e:
         traceback.print_exc()
         print(e)
-        return
+        return ""
     order_id = order["id"]
     # add to history
     history = get_history(csv_path)
@@ -180,7 +181,7 @@ def order(aoi: str, items: list, csv_path: str) -> str:
     return order_id
 
 
-def download(csv_path: str, download_path="tempDL") -> None:
+def download(csv_path: str, download_path="tempDL") -> pd.DataFrame:
     """
     Download all completed orders from planet, as per the history csv path
     Places the downloaded files in the download_path.
@@ -190,7 +191,7 @@ def download(csv_path: str, download_path="tempDL") -> None:
         download_path: path to store the downloaded zip files
 
     Returns:
-        None
+        Remaining orders that haven't been downloaded yet
     """
     history = get_history(csv_path)
     orders = planet_utils.get_orders()
@@ -357,6 +358,7 @@ def analyse(boat_csv_path, coverage_path, start_date=None, end_date=None, id=Non
         polygons = hm.get_polygons_from_df(coverage, group=g["aois"])
         if len(polygons) == 0:
             continue
+        print("Creating heatmap for", g["name"])
         hm.create_heatmap_from_polygons(
             polygons=polygons, save_file=heatmap_path, size=cfg["HEATMAP_SIZE"]
         )
@@ -376,7 +378,7 @@ def analyse(boat_csv_path, coverage_path, start_date=None, end_date=None, id=Non
         group_boats = boats[boats["aoi"].isin(g["aois"])]
         # get bounding box of aois
         polygons = [
-            hm.polygons_to_32756(file)[0] if file is not None else None
+            hm.polygon_latlong2crs(file)[0] if file is not None else None
             for file in [planet_utils.get_polygon_file(aoi) for aoi in g["aois"]]
         ]
         x_min, x_max, y_min, y_max = hm.get_bbox(polygons)  # bbox in 32756
@@ -423,11 +425,11 @@ def archive(path: str, coverage_path: str):
     import shutil
 
     print("Sending all ZIP files to storage (NOT IMPLEMENTED)")
+    os.makedirs(os.path.join("images", "archive"), exist_ok=True)
     for root, dirs, files in os.walk(path):
         for f in files:
             if f.endswith(".zip"):
                 # Move to ../archive/{whatever}
-                print("Sending to archive (not really, just moving to ./archive !)")
                 os.rename(os.path.join(root, f), os.path.join("images", "archive", f))
                 continue
         for d in dirs:
