@@ -21,6 +21,36 @@ import rasterio
 from . import image_cutting_support as ics
 
 
+def cloud_coverage_udm(udm_path: str) -> tuple[float, np.ndarray]:
+    """
+    Using the usable data mask (UDM) from Planet, calculate the cloud coverage of the image.
+    The UDM is a raster file with 8 bands, each representing a different variable. Band 6 should
+    be the cloud mask. This function checks the metadata to confirm, then calculates the cloud
+    percentage as the proportion of pixels in band 6 that are clouds, and returns the cloud coverage
+    mask as a binary array.
+    Note: the cloud mask is over the entire extent of the image. Use `area_coverage_tif` to calculate
+    the coverage of the tif, and then divide cloud coverage by image coverage to get cloud coverage over
+    the AOI.
+
+    Args:
+        udm_path: path to UDM file (from Planet)
+
+    Returns:
+        A tuple containing, a float (cloud coverage as a proportion of the image), and a numpy array (cloud mask)
+        with 1s for cloud pixels and 0s for non-cloud pixels.
+    """
+    with rasterio.open(udm_path) as src:
+        # check that band 6 is the cloud mask
+        if "cloud" not in src.descriptions[5]:
+            print(src.descriptions)
+            raise ValueError("Band 6 of UDM is not the cloud mask")
+        # read the cloud mask
+        cloud_mask = src.read(6)
+        # calculate cloud coverage
+        cloud_coverage = np.mean(cloud_mask)
+        return cloud_coverage, cloud_mask
+
+
 def area_coverage_tif(polygon: str, tif: str) -> tuple[float, float, float]:
     """
     Calculate the intersection of a polygon and a tif, as a percentage of the polygon area.
@@ -178,3 +208,18 @@ def is_inside(polygon, point):
     # point is in lat long, convert to EPSG:32756
     point_obj.TransformTo("EPSG:32756")
     return poly.Contains(point_obj)
+
+
+if __name__ == "__main__":
+    tif_file = input("tif File:")
+    udm_file = input("udm:")
+    cloud_cov, cloud_mask = cloud_coverage_udm(udm_file)
+    cov, _, _ = area_coverage_tif(
+        "/Users/charlieturner/Documents/CountingBoats/data/polygons/peel.json", tif_file
+    )
+    print("Cloud coverage: ", cloud_cov)
+    print("Coverage: ", cov)
+    print(cloud_mask)
+    print(np.sum(cloud_mask))
+    # Cloud coverage / coverage
+    print(cloud_cov / cov)

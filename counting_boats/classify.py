@@ -71,7 +71,12 @@ def auto(
     coverage_path = os.path.join(cfg["output_dir"], "coverage.csv")
     download_path = os.path.join("images", "downloads")
     # For all AOIS
-    history_len = cfg["HISTORY_LENGTH"]
+    history_len = None
+    if cfg.get("HISTORY_LENGTH") is None:
+        start_date = datetime.datetime.strptime(cfg["START_DATE"], "%Y-%m-%d")
+        end_date = datetime.datetime.strptime(cfg["END_DATE"], "%Y-%m-%d")
+    else:
+        history_len = cfg["HISTORY_LENGTH"]
     aois = cfg["AOIS"].split(",")
     if "all" in aois:
         aois = pu.get_aois()
@@ -84,7 +89,12 @@ def auto(
             # pause for 3 seconds
             time.sleep(3)
             for aoi in aois:
-                options, dates = ah.search(aoi, orders_path, days=history_len)
+                if history_len is not None:
+                    options, dates = ah.search(aoi, orders_path, days=history_len)
+                else:
+                    options, dates = ah.search(
+                        aoi, orders_path, start_date=start_date, end_date=end_date
+                    )
                 if options is None:
                     continue
                 for items in ah.select(aoi, options, dates):
@@ -106,31 +116,52 @@ def auto(
         ah.analyse(orders_path, coverage_path)
         # report (per run, and overall)
     elif cfg["AUTO_MODE"] == "batch":  # --------------- BATCH MODE ----------------
-        batch_mode(
-            history_len=history_len,
-            aois=aois,
-            orders_path=orders_path,
-            download_path=download_path,
-            coverage_path=coverage_path,
-        )
+        if history_len is not None:
+            batch_mode(
+                aois=aois,
+                orders_path=orders_path,
+                download_path=download_path,
+                coverage_path=coverage_path,
+                history_len=history_len,
+            )
+        else:
+            batch_mode(
+                aois=aois,
+                orders_path=orders_path,
+                download_path=download_path,
+                coverage_path=coverage_path,
+                start_date=start_date,
+                final_date=end_date,
+            )
     else:
         raise ValueError("Invalid AUTO_MODE in config")
     print("Auto complete. Results in", cfg["output_dir"])
 
 
 def batch_mode(
-    history_len: int,
     aois: list[str],
     orders_path: str,
     download_path: str,
     coverage_path: str,
+    history_len: int | None = None,
+    start_date: datetime.datetime | None = None,
+    final_date: datetime.datetime | None = None,
 ):
     batch_size = cfg["BATCH_SIZE"]
-    # set start date to today - history length
-    start_date = datetime.datetime.now() - datetime.timedelta(days=(history_len - 1))
+    if history_len is not None:
+        # set start date to today - history length
+        start_date = datetime.datetime.now() - datetime.timedelta(
+            days=(history_len - 1)
+        )
+        final_date = datetime.datetime.now()
+        n_batches = math.ceil(history_len / batch_size)
+    else:
+        assert start_date is not None
+        assert final_date is not None
+        n_batches = math.ceil((final_date - start_date).days / batch_size)
     # end date of first batch
     end_date = start_date + datetime.timedelta(days=(batch_size - 1))
-    n_batches = math.ceil(history_len / batch_size)
+
     print(
         COLORS.OKBLUE,
         "Batch Mode... Processing",
@@ -161,12 +192,19 @@ def batch_mode(
         # Here we order the following batch, because orders take time to fulfil
         next_start_date = end_date + datetime.timedelta(days=1)
         next_end_date = next_start_date + datetime.timedelta(days=batch_size)
+        if next_end_date > final_date:
+            next_end_date = final_date
         print(COLORS.OKCYAN, "Searching and Ordering Images", COLORS.ENDC)
         for aoi in aois:
             if i == 0:  # First batch, order this and next batch
                 batch_search_and_order(aoi, start_date, end_date, orders_path)
+                print(
+                    COLORS.OKGREEN,
+                    "\t Searching and Ordering Images for Batch 2",
+                    COLORS.ENDC,
+                )
                 batch_search_and_order(aoi, next_start_date, next_end_date, orders_path)
-            if i == n_batches - 1:  # Last batch, don't order anything
+            elif i == n_batches - 1:  # Last batch, don't order anything
                 pass
             else:  # order next batch
                 batch_search_and_order(aoi, next_start_date, next_end_date, orders_path)
@@ -174,12 +212,16 @@ def batch_mode(
         print(COLORS.OKCYAN, "Downloading Images", COLORS.ENDC)
         batch_download_with_wait(orders_path, download_path, start_date, end_date)
         # classify -> We will save coverage during archive step.
+        print(COLORS.OKCYAN, "Classifying Downloads", COLORS.ENDC)
         ah.count(save_coverage=False)
         # save
+        print(COLORS.OKCYAN, "Marking as Complete", COLORS.ENDC)
         ah.save(orders_path)
         # archive -> also saves coverage file
+        print(COLORS.OKCYAN, "Archiving ZIPS", COLORS.ENDC)
         ah.archive(download_path, coverage_path)
         # analyse batch
+        print(COLORS.OKCYAN, "Analysing Batch", COLORS.ENDC)
         boat_csv_path = cfg["output_dir"] + "/boat_detections.csv"
         ah.analyse(
             boat_csv_path,
@@ -191,8 +233,8 @@ def batch_mode(
         # report on batch
         start_date = end_date + datetime.timedelta(days=1)
         end_date = start_date + datetime.timedelta(days=batch_size)
-        if end_date > datetime.datetime.now():
-            end_date = datetime.datetime.now()
+        if end_date > final_date:
+            end_date = final_date
         print(COLORS.OKGREEN, "Batch", i + 1, "complete", COLORS.ENDC)
         time.sleep(3)
 
@@ -207,8 +249,15 @@ def batch_search_and_order(aoi, start_date, end_date, orders_path):
     if options is None:
         return
     # select
+    orders = 0
     for items in ah.select(aoi, options, dates):
         ah.order(aoi, items, orders_path)
+        orders += 1
+    print(
+        COLORS.OKGREEN,
+        f"\t{orders} orders placed for {aoi} from {start_date.strftime('%d/%m/%Y')} to {end_date.strftime('%d/%m/%Y')}",
+        COLORS.ENDC,
+    )
 
 
 def batch_download_with_wait(orders_path, download_path, start_date, end_date):
@@ -231,16 +280,13 @@ def batch_download_with_wait(orders_path, download_path, start_date, end_date):
     ]
 
     terminal_width = os.get_terminal_size().columns
-    string = (
-        "Waiting for "
-        + str(len(remaining_orders))
-        + " orders to download. Sleeping "
-        + str(wait_time)
-        + " seconds."
-    )
-    padding = terminal_width - len(string) - 8 - 3  # 8 = hh:mm:ss, 2 = 2 spaces
-    padding_string = "=" * padding if padding > 0 else ""
     while len(remaining_orders) > 0:
+        string = "Waiting for %2d orders to download. Sleeping %3d seconds." % (
+            len(remaining_orders),
+            wait_time,
+        )
+        padding = terminal_width - len(string) - 8 - 3  # 8 = hh:mm:ss, 2 = 2 spaces
+        padding_string = "=" * padding if padding > 0 else ""
         print(
             string,
             padding_string,

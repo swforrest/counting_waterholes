@@ -68,23 +68,25 @@ def process_tif(
         cfg["CONFIDENCE_THRESHOLD"],
     )
     if len(classifications) == 0:
-        return np.array([]), np.array([])
-    # split into moving and static boats
-    static = classifications[classifications[:, 3].astype(float) == 0]
-    moving = classifications[classifications[:, 3].astype(float) == 1]
-    # cluster each set separately
-    static_clusters = cluster(static, stat_cutoff)
-    moving_clusters = cluster(moving, moving_cutoff)
-    # process each set separately
-    static_boats = process_clusters(static_clusters)
-    moving_boats = process_clusters(moving_clusters)
-    # convert pixel coordinates to lat/long
-    # tif file should have coord details
-    static_boats = pixel2latlong(static_boats, os.path.join(cfg["tif_dir"], file))
-    moving_boats = pixel2latlong(moving_boats, os.path.join(cfg["tif_dir"], file))
-    # add the image name to each classification (as the last column)
-    static_boats = np.c_[static_boats, [file] * len(static_boats)]
-    moving_boats = np.c_[moving_boats, [file] * len(moving_boats)]
+        static_boats = np.array([])
+        moving_boats = np.array([])
+    else:
+        # split into moving and static boats
+        static = classifications[classifications[:, 3].astype(float) == 0]
+        moving = classifications[classifications[:, 3].astype(float) == 1]
+        # cluster each set separately
+        static_clusters = cluster(static, stat_cutoff)
+        moving_clusters = cluster(moving, moving_cutoff)
+        # process each set separately
+        static_boats = process_clusters(static_clusters)
+        moving_boats = process_clusters(moving_clusters)
+        # convert pixel coordinates to lat/long
+        # tif file should have coord details
+        static_boats = pixel2latlong(static_boats, os.path.join(cfg["tif_dir"], file))
+        moving_boats = pixel2latlong(moving_boats, os.path.join(cfg["tif_dir"], file))
+        # add the image name to each classification (as the last column)
+        static_boats = np.c_[static_boats, [file] * len(static_boats)]
+        moving_boats = np.c_[moving_boats, [file] * len(moving_boats)]
     # move the tif into the processed folder
     os.makedirs(path.join(cfg["tif_dir"], "processed"), exist_ok=True)
     os.rename(

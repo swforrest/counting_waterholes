@@ -47,7 +47,9 @@ def save_history(history, csv_path):
     history.to_csv(csv_path, index=False)
 
 
-def search(aoi, orders_csv_path, days=14, start_date=None, end_date=None):
+def search(
+    aoi, orders_csv_path, days=14, start_date=None, end_date=None
+) -> tuple[list, list]:
     """
     Search for images for a given AOI
     @param aoi: Area of Interest name
@@ -90,7 +92,6 @@ def search(aoi, orders_csv_path, days=14, start_date=None, end_date=None):
         traceback.print_exc()
         print(e)
         return None, None
-    print("Found", len(options), "total images for", aoi)
     # select and order for each date
     if len(options) == 0:
         return None, None
@@ -158,6 +159,9 @@ def order(aoi: str, items: list, csv_path: str) -> str:
     except Exception as e:
         traceback.print_exc()
         print(e)
+        return ""
+    if "id" not in order:
+        print("Could not place order for", aoi, date)
         return ""
     order_id = order["id"]
     # add to history
@@ -364,8 +368,11 @@ def analyse(boat_csv_path, coverage_path, start_date=None, end_date=None, id=Non
         )
         print("Saved", heatmap_path)
         # update full coverage heatmap
-        full_heatmap_path = os.path.join(cfg["output_dir"], f"full_coverage.tif")
-        polygons = hm.get_polygons_from_df(coverage)
+        print("Making full coverage raster")
+        full_heatmap_path = os.path.join(
+            cfg["output_dir"], f"{g['name']}_full_coverage.tif"
+        )
+        polygons = hm.get_polygons_from_df(all_coverage)
         if len(polygons) == 0:
             continue
         hm.create_heatmap_from_polygons(
@@ -420,7 +427,9 @@ def archive(path: str, coverage_path: str):
     # We want to delete any folders, but keep zip folders
     if not os.path.exists(coverage_path):
         # create it
-        open(coverage_path, "w").write("date,aoi,area_coverage,polygon\n")
+        open(coverage_path, "w").write(
+            "date,aoi,area_coverage,cloud_coverage,polygon,cloud_mask\n"
+        )
     coverage = pd.read_csv(coverage_path)
     import shutil
 
@@ -449,9 +458,26 @@ def archive(path: str, coverage_path: str):
                 ):
                     print(f"Already have {date}, {aoi} in coverage. Skipping.")
                 else:
+                    # Get area coverage percentage
                     cov_amount = ac.area_coverage_poly(
                         planet_utils.get_polygon_file(aoi), polygon
                     )
+                    # get cloud coverage percentage and polygon from tif UDM.
+                    udm_file = os.path.join(root, d, "composite_udm2.tif")
+                    if not os.path.exists(udm_file):
+                        print(
+                            "Could not find UDM file for",
+                            d,
+                            "Options:",
+                            os.listdir(os.path.join(root, d)),
+                        )
+                        cloud_cover = None
+                        cloud_mask = None
+                    else:
+                        cloud_cover, cloud_mask = ac.cloud_coverage_udm(udm_file)
+                        cloud_cover = cloud_cover / cov_amount
+                        cloud_mask = cloud_mask.tolist()
+
                     # add to coverage
                     coverage = pd.concat(
                         [
@@ -461,7 +487,9 @@ def archive(path: str, coverage_path: str):
                                     "aoi": [aoi],
                                     "date": [date],
                                     "area_coverage": [cov_amount],
+                                    "cloud_coverage": [cloud_cover],
                                     "polygon": [json.dumps(polygon)],
+                                    "cloud_mask": [json.dumps(cloud_mask)],
                                 }
                             ),
                         ]
