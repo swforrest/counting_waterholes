@@ -8,6 +8,7 @@ import shutil
 import numpy as np
 import pandas as pd
 import scipy
+import random
 
 from .classifier import cluster, process_clusters, read_classifications, pixel2latlong
 from .config import cfg
@@ -54,7 +55,7 @@ def prepare(run_folder, config):
                     ics.create_padded_png(root, save_folder, file)
 
 
-def segment(run_folder, config, tile_size=416, stride=104):
+def segment(run_folder, config):
     """
     Segment (labelled) png's in the given base.
     Places segmented images in the 'SegmentedImages' folder, and Labels in the 'Labels' folder.
@@ -68,6 +69,8 @@ def segment(run_folder, config, tile_size=416, stride=104):
     Returns:
         None
     """
+    tile_size = config.get("img_size", 416)
+    stride = config.get("img_stride", 104)
     pngs = os.path.join(config["path"], config["pngs"])
     im_save_folder = os.path.join(config["path"], config["segmented_images"])
     label_save_folder = os.path.join(config["path"], config["labels"])
@@ -905,112 +908,103 @@ def subimage_confidence(run_folder, config):
     days = [
         f for f in os.listdir(class_dir) if os.path.isdir(os.path.join(class_dir, f))
     ]
-    n_boats = 0
-    # config["tasks"]["analyse"]["images"]["subimage_confidence"]:
-    images = [] for day_
+    n_outputs = config["tasks"]["analyse"]["images"]["subimage_confidence"]
+    images = []
     for d in days:
         day_dir = os.path.join(class_dir, d)
-        images = [
-            f for f in os.listdir(day_dir) if os.path.isdir(os.path.join(day_dir, f))
-        ]
-        for img in images:
-            im_dir = os.path.join(day_dir, img)
-            cluster_dir = os.path.join(im_dir, "clusters")
-            if not os.path.exists(cluster_dir):
-                continue
-            # read the csv which has x, y, confidence, class, width, height, cluster
-            try:
-                stat_clusters = pd.read_csv(
-                    os.path.join(cluster_dir, "moving_clusters.csv"), header=None
-                )
-                mov_clusters = pd.read_csv(
-                    os.path.join(cluster_dir, "stat_clusters.csv"), header=None
-                )
-                together = pd.concat([stat_clusters, mov_clusters])
-                clusters = cluster(
-                    together.to_numpy()[:, :6], MOVING_DISTANCE_CUTOFF_PIX
-                )
-                clusters = pd.DataFrame(clusters)
-            except:
-                continue
-            boat = clusters.sample()
-            # work out which subimage the cluster is in
-            # get the image
-            img_path = os.path.join(config["pngs"], f"{img}.png")
-            if not os.path.exists(img_path):
-                print(f"Could not find image {img_path}")
-                continue
-            # cropped image bounds
-            W = 200
-            H = 200
-            x1 = boat[0].values[0] - W / 2
-            y1 = boat[1].values[0] - H / 2
-            x2 = x1 + W
-            y2 = y1 + H
-            all_boats = clusters.where(
-                (clusters[0] > x1)
-                & (clusters[0] < x2)
-                & (clusters[1] > y1)
-                & (clusters[1] < y2)
+        images.extend(
+            [f for f in os.listdir(day_dir) if os.path.isdir(os.path.join(day_dir, f))]
+        )
+    for _ in range(n_outputs):
+        img = random.choice(images)
+        im_dir = os.path.join(day_dir, img)
+        cluster_dir = os.path.join(im_dir, "clusters")
+        if not os.path.exists(cluster_dir):
+            continue
+        # read the csv which has x, y, confidence, class, width, height, cluster
+        try:
+            stat_clusters = pd.read_csv(
+                os.path.join(cluster_dir, "moving_clusters.csv"), header=None
             )
-            print(all_boats.shape)
-            # make a cropped image around the boat
-            img_data = Image.open(img_path)
-            img_data = img_data.crop((x1, y1, x2, y2))
-            # upscale the image
-            scale = 4
-            img_data = img_data.resize((W * scale, H * scale))
-            # save the image
-            subimg_path = os.path.join(
-                run_folder, "imgs", f"{img}_{int(x1)}_{int(y1)}.png"
+            mov_clusters = pd.read_csv(
+                os.path.join(cluster_dir, "stat_clusters.csv"), header=None
             )
-            img_data.save(subimg_path)
-            # upscale the clusters (each x and y is how far away from the top left corner of the subimage * scale)
-            all_boats[0] = all_boats[0] * scale
-            all_boats[1] = all_boats[1] * scale
-            all_boats[0] = all_boats[0] - (x1 * scale)
-            all_boats[1] = all_boats[1] - (y1 * scale)
-            # grab the image
-            with Image.open(subimg_path) as im:
-                # for each in the cluster, draw a rectangle around the boat
-                draw = ImageDraw.Draw(im)
-                grouped = all_boats.groupby(6)
-                for _, c in grouped:
-                    print("G")
-                    for _, row in c.iterrows():
-                        w = row[4] * 1.05 * scale
-                        h = row[5] * 1.05 * scale
-                        # Bounds of the boat 
-                        x0 = row[0] - w / 2
-                        y0 = row[1] - h / 2
-                        x1 = x0 + w
-                        y1 = y0 + h
-                        # draw a rectangle around the boat (0.5 opacity)
-                        conf = row[2]
-                        if conf > 0.9:  # Green
-                            color = (0, 255, 0, 100)
-                        elif conf > 0.7:  # Orange
-                            color = (255, 165, 0, 100)
-                        elif conf > 0.5:  # Red
-                            color = (255, 0, 0, 100)
-                        draw.rectangle((x0, y0, x1, y1), width=1, outline=color)
-                    num_boats = len(c)
-                    avg_conf = c[2].mean()
-                    max_conf = c[2].max()
-                    min_conf = c[2].min()
-                    # draw the text just above the boat
-                    # "Detections: {}, Avg Confidence: {}, Range: {} - {}".format(num_boats, avg_conf, min_conf, max_conf)
-                    stats = f"Detections: {num_boats}, Avg Confidence: {avg_conf:.2f}, Range: {min_conf:.2f} - {max_conf:.2f}"
-                    x = max(c[0].min() - (c[4].max() * scale) / 2, 0)
-                    y = max(c[1].min() - (c[5].max() * scale) / 2 - 15, 0)
-                    draw.text((x, y), stats, fill=(255, 255, 255, 255))
-                # save the image again
-                im.save(subimg_path)
-                n_boats += 1
-            if n_boats >= config["tasks"]["analyse"]["images"]["subimage_confidence"]:
-                break
-        if n_boats >= 
-            break
+            together = pd.concat([stat_clusters, mov_clusters])
+            clusters = cluster(together.to_numpy()[:, :6], MOVING_DISTANCE_CUTOFF_PIX)
+            clusters = pd.DataFrame(clusters)
+        except:
+            continue
+        boat = clusters.sample()
+        # work out which subimage the cluster is in
+        # get the image
+        img_path = os.path.join(config["pngs"], f"{img}.png")
+        if not os.path.exists(img_path):
+            print(f"Could not find image {img_path}")
+            continue
+        # cropped image bounds
+        W = 200
+        H = 200
+        x1 = boat[0].values[0] - W / 2
+        y1 = boat[1].values[0] - H / 2
+        x2 = x1 + W
+        y2 = y1 + H
+        all_boats = clusters.where(
+            (clusters[0] > x1)
+            & (clusters[0] < x2)
+            & (clusters[1] > y1)
+            & (clusters[1] < y2)
+        )
+        print(all_boats.shape)
+        # make a cropped image around the boat
+        img_data = Image.open(img_path)
+        img_data = img_data.crop((x1, y1, x2, y2))
+        # upscale the image
+        scale = 4
+        img_data = img_data.resize((W * scale, H * scale))
+        # save the image
+        subimg_path = os.path.join(run_folder, "imgs", f"{img}_{int(x1)}_{int(y1)}.png")
+        img_data.save(subimg_path)
+        # upscale the clusters (each x and y is how far away from the top left corner of the subimage * scale)
+        all_boats[0] = all_boats[0] * scale
+        all_boats[1] = all_boats[1] * scale
+        all_boats[0] = all_boats[0] - (x1 * scale)
+        all_boats[1] = all_boats[1] - (y1 * scale)
+        # grab the image
+        with Image.open(subimg_path) as im:
+            # for each in the cluster, draw a rectangle around the boat
+            draw = ImageDraw.Draw(im)
+            grouped = all_boats.groupby(6)
+            for _, c in grouped:
+                print("G")
+                for _, row in c.iterrows():
+                    w = row[4] * 1.05 * scale
+                    h = row[5] * 1.05 * scale
+                    # Bounds of the boat
+                    x0 = row[0] - w / 2
+                    y0 = row[1] - h / 2
+                    x1 = x0 + w
+                    y1 = y0 + h
+                    # draw a rectangle around the boat (0.5 opacity)
+                    conf = row[2]
+                    if conf > 0.9:  # Green
+                        color = (0, 255, 0, 100)
+                    elif conf > 0.7:  # Orange
+                        color = (255, 165, 0, 100)
+                    elif conf > 0.5:  # Red
+                        color = (255, 0, 0, 100)
+                    draw.rectangle((x0, y0, x1, y1), width=1, outline=color)
+                num_boats = len(c)
+                avg_conf = c[2].mean()
+                max_conf = c[2].max()
+                min_conf = c[2].min()
+                # draw the text just above the boat
+                # "Detections: {}, Avg Confidence: {}, Range: {} - {}".format(num_boats, avg_conf, min_conf, max_conf)
+                stats = f"Detections: {num_boats}, Avg Confidence: {avg_conf:.2f}, Range: {min_conf:.2f} - {max_conf:.2f}"
+                x = max(c[0].min() - (c[4].max() * scale) / 2, 0)
+                y = max(c[1].min() - (c[5].max() * scale) / 2 - 15, 0)
+                draw.text((x, y), stats, fill=(255, 255, 255, 255))
+            # save the image again
+            im.save(subimg_path)
 
 
 import utils.heatmap as hm
