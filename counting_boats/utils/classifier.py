@@ -89,8 +89,11 @@ def process_tif(
         moving_boats = np.c_[moving_boats, [file] * len(moving_boats)]
     # move the tif into the processed folder
     os.makedirs(path.join(cfg["tif_dir"], "processed"), exist_ok=True)
+    target = path.join(cfg["tif_dir"], "processed", file)
+    if path.exists(target):
+        os.remove(target)
     os.rename(
-        path.join(cfg["tif_dir"], file), path.join(cfg["tif_dir"], "processed", file)
+        path.join(cfg["tif_dir"], file), target
     )
 
     return static_boats, moving_boats
@@ -166,6 +169,10 @@ def classify_directory(directory):
         )
         for day in days
     )
+
+    # sort the data by day
+    daily_data = sorted(daily_data, key=lambda x: str(x[1]))
+
     daily_results = (
         process_day(
             files,
@@ -264,9 +271,9 @@ def classify_text(dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE):
 
 def prepare_temp_dirs():
     remove(TEMP)
-    remove(TEMP_PNG)
+    # remove(TEMP_PNG)
     os.mkdir(TEMP)
-    os.mkdir(TEMP_PNG)
+    os.makedirs(TEMP_PNG, exist_ok=True)
 
 
 def detect_from_tif(
