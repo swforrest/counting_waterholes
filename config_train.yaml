@@ -13,7 +13,7 @@ data: ./data/training_boats.yaml
 workers: 2
 
 BATCH_SIZE: 16
-EPOCHS : 1
+EPOCHS: 1
 
 TILE_SIZE: 800
 STRIDE: 200

@@ -240,7 +240,7 @@ def classify_images(images_dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE):
         write_to_csv(boats, day, OUTFILE)
 
 
-def classify_text(dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE):
+def classify_text(dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE, day="unknown", save_clusters=False):
     """
     If images have been classified and the text files are available, use this.
     Clusters and collates from yolov5 text files.
@@ -249,6 +249,7 @@ def classify_text(dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE):
         dir: The directory containing the text files
         STAT_DISTANCE_CUTOFF_PIX: The cutoff for static boats (pixels)
         OUTFILE: The output file name
+        save_clusters: Whether to save the clusters to csv before processing
 
     Returns:
         None
@@ -256,10 +257,13 @@ def classify_text(dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE):
     classifications, _ = read_classifications("prerun", class_folder=dir)
     # cluster
     clusters = cluster(classifications, STAT_DISTANCE_CUTOFF_PIX)
+    if save_clusters:
+        # save the clusters to csv
+        write_to_csv(classifications=clusters, day=day, file=OUTFILE)
     # process
     boats = process_clusters(clusters)
     # write to csv
-    write_to_csv(boats, "unknown", OUTFILE)
+    write_to_csv(classifications=boats, day=day, file=OUTFILE)
 
 
 def prepare_temp_dirs():
@@ -452,7 +456,7 @@ def read_classifications(
     all_cs = [
         parse_classifications(os.path.join(classification_path, file))
         for file in os.listdir(classification_path)
-        if not "DS" in file
+        if not "DS" in file and os.path.isfile(os.path.join(classification_path, file))
     ]
     # remove empty arrays
     all_cs = [cs for cs in all_cs if cs.shape[0] != 0]
@@ -476,11 +480,12 @@ def cluster(classifications: np.ndarray, cutoff: float) -> np.ndarray:
     Cluster the given classifications using the given cutoff.
 
     Args:
-        classifications: The classifications to cluster, in the form x, y, ...
+        classifications: The classifications to cluster, in the form x, y, confidence, class, width, height
         cutoff: The cutoff to use for clustering
 
     Returns:
         The classifications with an additional column for the cluster number
+        Columns: x, y, confidence, class, width, height, filename, cluster
 
     """
     if classifications.shape[0] < 2:
@@ -511,7 +516,6 @@ def process_clusters(classifications_with_clusters: np.ndarray) -> np.ndarray:
     boats = np.array([], dtype=np.float64).reshape(0, 6)
     if len(classifications_with_clusters) == 0:
         return boats
-    # as a comprehension:
     boats = [
         condense(
             classifications_with_clusters[classifications_with_clusters[:, -1] == i]
