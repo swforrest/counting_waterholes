@@ -12,6 +12,5 @@ runs
 .DS_Store
 *Temp*
 auto_test
-visualisation/data
 visualisation/outputs
 data/shapes
