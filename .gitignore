@@ -3,6 +3,7 @@ case_studies
 documents
 outputs
 training
+results
 *test
 images
 *pycache*
@@ -14,3 +15,4 @@ runs
 auto_test
 visualisation/outputs
 data/shapes
+active_learning/data
