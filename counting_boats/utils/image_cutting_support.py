@@ -2,14 +2,21 @@ import json
 import math
 import os
 import PIL
+import PIL.Image
 import pyproj
 import re
 import random
+import numpy as np
+from multiprocessing import Pool, cpu_count, Manager
+import tqdm
 
 from PIL import Image
 from osgeo import gdal
 
 gdal.UseExceptions()
+
+# allow pillow to open huge images
+PIL.Image.MAX_IMAGE_PIXELS = None
 
 
 class Classification(object):
@@ -83,8 +90,8 @@ class Classification(object):
 
 
 def add_margin(
-    pil_img: Image, left: int, right: int, top: int, bottom: int, color: tuple
-) -> Image:
+    pil_img: Image.Image, left: int, right: int, top: int, bottom: int, color: tuple
+) -> Image.Image:
     """
     Pads an OPEN PIL (pillow/python imaging library) image on each edge by the amount specified.
 
@@ -102,9 +109,90 @@ def add_margin(
     width, height = pil_img.size
     new_width = width + right + left
     new_height = height + top + bottom
+    print("New Width: ", new_width, "New Height: ", new_height)
     result = Image.new(pil_img.mode, (new_width, new_height), color)
     result.paste(pil_img, (left, top))
     return result
+
+
+def process_sub_image_with_labels(args):
+    (
+        (
+            i,
+            j,
+            stride,
+            sub_image,
+            image,
+            allImageClassifications,
+            remove_empty,
+            im_outdir,
+            labels_outdir,
+        ),
+        skipped_counter,
+        progress,
+        lock,
+    ) = args
+    sub_image = np.moveaxis(
+        sub_image, 0, -1
+    ).squeeze()  # need to move the channel axis to the end
+    # Still remove the mostly empty images
+    threshold = 0.75
+    if np.sum(sub_image == 0) / sub_image.size > threshold:
+        with lock:
+            skipped_counter.value += 1
+            progress.value += 1
+        return
+    
+    # Create the image
+    save_path = os.path.join(
+        im_outdir, f"{os.path.basename(image).split('.')[0]}_{i}_{j}.png"
+    )
+    # Get the classifications in the image
+    subsetClassifications = [
+        classification
+        for classification in allImageClassifications
+        if classification.in_bounds(
+            j * stride, (j + 1) * stride, i * stride, (i + 1) * stride
+        )
+    ]
+    if remove_empty > 0 and (
+        subsetClassifications is None or subsetClassifications == []
+    ):
+        subsetClassifications = []
+        if random.uniform(0, 1) < remove_empty:
+            with lock:
+                progress.value += 1
+                skipped_counter.value += 1
+            return
+    # Definitely keeping this image, so make the image and save it
+    out_image = Image.fromarray(sub_image)
+    out_image.save(save_path, quality=100, compress_level=0)
+    # write out the classifications for this sub-image
+    label_path = os.path.join(
+        labels_outdir, f"{os.path.basename(image).split('.')[0]}_{i}_{j}.txt"
+    )
+    outfile = open(label_path, "a+")
+    for c in subsetClassifications:
+        classLabel = (
+            0 if c.get_label() == "boat" else 1 if c.get_label() == "movingBoat" else -1
+        )
+        if classLabel == -1:
+            continue  # Skip tankers
+        outfile.write(
+            str(classLabel)
+            + " "
+            + str(((c.get_left() + c.get_right()) / 2 - j * stride) / stride)
+            + " "
+            + str(((c.get_top() + c.get_bottom()) / 2 - i * stride) / stride)
+            + " "
+            + str((c.get_right() - c.get_left()) / 2 / stride)
+            + " "
+            + str((c.get_bottom() - c.get_top()) / 2 / stride)
+            + "\n"
+        )
+    outfile.close()
+    with lock:
+        progress.value += 1
 
 
 def segment_image(
@@ -170,150 +258,319 @@ def segment_image(
             )
 
     # Ensure that the image is divisible by the desired size with no remainder.
-    if width % stride != 0 or height % stride != 0:
+    if width % (stride + tile_size) != 0 or height % (stride + tile_size) != 0:
         raise Exception(
-            "The image is not exactly divisible by the desired size of subset images"
+            "The image is not exactly divisible by the desired size of subset images",
+            "Width: ", width, "Height: ", height, "Stride: ", stride, "Tile Size: ", tile_size,
         )
 
     # Ensure that the desired size is divisible by the desired overlap with no remainder.
-    if tile_size % stride != 0:
-        raise Exception(
-            "The subset image size indicated is not divisible by the input overlap size"
-        )
+    # if tile_size % stride != 0:
+    #     raise Exception(
+    #         "The subset image size indicated is not divisible by the input overlap size"
+    #     )
 
     print("Cropping Image: " + image)
 
-    # Iterate over the original image and segment it into smaller images of the size specified in the parameters to
-    # this function.
-    for i in range(0, (int(height / stride) - (int(tile_size / stride)))):
-        for j in range(0, 1 + int(width / stride) - (int(tile_size / stride))):
-            cropImage = openImage.copy()
-            left = j * stride
-            top = i * stride
-            right = left + tile_size
-            bottom = top + tile_size
+    image_array = np.array(openImage)
+    image_shape = np.array(image_array.shape)
+    print(image_shape)
+    window_shape = np.array((tile_size, tile_size, 3)).reshape(-1)
+    step = np.array((stride, stride, 1)).reshape(-1)
+    image_stride = np.array(image_array.strides)
+    shape = tuple((image_shape - window_shape) // step + 1) + tuple(window_shape)
+    strides = tuple(image_stride * step) + tuple(image_stride)
+    as_strided = np.lib.stride_tricks.as_strided
+    sub_images = as_strided(image_array, shape=shape, strides=strides)
+    print("We will have: ", sub_images.shape, " images")
 
-            # Track how many of the image border pixels are "empty". This means it is black/its array index value is
-            # (0, 0, 0)
-            percentageEmpty = 0
-            total = 0
-
-            # Get all classifications in the original image that would be in the smaller image that has just been
-            # created.
-            subsetClassifications = [
-                classification
-                for classification in allImageClassifications
-                if classification.in_bounds(left, right, top, bottom)
-            ]
-
-            if remove_empty > 0 and (
-                subsetClassifications is None or subsetClassifications == []
-            ):
-                subsetClassifications = []
-                if random.uniform(0, 1) < remove_empty:
-                    continue
-
-            for f in range(0, tile_size - 1, 8):
-                # Iterate over the top edge of the image
-                if openImage.getpixel((left + f, top)) == (0, 0, 0):
-                    percentageEmpty += 1
-                    total += 1
-                else:
-                    total += 1
-                # Iterate over the left edge of the image
-                if openImage.getpixel((left, top + f)) == (0, 0, 0):
-                    percentageEmpty += 1
-                    total += 1
-                else:
-                    total += 1
-                # Iterate over the right edge of the image
-                if openImage.getpixel((right - 1, top + f)) == (0, 0, 0):
-                    percentageEmpty += 1
-                    total += 1
-                else:
-                    total += 1
-                # Iterate over the bottom edge of the image
-                if openImage.getpixel((left + f, bottom - 1)) == (0, 0, 0):
-                    percentageEmpty += 1
-                    total += 1
-                else:
-                    total += 1
-
-            # If more than 93% of the edge of the image is empty/black do NOT create a smaller image.
-            # NOTE: This is a magic number and I have no idea why it is this value
-            if percentageEmpty / total > 0.93:
-                continue
-
-            # Crop image
-            croppedImage = cropImage.crop((left, top, right, bottom))
-
-            if im_outdir is None:
-                im_outdir = os.path.join(os.getcwd(), "SegmentedImages")
-
-            # Save image
-            path = os.path.join(im_outdir, os.path.basename(image).split(".")[0])
-            croppedImage.save(
-                path + "_" + str(i) + "_" + str(j) + ".png",
-                quality=100,
-                compress_level=0,
-            )
-
-            # Write all of these classifications to a master set containing each time a classification appears in a
-            # smaller/segmented image.
-            im_name = (
-                os.path.basename(image).split(".")[0]
-                + "_"
-                + str(i)
-                + "_"
-                + str(j)
-                + ".txt"
-            )
-
-            if labels_outdir is None:
-                labels_outdir = os.path.join(os.getcwd(), "Labels")
-
-            path = os.path.join(labels_outdir, im_name)
-            outfile = open(path, "a+")
-
-            if len(subsetClassifications) > 0:
-                for elem in subsetClassifications:
-                    if type(elem) == type(1):
-                        continue
-                    if elem.get_label() == "tanker":
-                        continue
-                    if elem.get_label() == "boat":
-                        classLabel = 0
-                    else:
-                        classLabel = 1
-                    outfile.write(
-                        str(classLabel)
-                        + " "
-                        + str(
-                            (((elem.get_left() + elem.get_right()) / 2) - j * stride)
-                            / tile_size
-                        )
-                        + " "
-                        + str(
-                            (((elem.get_top() + elem.get_bottom()) / 2) - i * stride)
-                            / tile_size
-                        )
-                        + " "
-                        + str(
-                            (((elem.get_right()) - (elem.get_left())) / 2) / tile_size
-                        )
-                        + " "
-                        + str(((elem.get_bottom() - elem.get_top()) / 2) / tile_size)
-                        + "\n"
-                    )
-
-            outfile.close()
-        print(
-            str(
-                "Progress: " + str(int(float(i / ((height / stride) - 5)) * 100)) + "%"
-            ),
-            end="\r",
+    # Flatten the 2d grid of sub-images into a list with indices (for parallel processing)
+    sub_images_list = [
+        (
+            i,
+            j,
+            stride,
+            sub_images[i, j],
+            image,
+            allImageClassifications,
+            remove_empty,
+            im_outdir,
+            labels_outdir,
         )
-    print()
+        for i in range(sub_images.shape[0])
+        for j in range(sub_images.shape[1])
+    ]
+
+    with Manager() as manager:
+        skipped_counter = manager.Value("i", 0)
+        progress = manager.Value("i", 0)
+        lock = manager.Lock()
+        total = len(sub_images_list)
+        with Pool(cpu_count()) as pool:
+            for _ in tqdm.tqdm(
+                pool.imap_unordered(
+                    process_sub_image_with_labels,
+                    [
+                        (args, skipped_counter, progress, lock)
+                        for args in sub_images_list
+                    ],
+                ),
+                total=total,
+                desc="Saving Segments",
+            ):
+                pass
+        print(f"Skipped {skipped_counter.value} images")
+
+    # # Iterate over the original image and segment it into smaller images of the size specified in the parameters to
+    # # this function.
+    # for i in range(0, (int(height / stride) - (int(tile_size / stride)))):
+    #     for j in range(0, 1 + int(width / stride) - (int(tile_size / stride))):
+    #         cropImage = openImage.copy()
+    #         left = j * stride
+    #         top = i * stride
+    #         right = left + tile_size
+    #         bottom = top + tile_size
+
+    #         # Track how many of the image border pixels are "empty". This means it is black/its array index value is
+    #         # (0, 0, 0)
+    #         percentageEmpty = 0
+    #         total = 0
+
+    #         # Get all classifications in the original image that would be in the smaller image that has just been
+    #         # created.
+    #         subsetClassifications = [
+    #             classification
+    #             for classification in allImageClassifications
+    #             if classification.in_bounds(left, right, top, bottom)
+    #         ]
+
+    #         if remove_empty > 0 and (
+    #             subsetClassifications is None or subsetClassifications == []
+    #         ):
+    #             subsetClassifications = []
+    #             if random.uniform(0, 1) < remove_empty:
+    #                 continue
+
+    #         for f in range(0, tile_size - 1, 8):
+    #             # Iterate over the top edge of the image
+    #             if openImage.getpixel((left + f, top)) == (0, 0, 0):
+    #                 percentageEmpty += 1
+    #                 total += 1
+    #             else:
+    #                 total += 1
+    #             # Iterate over the left edge of the image
+    #             if openImage.getpixel((left, top + f)) == (0, 0, 0):
+    #                 percentageEmpty += 1
+    #                 total += 1
+    #             else:
+    #                 total += 1
+    #             # Iterate over the right edge of the image
+    #             if openImage.getpixel((right - 1, top + f)) == (0, 0, 0):
+    #                 percentageEmpty += 1
+    #                 total += 1
+    #             else:
+    #                 total += 1
+    #             # Iterate over the bottom edge of the image
+    #             if openImage.getpixel((left + f, bottom - 1)) == (0, 0, 0):
+    #                 percentageEmpty += 1
+    #                 total += 1
+    #             else:
+    #                 total += 1
+
+    #         # If more than 93% of the edge of the image is empty/black do NOT create a smaller image.
+    #         # NOTE: This is a magic number and I have no idea why it is this value
+    #         if percentageEmpty / total > 0.93:
+    #             continue
+
+    #         # Crop image
+    #         croppedImage = cropImage.crop((left, top, right, bottom))
+
+    #         if im_outdir is None:
+    #             im_outdir = os.path.join(os.getcwd(), "SegmentedImages")
+
+    #         # Save image
+    #         path = os.path.join(im_outdir, os.path.basename(image).split(".")[0])
+    #         croppedImage.save(
+    #             path + "_" + str(i) + "_" + str(j) + ".png",
+    #             quality=100,
+    #             compress_level=0,
+    #         )
+
+    #         # Write all of these classifications to a master set containing each time a classification appears in a
+    #         # smaller/segmented image.
+    #         im_name = (
+    #             os.path.basename(image).split(".")[0]
+    #             + "_"
+    #             + str(i)
+    #             + "_"
+    #             + str(j)
+    #             + ".txt"
+    #         )
+
+    #         if labels_outdir is None:
+    #             labels_outdir = os.path.join(os.getcwd(), "Labels")
+
+    #         path = os.path.join(labels_outdir, im_name)
+    #         outfile = open(path, "a+")
+
+    #         if len(subsetClassifications) > 0:
+    #             for elem in subsetClassifications:
+    #                 if type(elem) == type(1):
+    #                     continue
+    #                 if elem.get_label() == "tanker":
+    #                     continue
+    #                 if elem.get_label() == "boat":
+    #                     classLabel = 0
+    #                 else:
+    #                     classLabel = 1
+    #                 outfile.write(
+    #                     str(classLabel)
+    #                     + " "
+    #                     + str(
+    #                         (((elem.get_left() + elem.get_right()) / 2) - j * stride)
+    #                         / tile_size
+    #                     )
+    #                     + " "
+    #                     + str(
+    #                         (((elem.get_top() + elem.get_bottom()) / 2) - i * stride)
+    #                         / tile_size
+    #                     )
+    #                     + " "
+    #                     + str(
+    #                         (((elem.get_right()) - (elem.get_left())) / 2) / tile_size
+    #                     )
+    #                     + " "
+    #                     + str(((elem.get_bottom() - elem.get_top()) / 2) / tile_size)
+    #                     + "\n"
+    #                 )
+
+    #         outfile.close()
+    #     print(
+    #         str(
+    #             "Progress: " + str(int(float(i / ((height / stride) - 5)) * 100)) + "%"
+    #         ),
+    #         end="\r",
+    #     )
+    # print()
+
+
+# def segment_image_for_classification(image, data_path, tile_size, stride):
+#     """
+#     Segments a large .tif file into smaller .png files for use in a neural network.
+
+#     Args:
+#         image: The large .tif that is to be segmented
+#         size: The desired size (both length and width) of the segmented images.
+#         overlap_size: The desired amount of overlap that the segmented images should have
+
+#     Returns:
+#         None
+#     """
+#     # Open the image with pillow - this reads the image in as a 2d array
+#     openImage = Image.open(image)
+
+#     # Get width and height by indexing the image array
+#     width, height = openImage.size
+#     width = int(width)
+#     height = int(height)
+
+#     print(width, height)
+
+#     # Ensure that the image is divisible by the desired size with no remainder.
+#     if width % stride != 0 or height % stride != 0:
+#         raise Exception(
+#             "The image is not exactly divisible by the desired size of subset images"
+#         )
+
+#     # Ensure that the desired size is divisible by the desired overlap with no remainder.
+#     if tile_size % stride != 0:
+#         raise Exception(
+#             "The subset image size indicated is not divisible by the input overlap size"
+#         )
+
+#     # Iterate over the original image and segment it into smaller images of the size specified in the parameters to
+#     # this function.
+#     for i in range(0, (int(height / stride) - (int(tile_size / stride)))):
+#         for j in range(0, 1 + int(width / stride) - (int(tile_size / stride))):
+#             cropImage = openImage.copy()
+#             left = j * stride
+#             top = i * stride
+#             right = left + tile_size
+#             bottom = top + tile_size
+
+#             # Track how many of the image border pixels are "empty". This means it is black/it's array index value is
+#             # (0, 0, 0)
+#             percentageEmpty = 0
+#             total = 0
+
+#             for f in range(0, tile_size - 1, 8):
+#                 # Iterate over the top edge of the image
+#                 if openImage.getpixel((left + f, top)) == (0, 0, 0):
+#                     percentageEmpty += 1
+#                     total += 1
+#                 else:
+#                     total += 1
+#                 # Iterate over the left edge of the image
+#                 if openImage.getpixel((left, top + f)) == (0, 0, 0):
+#                     percentageEmpty += 1
+#                     total += 1
+#                 else:
+#                     total += 1
+#                 # Iterate over the right edge of the image
+#                 if openImage.getpixel((right - 1, top + f)) == (0, 0, 0):
+#                     percentageEmpty += 1
+#                     total += 1
+#                 else:
+#                     total += 1
+#                 # Iterate over the bottom edge of the image
+#                 if openImage.getpixel((left + f, bottom - 1)) == (0, 0, 0):
+#                     percentageEmpty += 1
+#                     total += 1
+#                 else:
+#                     total += 1
+
+#             # If more than 93% of the edge of the image is empty/black do NOT create a smaller image.
+#             if percentageEmpty / total > 0.93:
+#                 continue
+
+#             # Crop image
+#             croppedImage = cropImage.crop((left, top, right, bottom))
+
+#             # Save image
+#             # make sure data_path exists
+#             if not os.path.exists(data_path):
+#                 os.makedirs(data_path)
+#             savePath = os.path.join(data_path, os.path.basename(image).split(".")[0])
+#             croppedImage.save(
+#                 savePath + "_" + str(i) + "_" + str(j) + ".png",
+#                 quality=100,
+#                 compress_level=0,
+#             )
+
+#         print(
+#             str(
+#                 "Progress: " + str(int(float(i / ((height / stride) - 5)) * 100)) + "%"
+#             ),
+#             end="\r",
+#         )
+
+
+def process_sub_image(args):
+    (i, j, sub_image, image, data_path), skipped_counter, progress, lock = args
+    sub_image = np.moveaxis(sub_image, 0, -1).squeeze()
+    if np.all(sub_image == 0):
+        with lock:
+            skipped_counter.value += 1
+            progress.value += 1
+        return
+    out_image = Image.fromarray(sub_image)
+    save_path = os.path.join(
+        data_path, f"{os.path.basename(image).split('.')[0]}_{i}_{j}.png"
+    )
+    out_image.save(save_path)
+
+    with lock:
+        progress.value += 1
 
 
 def segment_image_for_classification(image, data_path, tile_size, stride):
@@ -322,8 +579,9 @@ def segment_image_for_classification(image, data_path, tile_size, stride):
 
     Args:
         image: The large .tif that is to be segmented
-        size: The desired size (both length and width) of the segmented images.
-        overlap_size: The desired amount of overlap that the segmented images should have
+        tile_size: The desired size (both length and width) of the segmented images.
+        data_path: The path to the directory where the segmented images will be saved.
+        stride: The desired amount of overlap that the segmented images should have
 
     Returns:
         None
@@ -350,71 +608,72 @@ def segment_image_for_classification(image, data_path, tile_size, stride):
             "The subset image size indicated is not divisible by the input overlap size"
         )
 
-    # Iterate over the original image and segment it into smaller images of the size specified in the parameters to
-    # this function.
-    for i in range(0, (int(height / stride) - (int(tile_size / stride)))):
-        for j in range(0, 1 + int(width / stride) - (int(tile_size / stride))):
-            cropImage = openImage.copy()
-            left = j * stride
-            top = i * stride
-            right = left + tile_size
-            bottom = top + tile_size
+    # open the image as a numpy array
+    image_array = np.array(openImage)
+    # use np.lib.stride_tricks.sliding_window_view to create a sliding window view of the image
+    # this will allow us to extract the sub-images
+    image_shape = np.array(image_array.shape)
+    print(image_shape)
+    window_shape = np.array((tile_size, tile_size, 1)).reshape(-1)
+    step = np.array((stride, stride, 1)).reshape(-1)
+    image_stride = np.array(image_array.strides)
+    shape = tuple((image_shape - window_shape) // step + 1) + tuple(window_shape)
+    strides = tuple(image_stride * step) + tuple(image_stride)
+    as_strided = np.lib.stride_tricks.as_strided
+    sub_images = as_strided(image_array, shape=shape, strides=strides)
 
-            # Track how many of the image border pixels are "empty". This means it is black/it's array index value is
-            # (0, 0, 0)
-            percentageEmpty = 0
-            total = 0
+    print(sub_images.shape)
 
-            for f in range(0, tile_size - 1, 8):
-                # Iterate over the top edge of the image
-                if openImage.getpixel((left + f, top)) == (0, 0, 0):
-                    percentageEmpty += 1
-                    total += 1
-                else:
-                    total += 1
-                # Iterate over the left edge of the image
-                if openImage.getpixel((left, top + f)) == (0, 0, 0):
-                    percentageEmpty += 1
-                    total += 1
-                else:
-                    total += 1
-                # Iterate over the right edge of the image
-                if openImage.getpixel((right - 1, top + f)) == (0, 0, 0):
-                    percentageEmpty += 1
-                    total += 1
-                else:
-                    total += 1
-                # Iterate over the bottom edge of the image
-                if openImage.getpixel((left + f, bottom - 1)) == (0, 0, 0):
-                    percentageEmpty += 1
-                    total += 1
-                else:
-                    total += 1
+    # flatten the 2d grid of sub-images into a list with indices (for parallel processing)
+    sub_images_list = [
+        (i, j, sub_images[i, j], image, data_path)
+        for i in range(sub_images.shape[0])
+        for j in range(sub_images.shape[1])
+    ]
 
-            # If more than 93% of the edge of the image is empty/black do NOT create a smaller image.
-            if percentageEmpty / total > 0.93:
-                continue
+    with Manager() as manager:
+        skipped_counter = manager.Value("i", 0)
+        progress = manager.Value("i", 0)
+        lock = manager.Lock()
+        total = len(sub_images_list)
+        with Pool(cpu_count()) as pool:
+            for _ in tqdm.tqdm(
+                pool.imap_unordered(
+                    process_sub_image,
+                    [
+                        (args, skipped_counter, progress, lock)
+                        for args in sub_images_list
+                    ],
+                ),
+                total=total,
+                desc="Saving Segments",
+            ):
+                pass
+        print(f"Skipped {skipped_counter.value} images")
 
-            # Crop image
-            croppedImage = cropImage.crop((left, top, right, bottom))
-
-            # Save image
-            # make sure data_path exists
-            if not os.path.exists(data_path):
-                os.makedirs(data_path)
-            savePath = os.path.join(data_path, os.path.basename(image).split(".")[0])
-            croppedImage.save(
-                savePath + "_" + str(i) + "_" + str(j) + ".png",
-                quality=100,
-                compress_level=0,
-            )
-
-        print(
-            str(
-                "Progress: " + str(int(float(i / ((height / stride) - 5)) * 100)) + "%"
-            ),
-            end="\r",
-        )
+    # for i in range(sub_images.shape[0]):
+    #     for j in range(sub_images.shape[1]):
+    #         sub_image = sub_images[i, j]
+    #         sub_image = np.moveaxis(sub_image, 0, -1).squeeze()
+    #         # don't save if the image is empty
+    #         if np.all(sub_image == 0):
+    #             skipped += 1
+    #             continue
+    #         out_image = Image.fromarray(sub_image)
+    #         save_path = os.path.join(
+    #             data_path, f"{os.path.basename(image).split('.')[0]}_{i}_{j}.png"
+    #         )
+    #         out_image.save(save_path)
+    #         print(
+    #             str(
+    #                 "Progress: "
+    #                 + str(int(float(i * sub_images.shape[1] + j) / num_images * 100))
+    #                 + "%. Skipped: "
+    #                 + str(skipped)
+    #             ),
+    #             end="\r",
+    #         )
+    # exit(1)
 
 
 def create_padded_png(
@@ -436,17 +695,23 @@ def create_padded_png(
     os.makedirs(output_dir, exist_ok=True)
     PNGpath = output_dir
 
+    savePath = os.path.join(PNGpath, file_name.split(".")[0] + ".png")
+    if os.path.exists(savePath):
+        return
+
     # Set the options for the gdal.Translate() call
     opsString2 = (
         "-ot UInt16 -of png -b 3 -b 2 -b 1 -scale_1 0 2048 0 65535 -scale_2 0 2048 0 65535 -scale_3 0 2048 0 "
         "65535"
     )
     # Translate original from tif into png
+    print("Doing gdal work...")
     gdal.Translate(
         os.path.join(PNGpath, f"colorCorrected{file_name.split('.')[0]}.png"),
         os.path.join(rawImageDirectory, file_name),
         options=opsString2,
     )
+    print("\rDone with gdal work for " + file_name)
 
     # Open the new color corrected PNG we have just made.
     colorImagePath = os.path.join(
@@ -454,7 +719,7 @@ def create_padded_png(
     )
     colourImage = PIL.Image.open(colorImagePath)
 
-    # Get new width and height in preparation of paddingthe image
+    # Get new width and height in preparation of padding the image
     width, height = colourImage.size
 
     # Calculate required padding to make image divisible by 416
@@ -462,22 +727,43 @@ def create_padded_png(
     overlapAmount = stride
 
     # Calculate vertical and horizontal padding
-    pad = subImageSize - overlapAmount
-    widthPadding = (math.ceil(width / stride) * stride) - width
-    heightPadding = (math.ceil(height / stride) * stride) - height
+
+    pad = (
+        subImageSize - overlapAmount
+    )  # The minimum amount of padding to add to the image
+    # use 'pad' padding on left and top
+    # fix right and bottom so that width and height % (n*stride + tile_size) = 0
+    newW = width + (2 * pad)
+    # workout right pad
+    rem = newW % (subImageSize + overlapAmount)  # remainder of width
+    rightPad = subImageSize + overlapAmount - rem
+
+    newH = height + (2 * pad)
+    # workout bottom pad
+    rem = newH % (subImageSize + overlapAmount)  # remainder of height
+    bottomPad = subImageSize + overlapAmount - rem
+
+    # widthPadding = (
+    #     math.ceil(width / stride) * stride
+    # ) - width  # fix to make divisible by stride
+    # heightPadding = (
+    #     math.ceil(height / stride) * stride
+    # ) - height  # fix to make divisible by stride
 
     # Calculate individual padding for each edge
-    leftPad = math.floor(widthPadding / 2)
-    rightPad = math.ceil(widthPadding / 2)
-    topPad = math.floor(heightPadding / 2)
-    bottomPad = math.ceil(heightPadding / 2)
+    # leftPad = math.floor(widthPadding / 2)
+    # leftPad = pad
+    # rightPad = math.ceil(widthPadding / 2)
+    # topPad = math.floor(heightPadding / 2)
+    # topPad = pad #math.floor(heightPadding / 2)
+    # bottomPad = math.ceil(heightPadding / 2)
 
     # Pad the edges (add_margin is a function in imageCuttingSupport.py that adds a margin to an opened PIL image.)
     im_new = add_margin(
         colourImage,
-        pad + leftPad,
+        pad,
         pad + rightPad,
-        pad + topPad,
+        pad,
         pad + bottomPad,
         (0, 0, 0),
     )
@@ -557,14 +843,26 @@ def get_required_padding(filepath, tilesize=416, stride=104):
 
     # Calculate individual padding for each edge
     pad = tilesize - stride
-    widthPadding = (math.ceil(width / stride) * stride) - width
-    heightPadding = (math.ceil(height / stride) * stride) - height
+    # widthPadding = (math.ceil(width / stride) * stride) - width
+    # heightPadding = (math.ceil(height / stride) * stride) - height
 
-    leftPad = math.floor(widthPadding / 2)
-    rightPad = math.ceil(widthPadding / 2)
-    topPad = math.floor(heightPadding / 2)
-    bottomPad = math.ceil(heightPadding / 2)
-    return leftPad + pad, rightPad + pad, topPad + pad, bottomPad + pad
+    # leftPad = math.floor(widthPadding / 2)
+    # rightPad = math.ceil(widthPadding / 2)
+    # topPad = math.floor(heightPadding / 2)
+    # bottomPad = math.ceil(heightPadding / 2)
+
+    leftPad = pad
+    topPad = pad
+
+    newW = width + (2 * pad)
+    rem = newW % (tilesize + stride)  # remainder of width
+    rightPad = tilesize + stride - rem
+
+    newH = height + (2 * pad)
+    rem = newH % (tilesize + stride)  # remainder of height
+    bottomPad = tilesize + stride - rem
+
+    return leftPad, rightPad + pad, topPad, bottomPad + pad
 
 
 def get_crs(filepath: str) -> int:
@@ -645,7 +943,7 @@ def coord2latlong(x: float, y: float, crs: int = 32756) -> tuple[float, float]:
     return long, lat
 
 
-def latlong2coord(lat: float, long: float, crs: int = 32756) -> tuple[float, float]:
+def latlong2coord(lat, long, crs: int = 32756) -> tuple[float, float]:
     """
     Converts latitude/longitude coordinates to global coordinates
 
@@ -817,7 +1115,7 @@ def get_cartesian_bottom_right(metadata_components: list[str]) -> tuple[float, f
     raise Exception("The bottom right corner coordinates do not exist in the metadata")
 
 
-def metadata_get_w_h(metadata_components: list[str]) -> tuple[int, int]|None:
+def metadata_get_w_h(metadata_components: list[str]) -> tuple[int, int] | None:
     """
     Obtains the width and height of a given satellite image
 

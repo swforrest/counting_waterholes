@@ -16,6 +16,7 @@ from . import image_cutting_support as ics
 from PIL import Image, ImageDraw
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
+import json
 
 
 def prepare(run_folder, config):
@@ -39,20 +40,34 @@ def prepare(run_folder, config):
                 # find the json file:
                 date_file = [f for f in files if f.endswith("xml")][0]
                 date = date_file.split("_")[0]
-                aoi = root.split("_")[-2].split("/")[-1]
+                aoi = os.path.basename(root).split("_")[-2].split("/")[-1]
+                print(root, aoi)
                 name = f"{date}_{aoi}.tif"
                 print(name)
                 os.rename(os.path.join(root, file), os.path.join(root, name))
                 # want to create a png for this
                 new_name = os.path.join(save_folder, f"{name.split('.')[0]}.png")
                 if not os.path.exists(new_name):
-                    ics.create_padded_png(root, save_folder, name)
+                    ics.create_padded_png(
+                        root,
+                        save_folder,
+                        name,
+                        tile_size=config["img_size"],
+                        stride=config["img_stride"],
+                    )
             # if the file is a tif and first part is a date, don't need to rename
             elif file.endswith("tif") and file.split("_")[0].isdigit():
                 # check if we have already created a png for this
                 new_name = os.path.join(save_folder, f"{file.split('.')[0]}.png")
                 if not os.path.exists(new_name):
-                    ics.create_padded_png(root, save_folder, file)
+                    print(f"Creating png for {file}")
+                    ics.create_padded_png(
+                        root,
+                        save_folder,
+                        file,
+                        tile_size=config["img_size"],
+                        stride=config["img_stride"],
+                    )
 
 
 def segment(run_folder, config):
@@ -63,8 +78,6 @@ def segment(run_folder, config):
     Args:
         run_folder (str): The folder to segment
         config (dict): The configuration dictionary
-        tile_size (int): The size of the tiles to segment
-        stride (int): The stride of the segmentation
 
     Returns:
         None
@@ -74,15 +87,21 @@ def segment(run_folder, config):
     pngs = os.path.join(config["path"], config["pngs"])
     im_save_folder = os.path.join(config["path"], config["segmented_images"])
     label_save_folder = os.path.join(config["path"], config["labels"])
+    if not os.path.exists(im_save_folder):
+        os.makedirs(im_save_folder, exist_ok=True)
+    if not os.path.exists(label_save_folder):
+        os.makedirs(label_save_folder, exist_ok=True)
     for filename in os.listdir(pngs):
         if filename.endswith(".json"):  # Grab the LabelMe Label file
             # get all dir names in the segmentation folder (recursively)
             dirs = [x[0].split(os.path.sep)[-1] for x in os.walk(im_save_folder)]
-            if filename[:-5] in dirs:
+            if filename[:-5] in dirs or filename[:8] in [
+                n[:8] for n in os.listdir(im_save_folder)
+            ]:
                 # skip this file if it has already been segmented (segmenting takes a while)
                 continue
             # find the corresponding image file
-            img_file = os.path.join(im_save_folder, filename[:-5] + ".png")
+            img_file = os.path.join(pngs, filename[:-5] + ".png")
             if os.path.isfile(img_file):  # Check exists
                 ics.segment_image(
                     img_file,
@@ -129,10 +148,10 @@ def run_detection(run_folder, run_config):
                 print(f"Already classified {this_classification_dir}")
                 continue
             os.makedirs(this_classification_dir, exist_ok=True)
-            device = run_config.get("device", "0")
-            tile_size = run_config.get("TILE_SIZE", 416)
+            device = run_config.get("device", "cuda:0")
+            tile_size = run_config.get("img_size", 416)
             res = os.system(
-                f"{python} {yolo}/detect.py --imgsz {tile_size} --save-txt --save-conf --weights {weights} --source {root} --device {device}"
+                f"{python} {yolo}/detect.py --imgsz {tile_size} --save-txt --save-conf --weights {weights} --source {root} --device {device} --nosave --conf-thres 0.15"
             )
             if res != 0:
                 raise Exception(f"Error running detection on {root}")
@@ -158,6 +177,105 @@ def run_detection(run_folder, run_config):
             print(f"Classified {root}, saved to {this_classification_dir}")
 
 
+def backwards_annotation(run_folder, config):
+    """
+    Generate labelme style annotations (json) from the classifications.
+    1. Read classifications
+    2. Generate json file {image}_labelme_auto.json with:
+    """
+    detection_dir = os.path.join(config["path"], config["classifications"])
+    for root, _, files in os.walk(detection_dir):
+        # skip if json file exists
+        if os.path.exists(
+            os.path.join(
+                config["path"],
+                config["pngs"],
+                f"{os.path.basename(root)}_labelme_auto.json",
+            )
+        ):
+            continue
+        if len(files) > 0 and files[0].endswith(".txt"):
+            this_image = os.path.basename(root)
+            ML_classifications, _ = read_classifications(
+                class_folder=root, confidence_threshold=0.5
+            )  # read all
+            ML_classifications_stat = ML_classifications[
+                ML_classifications[:, 3] == 0.0
+            ]
+            ML_classifications_moving = ML_classifications[
+                ML_classifications[:, 3] == 1.0
+            ]
+            # cluster
+            ML_clusters_stat = cluster(
+                ML_classifications_stat, STAT_DISTANCE_CUTOFF_PIX
+            )
+            ML_clusters_moving = cluster(
+                ML_classifications_moving, MOVING_DISTANCE_CUTOFF_PIX
+            )
+            # condense
+            ML_clusters_stat = process_clusters(ML_clusters_stat)
+            ML_clusters_moving = process_clusters(ML_clusters_moving)
+            # get image metadata (width and height)
+            img = Image.open(
+                os.path.join(config["path"], config["pngs"], this_image + ".png")
+            )
+            width, height = img.size
+
+            json_data = {}
+            json_data["version"] = "5.2.1"
+            json_data["flags"] = {}
+            json_data["imagePath"] = this_image
+            json_data["imageHeight"] = height
+            json_data["imageWidth"] = width
+            # put in the shapes
+            json_data["shapes"] = []
+            for c in ML_clusters_stat:
+                x, y, _, _, w, h = c
+                w = int(w / 2)
+                h = int(h / 2)
+                json_data["shapes"].append(
+                    {
+                        "label": "boat",
+                        "points": [[x - w, y - h], [x + w, y + h]],
+                        "group_id": None,
+                        "shape_type": "rectangle",
+                        "flags": {},
+                    }
+                )
+            for c in ML_clusters_moving:
+                (
+                    x,
+                    y,
+                    _,
+                    _,
+                    w,
+                    h,
+                ) = c
+                w = int(w / 2)
+                h = int(h / 2)
+                json_data["shapes"].append(
+                    {
+                        "label": "movingBoat",
+                        "points": [[x - w, y - h], [x + w, y + h]],
+                        "group_id": None,
+                        "shape_type": "rectangle",
+                        "flags": {},
+                    }
+                )
+            # also need to get the "image_data" key. There will also be a {this_image}.json we can grab this from
+            with open(
+                os.path.join(config["path"], config["pngs"], f"{this_image}.json"), "r"
+            ) as f:
+                image_data = json.load(f)["imageData"]
+            json_data["imageData"] = image_data
+            # save the json
+            json_path = os.path.join(
+                config["path"], config["pngs"], f"{this_image}_labelme_auto.json"
+            )
+            with open(json_path, "w+") as f:
+                json.dump(json_data, f)
+
+
 def compare_detections_to_ground_truth(run_folder, config):
     """
     Match up labels and detections, compare them, and save the results
@@ -178,7 +296,8 @@ def compare_detections_to_ground_truth(run_folder, config):
             data = process_image(root, label_dir)
             comparisons_to_csv(data, os.path.join(run_folder, this_img + ".csv"))
     # create an overall file, with all boats in lat long
-    classifications_to_lat_long(run_folder, config)
+    if config.get("raw_images", False):
+        classifications_to_lat_long(run_folder, config)
 
 
 def confusion_matrix(run_folder, config):

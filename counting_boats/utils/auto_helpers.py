@@ -8,16 +8,15 @@ import pandas as pd
 import os
 import datetime
 import json
+import shutil
 from utils import classifier
 from utils import planet_utils
 from utils import heatmap as hm
 from utils import area_coverage as ac
 from utils import planet_utils
 from utils.image_cutting_support import latlong2coord
-import seaborn as sns
-import matplotlib.pyplot as plt
-import cartopy.io.img_tiles as cimgt
-import cartopy.crs as ccrs
+import numpy as np
+import base64
 
 
 def get_history(csv_path: str) -> pd.DataFrame:
@@ -161,7 +160,8 @@ def order(aoi: str, items: list, csv_path: str) -> str:
         print(e)
         return ""
     if "id" not in order:
-        print("Could not place order for", aoi, date)
+        print("\033[91mCould not place order for", aoi, date, "\033[0m")
+        # json.dump(order, open(f"failed_order_{aoi}_{fs_date}.json", "w"))
         return ""
     order_id = order["id"]
     # add to history
@@ -185,7 +185,9 @@ def order(aoi: str, items: list, csv_path: str) -> str:
     return order_id
 
 
-def download(csv_path: str, download_path="tempDL") -> pd.DataFrame:
+def download(
+    csv_path: str, download_path="tempDL", start_date=None, end_date=None
+) -> pd.DataFrame:
     """
     Download all completed orders from planet, as per the history csv path
     Places the downloaded files in the download_path.
@@ -193,6 +195,7 @@ def download(csv_path: str, download_path="tempDL") -> pd.DataFrame:
     Args:
         csv_path: path to the history csv. Will check this to ensure we don't download the same file twice.
         download_path: path to store the downloaded zip files
+        download_ids: list of order_ids to download. If None, will attempt download all orders that are in the "ordered" state.
 
     Returns:
         Remaining orders that haven't been downloaded yet
@@ -207,12 +210,26 @@ def download(csv_path: str, download_path="tempDL") -> pd.DataFrame:
                 "order_id"
             ].tolist()
         ):
-            # already have this
             continue
         elif (
             order["id"]
             in history[history["order_status"] == "ordered"]["order_id"].tolist()
         ):
+            this_order = history[history["order_id"] == order["id"]].iloc[0]
+            if start_date is not None:
+                # convert both dates
+                start_date = pd.to_datetime(start_date)
+                order_date = pd.to_datetime(this_order["date"])
+                print(order_date, start_date)
+                if order_date < start_date:
+                    continue
+            if end_date is not None:
+                end_date = pd.to_datetime(end_date)
+                order_date = pd.to_datetime(this_order["date"])
+                print(order_date, end_date)
+                if order_date > end_date:
+                    continue
+
             print("Download:: Downloading", order["id"])
             # download
             this_order = history[history["order_id"] == order["id"]].iloc[0]
@@ -252,19 +269,20 @@ def extract(download_path):
                 planet_utils.extract_zip(os.path.join(root, f))
 
 
-def count(save_coverage=False) -> None:
+def count(save_coverage=False, days=None) -> None:
     """
     Run the classifier to count boats in the extracted images
 
     Essentially calls the main function of the classifier module. Most of the time here we will save coverage later.
     """
-    classifier.main(save_coverage=save_coverage)
+    classifier.main(save_coverage=save_coverage, days=days)
     # add the aoi column to the classifications and save again
-    classifications = pd.read_csv(cfg["output_dir"] + "/boat_detections.csv")
-    classifications["aoi"] = classifications["images"].apply(
-        lambda im: im.split("_")[1].split(".")[0]
-    )
-    classifications.to_csv(cfg["output_dir"] + "/boat_detections.csv", index=False)
+    if os.path.exists(cfg["output_dir"] + "/boat_detections.csv"):
+        classifications = pd.read_csv(cfg["output_dir"] + "/boat_detections.csv")
+        classifications["aoi"] = classifications["images"].apply(
+            lambda im: im.split("_")[1].split(".")[0]
+        )
+        classifications.to_csv(cfg["output_dir"] + "/boat_detections.csv", index=False)
 
 
 def save(csv_path) -> None:
@@ -305,7 +323,7 @@ def save(csv_path) -> None:
 
 groups = [
     {"name": "moreton_bay", "aois": ["peel", "tangalooma", "south_bribie", "moreton"]},
-    {"name": "gbr", "aois": ["whitsundays", "keppel", "capricorn", "haymen", "heron"]},
+    # {"name": "gbr", "aois": ["whitsundays", "keppel", "capricorn", "haymen", "heron"]},
 ]
 """ Groups of AOIs for analysis"""
 
@@ -342,74 +360,59 @@ def analyse(boat_csv_path, coverage_path, start_date=None, end_date=None, id=Non
         ]
         boats = boats[(boats["date"] >= start_date) & (boats["date"] <= end_date)]
 
-    if coverage.empty:
-        print("No new coverage data to analyse")
-        return
-    if boats.empty:
-        print("No boat data to analyse")
-        return
-
     prefix = f"{id}_" if id is not None else ""
 
     print("Analysing data from ", start_date, " to ", end_date)
-    # Do the analysis
-    # Update:
-    # - coverage heatmap raster for each group
-    for g in groups:
-        heatmap_path = os.path.join(
-            cfg["output_dir"], f"{prefix}{g['name']}_coverage_heatmap.tif"
-        )
-        polygons = hm.get_polygons_from_df(coverage, group=g["aois"])
-        if len(polygons) == 0:
-            continue
-        print("Creating heatmap for", g["name"])
-        hm.create_heatmap_from_polygons(
-            polygons=polygons, save_file=heatmap_path, size=cfg["HEATMAP_SIZE"]
-        )
-        print("Saved", heatmap_path)
-        # update full coverage heatmap
-        print("Making full coverage raster")
-        full_heatmap_path = os.path.join(
-            cfg["output_dir"], f"{g['name']}_full_coverage.tif"
-        )
-        polygons = hm.get_polygons_from_df(all_coverage)
-        if len(polygons) == 0:
-            continue
-        hm.create_heatmap_from_polygons(
-            polygons=polygons, save_file=full_heatmap_path, size=cfg["HEATMAP_SIZE"]
-        )
-        print("Saved", full_heatmap_path)
 
-    # - Density contour plot normalised for each group
-    for g in groups:
-        group_boats = boats[boats["aoi"].isin(g["aois"])]
-        # get bounding box of aois
-        polygons = [
-            hm.polygon_latlong2crs(file)[0] if file is not None else None
-            for file in [planet_utils.get_polygon_file(aoi) for aoi in g["aois"]]
-        ]
-        x_min, x_max, y_min, y_max = hm.get_bbox(polygons)  # bbox in 32756
-        if group_boats.empty:
-            print(f"No boats for {g['name']}")
-            continue
-        x = group_boats["longitude"]
-        y = group_boats["latitude"]
-        # do latlong to 32756 for each point. Have to do one at a time
-        x, y = zip(*[latlong2coord(x, y) for x, y in zip(x, y)])
-        plt.figure()
-        img = cimgt.GoogleTiles(style="satellite")
-        ax = plt.axes(projection=ccrs.epsg(32756))
-        ax.set_extent([x_min, x_max, y_min, y_max], crs=ccrs.epsg(32756))
-        ax.add_image(img, 14)
-        sns.kdeplot(x=x, y=y, cmap="viridis", fill=True, levels=20, ax=ax)
-        plt.title(f"{prefix}{g['name']} Density Contour")
-        # set limits
-        plt.savefig(
-            os.path.join(cfg["output_dir"], f"{prefix}{g['name']}_density_contour.png"),
-            bbox_inches="tight",
-            pad_inches=0.1,
-            dpi=600,
-        )
+    heatmap_txt = os.path.join(cfg["output_dir"], f"{prefix}heatmap.txt")
+    dates = []
+    if not os.path.exists(heatmap_txt):
+        with open(heatmap_txt, "w") as f:
+            f.write("")
+    with open(heatmap_txt, "r") as f:
+        dates = f.readlines()
+    dates = [pd.to_datetime(d.strip()) for d in dates]
+
+    if coverage.empty:
+        print("No new coverage data to analyse")
+    else:
+        # - coverage heatmap raster for each group
+        for g in groups:
+            print("Making full coverage raster")
+            full_heatmap_path = os.path.join(
+                cfg["output_dir"], f"{g['name']}_full_coverage.tif"
+            )
+
+            if os.path.exists(full_heatmap_path):
+                # grab any polygons from dates we don't have
+                # all_coverage where date is not in dates
+                new_coverage = all_coverage[~all_coverage["date"].isin(dates)]
+                polygons = hm.get_polygons_from_df(
+                    new_coverage 
+                )  
+                if len(polygons) == 0:
+                    continue
+                hm.add_to_heatmap(full_heatmap_path, polygons)
+            else:
+                new_coverage = all_coverage
+                polygons = hm.get_polygons_from_df(
+                    all_coverage
+                )  # Get the polygons from this batch
+                if len(polygons) == 0:
+                    continue
+                hm.create_heatmap_from_polygons(
+                    polygons=polygons,
+                    save_file=full_heatmap_path,
+                    size=cfg["HEATMAP_SIZE"],
+                )
+            # save a file heatmap.txt that has the images if they are in the heatmap
+            dates = all_coverage["date"].unique()
+            print("Saving heatmap.txt")
+            with open(heatmap_txt, "w") as f:
+                f.write("\n".join([str(d) for d in dates]))
+
+
+            print("Saved", full_heatmap_path)
 
 
 def archive(path: str, coverage_path: str):
@@ -428,18 +431,25 @@ def archive(path: str, coverage_path: str):
     if not os.path.exists(coverage_path):
         # create it
         open(coverage_path, "w").write(
-            "date,aoi,area_coverage,cloud_coverage,polygon,cloud_mask\n"
+            "date,aoi,area_coverage,cloud_coverage,polygon,x,y\n"
         )
     coverage = pd.read_csv(coverage_path)
     import shutil
 
     print("Sending all ZIP files to storage (NOT IMPLEMENTED)")
-    os.makedirs(os.path.join("images", "archive"), exist_ok=True)
+    archive_dir = "U:\\Research\\Projects\\sef\\livingplayingmb\\Boat Detection TMBF\\PlanetArchive"
+    if not os.path.exists(archive_dir):
+        raise FileNotFoundError("Archive directory not found")
+
     for root, dirs, files in os.walk(path):
         for f in files:
             if f.endswith(".zip"):
                 # Move to ../archive/{whatever}
-                os.rename(os.path.join(root, f), os.path.join("images", "archive", f))
+                if os.path.exists(os.path.join(archive_dir, f)):
+                    print(f"Already have {f} in archive. Skipping.")
+                    os.remove(os.path.join(root, f))
+                else:
+                    shutil.move(os.path.join(root, f), os.path.join(archive_dir, f))
                 continue
         for d in dirs:
             # Directories that are unzipped need to have their coverage recorded then deleted (zips still exist)
@@ -472,11 +482,25 @@ def archive(path: str, coverage_path: str):
                             os.listdir(os.path.join(root, d)),
                         )
                         cloud_cover = None
-                        cloud_mask = None
                     else:
-                        cloud_cover, cloud_mask = ac.cloud_coverage_udm(udm_file)
-                        cloud_cover = cloud_cover / cov_amount
-                        cloud_mask = cloud_mask.tolist()
+                        cloud_cover, _ = ac.cloud_coverage_udm(udm_file)
+                        # create the clear tif file
+                        # ac.add_udm_clear_to_tif(
+                        #     udm_file, os.path.join(cfg["output_dir"], "clear.tif")
+                        # )
+                        filesafe_date = date.replace("-", "")
+                        if not os.path.exists(os.path.join(cfg["output_dir"], "UDM")):
+                            os.makedirs(os.path.join(cfg["output_dir"], "UDM"))
+
+                        # save the udm to the output directory
+                        shutil.copy(
+                            udm_file,
+                            os.path.join(
+                                cfg["output_dir"],
+                                "UDM",
+                                f"{aoi}_{filesafe_date}_udm.tif",
+                            ),
+                        )
 
                     # add to coverage
                     coverage = pd.concat(
@@ -489,7 +513,6 @@ def archive(path: str, coverage_path: str):
                                     "area_coverage": [cov_amount],
                                     "cloud_coverage": [cloud_cover],
                                     "polygon": [json.dumps(polygon)],
-                                    "cloud_mask": [json.dumps(cloud_mask)],
                                 }
                             ),
                         ]

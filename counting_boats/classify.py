@@ -59,9 +59,24 @@ app = typer.Typer(
 
 
 @app.command()
+def archive():
+    """
+    Archive the images in the downloads folder.
+    """
+    download_path = os.path.join("images", "downloads")
+    coverage_path = os.path.join(cfg["output_dir"], "coverage.csv")
+    ah.archive(download_path, coverage_path)
+    print("Archive complete. Results in", cfg["output_dir"])
+
+
+@app.command()
 def auto(
     skip_order: bool = typer.Option(
         False, help="Skip ordering images (Just check existing orders)"
+    ),
+    clear: bool = typer.Option(
+        True,
+        help="Clean processed images to save space. Disable to keep tifs around for analysing in images/processed. If True, tifs are stil available in the archive.",
     ),
 ):
     """
@@ -114,7 +129,16 @@ def auto(
         # analyse
         print("Analysing Images")
         ah.analyse(orders_path, coverage_path)
-        # report (per run, and overall)
+        # Clear processed images
+        if clear:
+            processed_dir = os.path.join(cfg["tif_dir"], "processed")
+            if os.path.exists(processed_dir):
+                for f in os.listdir(processed_dir):
+                    if os.path.isfile(os.path.join(processed_dir, f)):
+                        try:
+                            os.remove(os.path.join(processed_dir, f))
+                        except:
+                            print(COLORS.FAIL, "Failed to remove", f, COLORS.ENDC)
     elif cfg["AUTO_MODE"] == "batch":  # --------------- BATCH MODE ----------------
         if history_len is not None:
             batch_mode(
@@ -132,6 +156,7 @@ def auto(
                 coverage_path=coverage_path,
                 start_date=start_date,
                 final_date=end_date,
+                clear=clear,
             )
     else:
         raise ValueError("Invalid AUTO_MODE in config")
@@ -146,6 +171,7 @@ def batch_mode(
     history_len: int | None = None,
     start_date: datetime.datetime | None = None,
     final_date: datetime.datetime | None = None,
+    clear: bool = True,
 ):
     batch_size = cfg["BATCH_SIZE"]
     if history_len is not None:
@@ -161,6 +187,8 @@ def batch_mode(
         n_batches = math.ceil((final_date - start_date).days / batch_size)
     # end date of first batch
     end_date = start_date + datetime.timedelta(days=(batch_size - 1))
+    if end_date > final_date:
+        end_date = final_date
 
     print(
         COLORS.OKBLUE,
@@ -211,9 +239,15 @@ def batch_mode(
         # download the current batch
         print(COLORS.OKCYAN, "Downloading Images", COLORS.ENDC)
         batch_download_with_wait(orders_path, download_path, start_date, end_date)
+        ah.extract(download_path)
         # classify -> We will save coverage during archive step.
+        # get a list of the days in the batch in DD/MM/YYYY format
+        days_in_batch = [
+            (start_date + datetime.timedelta(days=d)).strftime("%d/%m/%Y")
+            for d in range(batch_size)
+        ]
         print(COLORS.OKCYAN, "Classifying Downloads", COLORS.ENDC)
-        ah.count(save_coverage=False)
+        ah.count(save_coverage=False, days=days_in_batch)
         # save
         print(COLORS.OKCYAN, "Marking as Complete", COLORS.ENDC)
         ah.save(orders_path)
@@ -221,20 +255,30 @@ def batch_mode(
         print(COLORS.OKCYAN, "Archiving ZIPS", COLORS.ENDC)
         ah.archive(download_path, coverage_path)
         # analyse batch
-        print(COLORS.OKCYAN, "Analysing Batch", COLORS.ENDC)
-        boat_csv_path = cfg["output_dir"] + "/boat_detections.csv"
-        ah.analyse(
-            boat_csv_path,
-            coverage_path,
-            start_date=start_date,
-            end_date=end_date,
-            id=f"batch_{i}",
-        )
+        # print(COLORS.OKCYAN, "Analysing Batch", COLORS.ENDC)
+        # boat_csv_path = cfg["output_dir"] + "/boat_detections.csv"
+        # ah.analyse(
+        #     boat_csv_path,
+        #     coverage_path,
+        #     start_date=start_date,
+        #     end_date=end_date,
+        #     id=f"batch_{i}",
+        # )
         # report on batch
         start_date = end_date + datetime.timedelta(days=1)
         end_date = start_date + datetime.timedelta(days=batch_size)
         if end_date > final_date:
             end_date = final_date
+        if clear:
+            print(COLORS.OKCYAN, "Clearing Processed Images", COLORS.ENDC)
+            processed_dir = os.path.join(cfg["tif_dir"], "processed")
+            if os.path.exists(processed_dir):
+                for f in os.listdir(processed_dir):
+                    if os.path.isfile(os.path.join(processed_dir, f)):
+                        try:
+                            os.remove(os.path.join(processed_dir, f))
+                        except:
+                            print(COLORS.FAIL, "Failed to remove", f, COLORS.ENDC)
         print(COLORS.OKGREEN, "Batch", i + 1, "complete", COLORS.ENDC)
         time.sleep(3)
 
@@ -251,8 +295,9 @@ def batch_search_and_order(aoi, start_date, end_date, orders_path):
     # select
     orders = 0
     for items in ah.select(aoi, options, dates):
-        ah.order(aoi, items, orders_path)
-        orders += 1
+        oid = ah.order(aoi, items, orders_path)
+        if not oid == "":
+            orders += 1
     print(
         COLORS.OKGREEN,
         f"\t{orders} orders placed for {aoi} from {start_date.strftime('%d/%m/%Y')} to {end_date.strftime('%d/%m/%Y')}",
@@ -268,8 +313,12 @@ def batch_download_with_wait(orders_path, download_path, start_date, end_date):
     wait_time = 10 * 60  # 10 minutes
     total_wait_time = 0
     timeout = 2 * 60 * 60  # 2 hours
+    ids = []
     remaining_orders: pd.DataFrame = ah.download(
-        csv_path=orders_path, download_path=download_path
+        csv_path=orders_path,
+        download_path=download_path,
+        start_date=start_date,
+        end_date=end_date,
     )
     remaining_orders["date"] = pd.to_datetime(remaining_orders["date"])
     start_date = pd.to_datetime(start_date).floor("D")
@@ -281,6 +330,23 @@ def batch_download_with_wait(orders_path, download_path, start_date, end_date):
 
     terminal_width = os.get_terminal_size().columns
     while len(remaining_orders) > 0:
+        remaining_orders = ah.download(
+            csv_path=orders_path,
+            download_path=download_path,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        remaining_orders["date"] = pd.to_datetime(remaining_orders["date"])
+        remaining_orders = remaining_orders.loc[
+            (remaining_orders["date"] >= start_date)
+            & (remaining_orders["date"] <= end_date)
+        ]
+        if len(remaining_orders) == 0:
+            break
+        if total_wait_time > timeout:
+            print(remaining_orders)
+            print("Waited over 2 hours for orders to download. Exiting.")
+            break
         string = "Waiting for %2d orders to download. Sleeping %3d seconds." % (
             len(remaining_orders),
             wait_time,
@@ -293,20 +359,8 @@ def batch_download_with_wait(orders_path, download_path, start_date, end_date):
             datetime.datetime.now().strftime("%H:%M:%S"),  # hh:mm:ss = 8 characters
         )
         time.sleep(wait_time)
-        remaining_orders = ah.download(
-            csv_path=orders_path, download_path=download_path
-        )
-        remaining_orders["date"] = pd.to_datetime(remaining_orders["date"])
-        remaining_orders = remaining_orders.loc[
-            (remaining_orders["date"] >= start_date)
-            & (remaining_orders["date"] <= end_date)
-        ]
         total_wait_time += wait_time
         wait_time = 5 * 60
-        if total_wait_time > timeout:
-            print(remaining_orders)
-            print("Waited over 2 hours for orders to download. Exiting.")
-            break
 
 
 @app.command()

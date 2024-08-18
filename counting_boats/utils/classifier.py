@@ -30,7 +30,7 @@ STRIDE = cfg["STRIDE"]
 SAVE_COVERAGE = True
 
 
-def main(save_coverage=True):
+def main(save_coverage=True, days=None):
     """
     Run the classifier on each image in the directory given in the configuration.
     Return the name of each directory which is successfully processed.
@@ -38,7 +38,7 @@ def main(save_coverage=True):
     """
     global SAVE_COVERAGE
     SAVE_COVERAGE = save_coverage
-    classify_directory(cfg["tif_dir"])
+    classify_directory(cfg["tif_dir"], classify_days=days)
     remove(TEMP)
     remove(TEMP_PNG)
 
@@ -54,7 +54,6 @@ def process_tif(
         img_path: The path to the directory to store the data in
         stat_cutoff: The cutoff for static boats (pixels)
         moving_cutoff: The cutoff for moving boats (pixels)
-
     Returns:
         A tuple of the static boats and moving boats
         With boats as a list of: [x, y, filename]
@@ -92,9 +91,7 @@ def process_tif(
     target = path.join(cfg["tif_dir"], "processed", file)
     if path.exists(target):
         os.remove(target)
-    os.rename(
-        path.join(cfg["tif_dir"], file), target
-    )
+    os.rename(path.join(cfg["tif_dir"], file), target)
 
     return static_boats, moving_boats
 
@@ -145,19 +142,24 @@ def process_day(
     return (static_boats, moving_boats, day)
 
 
-def classify_directory(directory):
+def classify_directory(directory, classify_days=None):
     """
     Use for directory of tiff images. Preprocesses, classifies, clusters.
     Writes the results to a csv file called boat_detections.csv in the output directory
 
     Args:
         directory: The directory to classify
+        classify_days: list of days to classify in format "DD/MM/YYYY"
 
     Returns:
         None
     """
     days = {ics.get_date_from_filename(file) for file in os.listdir(directory)}
     days.discard(None)
+    # set days to be intersection of all days and classify_days
+    if classify_days is not None:
+        days = days.intersection(set(classify_days))
+
     all_tif_files = [
         f for f in os.listdir(directory) if f.endswith(".tif") and "udm" not in f
     ]
@@ -247,7 +249,9 @@ def classify_images(images_dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE):
         write_to_csv(boats, day, OUTFILE)
 
 
-def classify_text(dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE, day="unknown", save_clusters=False):
+def classify_text(
+    dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE, day="unknown", save_clusters=False
+):
     """
     If images have been classified and the text files are available, use this.
     Clusters and collates from yolov5 text files.
@@ -369,7 +373,8 @@ def parse_classifications(file: str) -> np.ndarray:
     parse a single text file of classifications into the desired format
 
     Args:
-        file: path to text file
+        file: path to text file with classifications in form:
+        class, x, y, w, h, conf
 
     Returns:
         array of classifications from the file in the form:

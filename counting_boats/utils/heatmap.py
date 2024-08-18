@@ -22,8 +22,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from osgeo import gdal, ogr, osr
 
-from utils.area_coverage import polygon_latlong2crs
-from utils.image_cutting_support import coord2latlong
+from .area_coverage import polygon_latlong2crs
+from .image_cutting_support import coord2latlong
+from tqdm import tqdm
 
 gdal.UseExceptions()
 
@@ -156,14 +157,17 @@ def paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly):
     Returns:
         None
     """
-    for col in range(grid.shape[0]):
-        for row in range(grid.shape[1]):
-            x = x_min + col * x_step
-            y = y_min + row * y_step
-            point = ogr.Geometry(ogr.wkbPoint)
-            point.AddPoint(x + x_step / 2, y + y_step / 2)
-            if point is not None and poly.Contains(point):
-                grid[col, row] += 1
+
+    cols = range(grid.shape[0]) 
+    rows = range(grid.shape[1])
+
+    for (row, col) in [(row, col) for row in rows for col in cols]:
+        x = x_min + col * x_step
+        y = y_min + row * y_step
+        point = ogr.Geometry(ogr.wkbPoint)
+        point.AddPoint(x + x_step / 2, y + y_step / 2)
+        if point is not None and poly.Contains(point):
+            grid[col, row] += 1
 
 
 def export_data(
@@ -212,7 +216,9 @@ def export_data(
     new_raster.SetProjection(new_raster_srs.ExportToWkt())
     # close raster file
     band.FlushCache()
+    print(f"Saved heatmap to {filename}")
     if geojson:
+        print("Creating GeoJSON file")
         # save GeoJSON file where each feature has either an id field or some identifying value in properties
         # where each feature is a square in the grid
         grid_to_geojson(
@@ -340,17 +346,21 @@ def add_to_heatmap(heatmap: str, polygons: list):
     for poly in polygons:
         paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly)
     grid = np.rot90(grid)  # Grid has to be rotated for some reason
-    export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="temp.tif")
+    export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="temp.tif", geojson=False)
     # add the rasters together
     ds1 = gdal.Open(heatmap, gdal.GA_Update)
     ds2 = gdal.Open("temp.tif")
     band1 = ds1.GetRasterBand(1)
     band2 = ds2.GetRasterBand(1)
     # add the rasters together
-    band1.WriteArray(band1.ReadAsArray() + band2.ReadAsArray())
-    band1.FlushCache()
+    array = band1.ReadAsArray() + band2.ReadAsArray()
+    ds1 = None
+    ds2 = None
     # remove the temp file
     os.remove("temp.tif")
+    os.remove(heatmap)
+    # export the new raster
+    export_data(array, x_min, x_max, y_min, y_max, x_step, y_step, filename=heatmap)
 
 
 def create_heatmap_from_polygons(
@@ -384,11 +394,12 @@ def create_heatmap_from_polygons(
         plt.show()
     grid = np.rot90(grid)  # Grid has to be rotated for some reason for the tif file
     # Export the grid
+    print("Exporting heatmap")
     export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename=save_file)
 
 
 if __name__ == "__main__":
     # Load the polygons
-    folder = input("Enter the folder with the polygons: ")
-    polygons = get_polygons_from_folder(folder, name="composite_metadata.json")
-    create_heatmap_from_polygons(polygons, os.getcwd())
+    folder = input("Enter coverage file with 'polygon' column:")
+    polygons = get_polygons_from_file(folder)
+    create_heatmap_from_polygons(polygons, os.path.join(os.getcwd(), "coverage.tif"))

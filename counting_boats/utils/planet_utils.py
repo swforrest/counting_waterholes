@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from . import area_coverage
 import zipfile
 
-load_dotenv()
+load_dotenv(override=True)
 
 # api key is either set in the environment variable or config.yml
 API_KEY = os.environ.get("PLANET_API_KEY", cfg["planet"]["api_key"])
@@ -241,10 +241,21 @@ def extract_zip(downloadFile, aoi=None, date=None):
     if not os.path.isfile(tif):
         raise Exception(f"No tif file found in {extractPath}")
 
-    os.replace(
-        tif,
-        os.path.join(cfg["proj_root"], "images", "RawImages", newfname),
-    )
+    if not os.path.exists(os.path.join(cfg["proj_root"], "images", "RawImages")):
+        os.makedirs(os.path.join(cfg["proj_root"], "images", "RawImages"))
+
+    try:
+        os.replace(
+            tif,
+            os.path.join(cfg["proj_root"], "images", "RawImages", newfname),
+        )
+    except:
+        if os.path.exists(
+            os.path.join(cfg["proj_root"], "images", "RawImages", newfname)
+        ):
+            print(f"File {newfname} already exists, skipping")
+        else:
+            raise Exception(f"Error moving {tif} to {newfname}")
     return newfname
 
 
