@@ -1,18 +1,21 @@
-# Configuration for Validation/Analysis Runs
-path: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton
-weights: /Users/charlieturner/Documents/CountingBoats/data/NN_weights.pt
-# weights: /Users/charlieturner/Desktop/Yolov5l.pt
-device: mps
+# Validation run with Best weights from TrainFinalandOld
 
-raw_images: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton/RawImages # Folders as downloaded from Planet (extracted zips)
+yolo_dir: C:\yolov5
+python: python
+# Configuration for Validation/Analysis Runs
+path: C:\ML_Software\MoretonVal\
+weights: C:\yolov5\runs\train\TrainFinalAndOld\weights\last.pt
+# weights: /Users/charlieturner/Desktop/Yolov5l.pt
+device: cuda:0
+
+# raw_images: C:\ML_Software\active_learning\data\downloads # Folders as downloaded from Planet (extracted zips)
 
 # Auxiliary Paths (relative to run folder, or absolute if using existing)
 # These paths either exist (and are used) or are created (and used) by the run
-pngs: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton # Pngs for the tif files
-segmented_images: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton/images # Segmented images
-labels: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton/labels # Labels for the images
-classifications: /Users/charlieturner/Documents/CountingBoats/case_studies/TestMoreton/Classifications # Classifications for the images
-# classifications: classifications
+pngs: . # Pngs for the tif files
+segmented_images: C:\ML_Software\MoretonVal\images # Segmented images
+labels: C:\ML_Software\MoretonVal\labels # Labels for the images
+classifications: C:\ML_Software\MoretonVal\classifications_new_last # Classifications for the images
 
 img_size: 416
 img_stride: 104
@@ -21,7 +24,8 @@ tasks:
   # These 4 are not required if have been done before (and above paths are absolute and exist)
   prepare: False # Prepare for labelling
   segment: False # Segment images/labels
-  run_detection: False # Run the classifier
+  run_detection: True # Run the classifier
+  backwards_annotation: False # Generate annotations from the classifier output
 
   analyse:
     # Main analysis step: cluster and compare
@@ -29,8 +33,8 @@ tasks:
 
     # Supplementary analysis, not all implemented
     plots:
-      confusion_matrix: False
-      boat_count_compare: False
+      confusion_matrix: True
+      boat_count_compare: True
       precision_recall: False
       roc: False
       mAP_50: False
@@ -38,5 +42,5 @@ tasks:
       mAP_90: False
     images:
       all_mistakes: False # Collate all mistakes into images with comparison
-      subimage_confidence: 10 # Show confidence of detection for all subimages of a given boat (number of random boats to do this for)
+      subimage_confidence: False # Show confidence of detection for all subimages of a given boat (number of random boats to do this for)
       coverage_heatmap: False
