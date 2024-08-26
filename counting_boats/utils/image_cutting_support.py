@@ -128,6 +128,7 @@ def process_sub_image_with_labels(args):
             im_outdir,
             labels_outdir,
         ),
+        empty_counter,
         skipped_counter,
         progress,
         lock,
@@ -142,28 +143,43 @@ def process_sub_image_with_labels(args):
             skipped_counter.value += 1
             progress.value += 1
         return
-    
+
     # Create the image
     save_path = os.path.join(
         im_outdir, f"{os.path.basename(image).split('.')[0]}_{i}_{j}.png"
     )
+    # get the bounding box of this image
+    sizex = sub_image.shape[1]
+    sizey = sub_image.shape[0]
+    x1 = stride * j
+    y1 = stride * i
+    x2 = x1 + sizex
+    y2 = y1 + sizey
     # Get the classifications in the image
     subsetClassifications = [
         classification
         for classification in allImageClassifications
-        if classification.in_bounds(
-            j * stride, (j + 1) * stride, i * stride, (i + 1) * stride
-        )
+        if classification.in_bounds(x1, x2, y1, y2)
     ]
+
+    skipped = False
     if remove_empty > 0 and (
-        subsetClassifications is None or subsetClassifications == []
+        subsetClassifications is None
+        or subsetClassifications == []
+        or all([c.get_label() == "tanker" for c in subsetClassifications])
     ):
         subsetClassifications = []
         if random.uniform(0, 1) < remove_empty:
+            skipped = True
             with lock:
+                empty_counter.value += 1
                 progress.value += 1
                 skipped_counter.value += 1
-            return
+            return  # don't keep this image
+        with lock:
+            empty_counter.value += 1
+    if skipped:
+        raise Exception("This should not happen")
     # Definitely keeping this image, so make the image and save it
     out_image = Image.fromarray(sub_image)
     out_image.save(save_path, quality=100, compress_level=0)
@@ -173,6 +189,14 @@ def process_sub_image_with_labels(args):
     )
     outfile = open(label_path, "a+")
     for c in subsetClassifications:
+        # if the classification is less than 3x3 pixels, expand it
+        if c.get_right() - c.get_left() < 3:
+            c._left -= 1
+            c._right += 1
+        if c.get_bottom() - c.get_top() < 3:
+            c._top -= 1
+            c._bottom += 1
+
         classLabel = (
             0 if c.get_label() == "boat" else 1 if c.get_label() == "movingBoat" else -1
         )
@@ -181,13 +205,13 @@ def process_sub_image_with_labels(args):
         outfile.write(
             str(classLabel)
             + " "
-            + str(((c.get_left() + c.get_right()) / 2 - j * stride) / stride)
+            + str(((c.get_left() + c.get_right()) / 2 - j * stride) / sizex)
             + " "
-            + str(((c.get_top() + c.get_bottom()) / 2 - i * stride) / stride)
+            + str(((c.get_top() + c.get_bottom()) / 2 - i * stride) / sizex)
             + " "
-            + str((c.get_right() - c.get_left()) / 2 / stride)
+            + str((c.get_right() - c.get_left()) / 2 / sizex)
             + " "
-            + str((c.get_bottom() - c.get_top()) / 2 / stride)
+            + str((c.get_bottom() - c.get_top()) / 2 / sizex)
             + "\n"
         )
     outfile.close()
@@ -220,6 +244,7 @@ def segment_image(
     Returns:
         None
     """
+    random.seed()
     # Open the image with tifffile - this reads the image in as a 2d array
     openImage = Image.open(image)
 
@@ -261,14 +286,15 @@ def segment_image(
     if width % (stride + tile_size) != 0 or height % (stride + tile_size) != 0:
         raise Exception(
             "The image is not exactly divisible by the desired size of subset images",
-            "Width: ", width, "Height: ", height, "Stride: ", stride, "Tile Size: ", tile_size,
+            "Width: ",
+            width,
+            "Height: ",
+            height,
+            "Stride: ",
+            stride,
+            "Tile Size: ",
+            tile_size,
         )
-
-    # Ensure that the desired size is divisible by the desired overlap with no remainder.
-    # if tile_size % stride != 0:
-    #     raise Exception(
-    #         "The subset image size indicated is not divisible by the input overlap size"
-    #     )
 
     print("Cropping Image: " + image)
 
@@ -282,7 +308,10 @@ def segment_image(
     strides = tuple(image_stride * step) + tuple(image_stride)
     as_strided = np.lib.stride_tricks.as_strided
     sub_images = as_strided(image_array, shape=shape, strides=strides)
-    print("We will have: ", sub_images.shape, " images")
+    print(
+        "We will have: ", sub_images.shape[0] * sub_images.shape[1], " images maximum"
+    )
+    print(f"{remove_empty * 100}% of images without labels will be removed")
 
     # Flatten the 2d grid of sub-images into a list with indices (for parallel processing)
     sub_images_list = [
@@ -303,6 +332,7 @@ def segment_image(
 
     with Manager() as manager:
         skipped_counter = manager.Value("i", 0)
+        empty_counter = manager.Value("i", 0)
         progress = manager.Value("i", 0)
         lock = manager.Lock()
         total = len(sub_images_list)
@@ -311,7 +341,7 @@ def segment_image(
                 pool.imap_unordered(
                     process_sub_image_with_labels,
                     [
-                        (args, skipped_counter, progress, lock)
+                        (args, empty_counter, skipped_counter, progress, lock)
                         for args in sub_images_list
                     ],
                 ),
@@ -319,7 +349,9 @@ def segment_image(
                 desc="Saving Segments",
             ):
                 pass
+
         print(f"Skipped {skipped_counter.value} images")
+        print(f"Empty {empty_counter.value} images")
 
     # # Iterate over the original image and segment it into smaller images of the size specified in the parameters to
     # # this function.

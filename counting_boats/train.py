@@ -80,6 +80,8 @@ def segment(
             labels_outdir=label_out,
         )
     # split the images into training and validation
+    if train_val_split == 1:
+        return
     os.makedirs(os.path.join(image_out, "train"), exist_ok=True)
     os.makedirs(os.path.join(image_out, "val"), exist_ok=True)
     os.makedirs(os.path.join(label_out, "train"), exist_ok=True)
@@ -99,6 +101,139 @@ def segment(
 
 
 @app.command()
+def describe(
+    config: str = typer.Option("", help="Path to the config file"),
+):
+    """
+    Work out and display:
+        - Number of original images (unique filenames excluding locations)
+        - Number of tiles
+        - Number of labels total
+        - Number of labels per class
+        - Number of images with no labels
+
+    Each also as a percentage of total
+    e.g
+    -------------------------------------------
+    | Training dataset statistics             |
+    -------------------------------------------
+    | Number of original images: 10           |
+    | Number of tiles: 100                    |
+    | Number of labels
+    |   - Total: 122                          |
+    |   - Per class:                          |
+    |       - Class 1: 50 (41.67%)            |
+    |       - Class 2: 70 (58.33%)            |
+    | Number of images with no labels: 2 (3%) |
+    -------------------------------------------
+    | Validation dataset statistics ...
+    """
+    cfg = parse_config(config)
+    # get the number of original images
+    imdirs = cfg["train"]
+    num_images = 0
+    num_tiles = 0
+    num_labels = 0
+    class_counts = {}
+    num_tiles_no_labels = 0
+
+    for imdir in imdirs:
+        if os.path.exists(os.path.join(imdir, "train")):
+            imdir = os.path.join(imdir, "train")
+        print(imdir)
+        all_images = [i for i in os.listdir(imdir) if i.endswith(".png")]
+        unique_images = set([im[0 : im.find("_", 9)] for im in all_images])
+        num_images += len(unique_images)
+        num_tiles += len(all_images)
+        # get the number of labels
+        a = os.path.join(imdir, "..", "..", "labels", "train")
+        b = os.path.join(imdir, "..", "labels")
+        labdir = a if os.path.exists(a) else b
+        all_labels = [l for l in os.listdir(labdir) if l.endswith(".txt")]
+        # count number of lines in all the files
+        for lab in all_labels:
+            with open(os.path.join(labdir, lab), "r") as f:
+                lines = f.readlines()
+                num_labels += len(lines)
+                if len(lines) == 0:
+                    num_tiles_no_labels += 1
+                for line in lines:
+                    class_id = line.split(" ")[0]
+                    if class_id not in class_counts:
+                        class_counts[class_id] = 1
+                    else:
+                        class_counts[class_id] += 1
+    # print the statistics
+    print("-" * 43)
+    print("| Training dataset statistics             |")
+    print("-" * 43)
+    print(f"| Number of original images: {num_images:<13}|")
+    print(f"| Number of tiles: {num_tiles:<23}|")
+    print(f"| Number of labels                        |")
+    print(f"|   - Total: {num_labels:<29}|")
+    print(f"|   - Per class:                          |")
+    for class_id, count in class_counts.items():
+        print(
+            f"|       - Class {class_id}: {count:<6} ({count/num_labels*100:.2f}%)        |"
+        )
+    print(
+        f"| Background Images: {num_tiles_no_labels:<6} ({num_tiles_no_labels/num_tiles*100:.2f}%)      |"
+    )
+    print("-" * 43)
+    return num_images, num_tiles, num_labels, class_counts, num_tiles_no_labels
+
+
+@app.command()
+def cull(
+    config: str = typer.Option("", help="Path to the config file"),
+):
+    """
+    Remove images with no labels
+    """
+    num_images, num_tiles, num_labels, class_counts, num_tiles_no_labels = describe(
+        config
+    )
+    # remove images with no labels from the training set
+    # need to cull enough images so that the percentage of images with no labels is 10%
+    all_labels = [
+        l for l in os.listdir("active_learning/data/labels") if l.endswith(".txt")
+    ]
+    while num_tiles_no_labels / num_tiles > 0.1:
+        # find an empty label file
+        # shuffle the list of labels
+        np.random.shuffle(all_labels)
+        for lab in all_labels:
+            remove = False
+            with open(os.path.join("active_learning/data/labels", lab), "r") as f:
+                lines = f.readlines()
+                if len(lines) == 0:
+                    # delete the corresponding image and label file
+                    remove = True
+            if remove:
+                if os.path.exists(
+                    os.path.join(
+                        "active_learning/data/images",
+                        lab.replace(".txt", ".png"),
+                    )
+                ):
+                    os.remove(
+                        os.path.join(
+                            "active_learning/data/images",
+                            lab.replace(".txt", ".png"),
+                        )
+                    )
+                os.remove(os.path.join("active_learning/data/labels", lab))
+                num_tiles_no_labels -= 1
+                num_tiles -= 1
+                # remove lab from all_labels
+                all_labels.remove(lab)
+                break
+    num_images, num_tiles, num_labels, class_counts, num_tiles_no_labels = describe(
+        config
+    )
+
+
+@app.command()
 def train(
     config: str = typer.Option("", help="Path to the config file"),
 ):
@@ -112,7 +247,7 @@ def train(
 --img {cfg['TILE_SIZE']} --batch {cfg['BATCH_SIZE']} \
 --workers {cfg['workers']} \
 --epochs {cfg['EPOCHS']} --data {config} \
---weights {cfg['weights']} --save-period 50 --patience=0"
+--weights {cfg['weights']} --save-period 50"
     # print command in yellow:
     print(f"\033[93m{command}\033[0m")
     os.system(command)

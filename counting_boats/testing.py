@@ -1,3 +1,8 @@
+import pathlib
+from pathlib import Path
+
+temp = pathlib.PosixPath
+pathlib.PosixPath = pathlib.WindowsPath
 import os
 import utils.testing as val_utils
 import argparse

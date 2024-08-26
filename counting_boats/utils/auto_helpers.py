@@ -17,6 +17,7 @@ from utils import planet_utils
 from utils.image_cutting_support import latlong2coord
 import numpy as np
 import base64
+import comet_ml
 
 
 def get_history(csv_path: str) -> pd.DataFrame:
@@ -220,13 +221,11 @@ def download(
                 # convert both dates
                 start_date = pd.to_datetime(start_date)
                 order_date = pd.to_datetime(this_order["date"])
-                print(order_date, start_date)
                 if order_date < start_date:
                     continue
             if end_date is not None:
                 end_date = pd.to_datetime(end_date)
                 order_date = pd.to_datetime(this_order["date"])
-                print(order_date, end_date)
                 if order_date > end_date:
                     continue
 
@@ -328,14 +327,17 @@ groups = [
 """ Groups of AOIs for analysis"""
 
 
-def analyse(boat_csv_path, coverage_path, start_date=None, end_date=None, id=None):
+def analyse(boat_csv_path, coverage_path, start_date=None, end_date=None, id=None, exp: comet_ml.Experiment = None):
     """
     do a series of analyses on the data and save it in the output directory
 
     Args:
         csv_path: path to the history csv
         coverage_path: path to the coverage csv (should be generated when images are archived)
-        kwargs: additional arguments to skip or alter steps (look at the code for details)
+        start_date: start date to analyse from
+        end_date: end date to analyse to
+        id: id to prefix the output files with
+        exp: comet experiment to log to
 
     Returns:
         None
@@ -344,6 +346,7 @@ def analyse(boat_csv_path, coverage_path, start_date=None, end_date=None, id=Non
     all_coverage = pd.read_csv(coverage_path)
     all_coverage["date"] = pd.to_datetime(all_coverage["date"])
     boats = pd.read_csv(boat_csv_path)
+    all_boats = boats.copy()
     boats["date"] = pd.to_datetime(boats["date"], dayfirst=True)
     # filter by date (day only, inclusive)
     # time doesn't matter
@@ -413,7 +416,42 @@ def analyse(boat_csv_path, coverage_path, start_date=None, end_date=None, id=Non
 
 
             print("Saved", full_heatmap_path)
+        
+        # log to comet:
+        #   - the number of boats in this batch
+        #       - moving
+        #       - stationary
+        #       - total
+        #   - the number of boats in total
+        #       - moving
+        #       - stationary
+        #       - total
+        #   - the number of days of images in this batch
+        #   - the coverage (percentage) of the area of interest for the images in this batch
 
+        if exp is not None:
+            # get the number of boats in this batch
+            moving = len(boats[boats["class"] == 1])
+            stationary = len(boats[boats["class"] == 0])
+            total = len(boats)
+            exp.log_metric("boats_batch/total", total)
+            exp.log_metric("boats_batch/moving", moving)
+            exp.log_metric("boats_batch/stationary", stationary)
+            # get the number of boats in total
+            moving = len(all_boats[boats["class"] == 1])
+            stationary = len(all_boats[boats["class"] == 0])
+            total = len(all_boats)
+            exp.log_metric("boats_total/total", total)
+            exp.log_metric("boats_total/moving", moving)
+            exp.log_metric("boats_total/stationary", stationary)
+            # get the number of days of images in this batch
+            exp.log_metric("days", len(all_coverage["date"].unique()))
+            # get the coverage (percentage) of the area of interest for each images in this batch
+            for i, row in all_coverage.iterrows():
+                exp.log_metric(
+                    f"coverage",
+                    row["area_coverage"],
+                )
 
 def archive(path: str, coverage_path: str):
     """

@@ -1,3 +1,4 @@
+import comet_ml
 import datetime
 import os
 import argparse
@@ -210,6 +211,19 @@ def batch_mode(
     # for each batch
     ordered_batches = np.zeros(n_batches)
     is_batch_ordered = lambda i: ordered_batches[i] == 1
+
+    # start a comet experiment
+    experiment = comet_ml.Experiment(project_name="count-the-boats")
+    experiment.log_parameters(
+        {
+            "aois": aois,
+            "batch_size": batch_size,
+            "start_date": start_date.strftime("%d/%m/%Y"),
+            "final_date": final_date.strftime("%d/%m/%Y"),
+        }
+    )
+    experiment.log_parameters(cfg, prefix="cfg")
+
     for i in range(n_batches):
         print(
             COLORS.OKBLUE,
@@ -255,15 +269,16 @@ def batch_mode(
         print(COLORS.OKCYAN, "Archiving ZIPS", COLORS.ENDC)
         ah.archive(download_path, coverage_path)
         # analyse batch
-        # print(COLORS.OKCYAN, "Analysing Batch", COLORS.ENDC)
-        # boat_csv_path = cfg["output_dir"] + "/boat_detections.csv"
-        # ah.analyse(
-        #     boat_csv_path,
-        #     coverage_path,
-        #     start_date=start_date,
-        #     end_date=end_date,
-        #     id=f"batch_{i}",
-        # )
+        print(COLORS.OKCYAN, "Analysing Batch", COLORS.ENDC)
+        boat_csv_path = cfg["output_dir"] + "/boat_detections.csv"
+        ah.analyse(
+            boat_csv_path,
+            coverage_path,
+            start_date=start_date,
+            end_date=end_date,
+            id=f"batch_{i}",
+            exp=experiment,
+        )
         # report on batch
         start_date = end_date + datetime.timedelta(days=1)
         end_date = start_date + datetime.timedelta(days=batch_size)
@@ -281,6 +296,7 @@ def batch_mode(
                             print(COLORS.FAIL, "Failed to remove", f, COLORS.ENDC)
         print(COLORS.OKGREEN, "Batch", i + 1, "complete", COLORS.ENDC)
         time.sleep(3)
+    experiment.end()
 
 
 def batch_search_and_order(aoi, start_date, end_date, orders_path):
