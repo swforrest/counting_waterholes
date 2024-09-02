@@ -227,6 +227,9 @@ def plot_boats():
                 f"Testing/{folder}/composite.png", f"Testing/{folder}/{folder}.png"
             )
         # plot the boats onto the png
+        if os.path.exists(f"Testing/{folder}/{folder}_boats.png"):
+            print("Boats already plotted")
+            continue
         date = folder.split("_")[1]
         year = date[0:4]
         month = date[4:6]
