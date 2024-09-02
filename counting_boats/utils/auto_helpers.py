@@ -51,13 +51,20 @@ def search(
     aoi, orders_csv_path, days=14, start_date=None, end_date=None
 ) -> tuple[list, list]:
     """
-    Search for images for a given AOI
-    @param aoi: Area of Interest name
-    @param orders_csv_path: Path to csv of order history
-    @pram days: Number of days to search from
-    @param start_date: Start date to search from
-    @param end_date: End date to search to
-    @return list: list of options
+    Search for images using the Planet API for the given AOI. Will search for the last 14 days by default,
+    or between the start and end dates if provided.
+
+    Args:
+        aoi: Area of Interest name
+        orders_csv_path: path to the history csv
+        days: number of days to search back from the current date
+        start_date: start date to search from (inclusive)
+        end_date: end date to search to (inclusive)
+
+    Returns:
+        tuple of:
+            options: list of options from the search
+            dates: list of dates that we don't already have in the history
     """
     # First get all the dates that we have for the AOI
     history = get_history(orders_csv_path)
@@ -69,7 +76,7 @@ def search(
     if end_date is None:
         end_date = datetime.datetime.now()
     end_date = end_date.strftime("%Y-%m-%d")
-    # create list of dates between min and max
+    # create list of dates between min and max (inclusive)
     daterange = (
         pd.date_range(start=start_date, end=end_date).strftime("%Y-%m-%d").tolist()
     )
@@ -89,8 +96,13 @@ def search(
             cloud_cover=cfg["ALLOWED_CLOUD_COVER"],
         )
     except Exception as e:
+        # write the current stats and exception to a file:
         traceback.print_exc()
         print(e)
+        with open("error_log.txt", "a+") as f:
+            f.write(f"Error for {aoi} on {datetime.datetime.now()}:\n")
+            f.write(str(e))
+            f.write("\n")
         return None, None
     # select and order for each date
     if len(options) == 0:
@@ -108,7 +120,8 @@ def select(aoi: str, options: list, dates: list) -> list[list]:
         dates: list of dates that we want to select for
 
     Returns:
-        list of items which
+        list of items for each date
+
     """
     polygon = planet_utils.get_polygon_file(aoi)
     if polygon is None:
@@ -136,15 +149,18 @@ def select(aoi: str, options: list, dates: list) -> list[list]:
 
 def order(aoi: str, items: list, csv_path: str) -> str:
     """
-    Place a Planet order for the given items
+    Place a Planet order for the given items. Items will be composited, so
+    only one order should be placed per day. Items should be from the same
+    AOI as only one tif is returned per order, with all items composited.
 
     Args:
         aoi: Area of Interest name
         items: list of items to order
-        history: DataFrame of the history of orders
+        csv_path: path to the order history csv
 
     Returns:
         order_id: the ID of the order placed
+
     """
     polygon = planet_utils.get_polygon_file(aoi)
     if polygon is None:
@@ -161,7 +177,12 @@ def order(aoi: str, items: list, csv_path: str) -> str:
         print(e)
         return ""
     if "id" not in order:
-        print("\033[91mCould not place order for", aoi, date, "\033[0m")
+        print(
+            "\033[91mCould not place order for",
+            aoi,
+            date,
+            ". Possibly doesn't match required asset rectification.\033[0m",
+        )
         # json.dump(order, open(f"failed_order_{aoi}_{fs_date}.json", "w"))
         return ""
     order_id = order["id"]
@@ -197,12 +218,16 @@ def download(
         csv_path: path to the history csv. Will check this to ensure we don't download the same file twice.
         download_path: path to store the downloaded zip files
         download_ids: list of order_ids to download. If None, will attempt download all orders that are in the "ordered" state.
+        start_date: start date to download from (inclusive)
+        end_date: end date to download to (inclusive)
 
     Returns:
         Remaining orders that haven't been downloaded yet
     """
     history = get_history(csv_path)
     orders = planet_utils.get_orders()
+    # normalise the date for each order
+
     for order in [o for o in orders if o["state"] == "success"]:
         # check if we have already downloaded (status == downloaded or complete)
         if (
@@ -252,7 +277,7 @@ def download(
     return history[history["order_status"] == "ordered"]
 
 
-def extract(download_path):
+def extract(download_path, start_date=None, end_date=None):
     """
     Extract any downloaded images we haven't processed.
 
@@ -262,10 +287,26 @@ def extract(download_path):
     Returns:
         None
     """
-    for root, dirs, files in os.walk(download_path):
-        for f in files:
-            if f.endswith(".zip"):
-                planet_utils.extract_zip(os.path.join(root, f))
+    if not start_date and not end_date:
+        for root, dirs, files in os.walk(download_path):
+            for f in files:
+                if f.endswith(".zip"):
+                    planet_utils.extract_zip(os.path.join(root, f))
+    else:
+        for root, dirs, files in os.walk(download_path):
+            for f in files:
+                if f.endswith(".zip"):
+                    date = f.split("_")[1].split(".")[0]
+                    date = date[:4] + "-" + date[4:6] + "-" + date[6:8]
+                    if start_date is not None:
+                        start_date = pd.to_datetime(start_date)
+                        if pd.to_datetime(date) < start_date:
+                            continue
+                    if end_date is not None:
+                        end_date = pd.to_datetime(end_date)
+                        if pd.to_datetime(date) > end_date:
+                            continue
+                    planet_utils.extract_zip(os.path.join(root, f))
 
 
 def count(save_coverage=False, days=None) -> None:
@@ -276,27 +317,42 @@ def count(save_coverage=False, days=None) -> None:
     """
     classifier.main(save_coverage=save_coverage, days=days)
     # add the aoi column to the classifications and save again
-    if os.path.exists(cfg["output_dir"] + "/boat_detections.csv"):
-        classifications = pd.read_csv(cfg["output_dir"] + "/boat_detections.csv")
+    det_path = os.path.join(cfg["output_dir"], "boat_detections.csv")
+    if os.path.exists(det_path):
+        classifications = pd.read_csv(det_path)
         classifications["aoi"] = classifications["images"].apply(
             lambda im: im.split("_")[1].split(".")[0]
         )
-        classifications.to_csv(cfg["output_dir"] + "/boat_detections.csv", index=False)
+        classifications.to_csv(det_path, index=False)
 
 
-def save(csv_path) -> None:
+def save(csv_path, start_date=None, end_date=None) -> None:
     """
     Confirm completion of the process and archive the raw data.
     Saves the csv with everything updated.
 
     Args:
         csv_path: path to the history csv
+        start_date: start date to save from
+        end_date: end date to save to
 
     Returns:
         None
     """
     history = get_history(csv_path)
     new = history[history["order_status"] == "downloaded"]
+    new["date"] = pd.to_datetime(new["date"])
+
+    if start_date is not None:
+        start_date = pd.to_datetime(start_date)
+        new = new[new["date"] >= start_date]
+    if end_date is not None:
+        end_date = pd.to_datetime(end_date)
+        new = new[new["date"] <= end_date]
+
+    new["date"] = new["date"].dt.strftime("%Y-%m-%d")
+    # the above without settingwithcopywarning
+
     if len(new) == 0:
         print("Save:: No new orders this run. Exiting.")
     # make a list of new file names (row["date"]_row["aoi"] for each row in new)
@@ -327,7 +383,14 @@ groups = [
 """ Groups of AOIs for analysis"""
 
 
-def analyse(boat_csv_path, coverage_path, start_date=None, end_date=None, id=None, exp: comet_ml.Experiment = None):
+def analyse(
+    boat_csv_path,
+    coverage_path,
+    start_date=None,
+    end_date=None,
+    id=None,
+    exp: comet_ml.Experiment = None,
+):
     """
     do a series of analyses on the data and save it in the output directory
 
@@ -347,6 +410,7 @@ def analyse(boat_csv_path, coverage_path, start_date=None, end_date=None, id=Non
     all_coverage["date"] = pd.to_datetime(all_coverage["date"])
     boats = pd.read_csv(boat_csv_path)
     all_boats = boats.copy()
+    all_boats["date"] = pd.to_datetime(all_boats["date"], dayfirst=True)
     boats["date"] = pd.to_datetime(boats["date"], dayfirst=True)
     # filter by date (day only, inclusive)
     # time doesn't matter
@@ -362,64 +426,62 @@ def analyse(boat_csv_path, coverage_path, start_date=None, end_date=None, id=Non
             (all_coverage["date"] >= start_date) & (all_coverage["date"] <= end_date)
         ]
         boats = boats[(boats["date"] >= start_date) & (boats["date"] <= end_date)]
+        all_boats = all_boats[all_boats["date"] <= end_date]
 
     prefix = f"{id}_" if id is not None else ""
 
     print("Analysing data from ", start_date, " to ", end_date)
 
-    heatmap_txt = os.path.join(cfg["output_dir"], f"{prefix}heatmap.txt")
-    dates = []
-    if not os.path.exists(heatmap_txt):
-        with open(heatmap_txt, "w") as f:
-            f.write("")
-    with open(heatmap_txt, "r") as f:
-        dates = f.readlines()
-    dates = [pd.to_datetime(d.strip()) for d in dates]
+    # heatmap_txt = os.path.join(cfg["output_dir"], f"{prefix}heatmap.txt")
+    # dates = []
+    # if not os.path.exists(heatmap_txt):
+    #     with open(heatmap_txt, "w") as f:
+    #         f.write("")
+    # with open(heatmap_txt, "r") as f:
+    #     dates = f.readlines()
+    # dates = [pd.to_datetime(d.strip()) for d in dates]
 
     if coverage.empty:
         print("No new coverage data to analyse")
     else:
-        # - coverage heatmap raster for each group
-        for g in groups:
-            print("Making full coverage raster")
-            full_heatmap_path = os.path.join(
-                cfg["output_dir"], f"{g['name']}_full_coverage.tif"
-            )
+        # # - coverage heatmap raster for each group
+        # for g in groups:
+        #     print("Making full coverage raster")
+        #     full_heatmap_path = os.path.join(
+        #         cfg["output_dir"], f"{g['name']}_full_coverage.tif"
+        #     )
 
-            if os.path.exists(full_heatmap_path):
-                # grab any polygons from dates we don't have
-                # all_coverage where date is not in dates
-                new_coverage = all_coverage[~all_coverage["date"].isin(dates)]
-                polygons = hm.get_polygons_from_df(
-                    new_coverage 
-                )  
-                if len(polygons) == 0:
-                    continue
-                hm.add_to_heatmap(full_heatmap_path, polygons)
-            else:
-                new_coverage = all_coverage
-                polygons = hm.get_polygons_from_df(
-                    all_coverage
-                )  # Get the polygons from this batch
-                if len(polygons) == 0:
-                    continue
-                hm.create_heatmap_from_polygons(
-                    polygons=polygons,
-                    save_file=full_heatmap_path,
-                    size=cfg["HEATMAP_SIZE"],
-                )
-            # save a file heatmap.txt that has the images if they are in the heatmap
-            dates = all_coverage["date"].unique()
-            print("Saving heatmap.txt")
-            with open(heatmap_txt, "w") as f:
-                f.write("\n".join([str(d) for d in dates]))
+        #     if os.path.exists(full_heatmap_path):
+        #         # grab any polygons from dates we don't have
+        #         # all_coverage where date is not in dates
+        #         new_coverage = all_coverage[~all_coverage["date"].isin(dates)]
+        #         polygons = hm.get_polygons_from_df(new_coverage)
+        #         if len(polygons) == 0:
+        #             continue
+        #         hm.add_to_heatmap(full_heatmap_path, polygons)
+        #     else:
+        #         new_coverage = all_coverage
+        #         polygons = hm.get_polygons_from_df(
+        #             all_coverage
+        #         )  # Get the polygons from this batch
+        #         if len(polygons) == 0:
+        #             continue
+        #         hm.create_heatmap_from_polygons(
+        #             polygons=polygons,
+        #             save_file=full_heatmap_path,
+        #             size=cfg["HEATMAP_SIZE"],
+        #         )
+        #     # save a file heatmap.txt that has the images if they are in the heatmap
+        #     dates = all_coverage["date"].unique()
+        #     print("Saving heatmap.txt")
+        #     with open(heatmap_txt, "w") as f:
+        #         f.write("\n".join([str(d) for d in dates]))
 
+        #     print("Saved", full_heatmap_path)
 
-            print("Saved", full_heatmap_path)
-        
-        # log to comet:
-        #   - the number of boats in this batch
-        #       - moving
+        # # log to comet:
+        # #   - the number of boats in this batch
+        # #       - moving
         #       - stationary
         #       - total
         #   - the number of boats in total
@@ -428,32 +490,36 @@ def analyse(boat_csv_path, coverage_path, start_date=None, end_date=None, id=Non
         #       - total
         #   - the number of days of images in this batch
         #   - the coverage (percentage) of the area of interest for the images in this batch
+        pass
 
-        if exp is not None:
-            # get the number of boats in this batch
-            moving = len(boats[boats["class"] == 1])
-            stationary = len(boats[boats["class"] == 0])
-            total = len(boats)
-            exp.log_metric("boats_batch/total", total)
-            exp.log_metric("boats_batch/moving", moving)
-            exp.log_metric("boats_batch/stationary", stationary)
-            # get the number of boats in total
-            moving = len(all_boats[boats["class"] == 1])
-            stationary = len(all_boats[boats["class"] == 0])
-            total = len(all_boats)
-            exp.log_metric("boats_total/total", total)
-            exp.log_metric("boats_total/moving", moving)
-            exp.log_metric("boats_total/stationary", stationary)
-            # get the number of days of images in this batch
-            exp.log_metric("days", len(all_coverage["date"].unique()))
-            # get the coverage (percentage) of the area of interest for each images in this batch
-            for i, row in all_coverage.iterrows():
-                exp.log_metric(
-                    f"coverage",
-                    row["area_coverage"],
-                )
+    if exp is not None:
+        # get the number of boats in this batch
+        moving = len(boats[boats["class"] == 1])
+        stationary = len(boats[boats["class"] == 0])
+        total = len(boats)
+        exp.log_metric("boats_batch/total", total) 
+        exp.log_metric("boats_batch/moving", moving)
+        exp.log_metric("boats_batch/stationary", stationary)
+        # get the number of boats in total
+        moving = len(all_boats[all_boats["class"] == 1])
+        stationary = len(all_boats[all_boats["class"] == 0])
+        total = len(all_boats)
+        exp.log_metric("boats_total/total", total)
+        exp.log_metric("boats_total/moving", moving)
+        exp.log_metric("boats_total/stationary", stationary)
+        # get the number of days of images in this batch
+        exp.log_metric("days", len(all_coverage["date"].unique()))
+        # get the coverage (percentage) of the area of interest for each images in this batch
+        for i, row in all_coverage.iterrows():
+            exp.log_metric(
+                f"coverage",
+                row["area_coverage"],
+            )
+        # log the detections csv
+        exp.log_asset(boat_csv_path)
 
-def archive(path: str, coverage_path: str):
+
+def archive(path: str, coverage_path: str, start_date=None, end_date=None):
     """
     Deal with folder of raw data after processing. Send zip files to archive,
     delete the folders, update coverage file.
@@ -482,9 +548,16 @@ def archive(path: str, coverage_path: str):
     for root, dirs, files in os.walk(path):
         for f in files:
             if f.endswith(".zip"):
+                date = f.split("_")[1].split(".")[0]
+                date = date[:4] + "-" + date[4:6] + "-" + date[6:8]
+                if start_date and pd.to_datetime(date) < pd.to_datetime(start_date):
+                    continue
+                if end_date and pd.to_datetime(date) > pd.to_datetime(end_date):
+                    continue
                 # Move to ../archive/{whatever}
                 if os.path.exists(os.path.join(archive_dir, f)):
                     print(f"Already have {f} in archive. Skipping.")
+                    # NOTE: Delete zips when running on the desktop
                     os.remove(os.path.join(root, f))
                 else:
                     shutil.move(os.path.join(root, f), os.path.join(archive_dir, f))
@@ -494,6 +567,12 @@ def archive(path: str, coverage_path: str):
             # save the polygon to the coverage file
             # load composite_metadata.json from the directory if it exists
             if "composite_metadata.json" in os.listdir(os.path.join(root, d)):
+                date = d.split("_")[-1]
+                date = date[:4] + "-" + date[4:6] + "-" + date[6:8]
+                if start_date and pd.to_datetime(date) < pd.to_datetime(start_date):
+                    continue
+                if end_date and pd.to_datetime(date) > pd.to_datetime(end_date):
+                    continue
                 meta = json.load(open(os.path.join(root, d, "composite_metadata.json")))
                 polygon = meta["geometry"]
                 aoi = "_".join(d.split("_")[0:-1])

@@ -207,11 +207,11 @@ def process_sub_image_with_labels(args):
             + " "
             + str(((c.get_left() + c.get_right()) / 2 - j * stride) / sizex)
             + " "
-            + str(((c.get_top() + c.get_bottom()) / 2 - i * stride) / sizex)
+            + str(((c.get_top() + c.get_bottom()) / 2 - i * stride) / sizey)
             + " "
             + str((c.get_right() - c.get_left()) / 2 / sizex)
             + " "
-            + str((c.get_bottom() - c.get_top()) / 2 / sizex)
+            + str((c.get_bottom() - c.get_top()) / 2 / sizey)
             + "\n"
         )
     outfile.close()
@@ -939,7 +939,9 @@ def pixel2coord(x: int, y: int, original_image_path: str) -> tuple[float, float]
     return (xp, yp)
 
 
-def coord2pixel(x: float, y: float, original_image_path: str) -> tuple[int, int]:
+def coord2pixel(
+    x: float, y: float, original_image_path: str
+) -> tuple[int, int] | tuple[list[int], list[int]]:
     """
     Returns pixel coordinates to pixel center using base-0 raster index
 

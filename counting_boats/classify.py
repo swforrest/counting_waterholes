@@ -85,7 +85,7 @@ def auto(
     """
     orders_path = os.path.join(cfg["output_dir"], "orders.csv")
     coverage_path = os.path.join(cfg["output_dir"], "coverage.csv")
-    download_path = os.path.join("images", "downloads")
+    download_path = cfg["download_dir"]
     # For all AOIS
     history_len = None
     if cfg.get("HISTORY_LENGTH") is None:
@@ -204,7 +204,7 @@ def batch_mode(
         "Dates:",
         start_date.strftime("%d/%m/%Y"),
         "to",
-        datetime.datetime.now().strftime("%d/%m/%Y"),
+        final_date.strftime("%d/%m/%Y"),
         "(inclusive)",
     )
     time.sleep(3)
@@ -253,24 +253,21 @@ def batch_mode(
         # download the current batch
         print(COLORS.OKCYAN, "Downloading Images", COLORS.ENDC)
         batch_download_with_wait(orders_path, download_path, start_date, end_date)
-        ah.extract(download_path)
+        ah.extract(download_path, start_date, end_date)
         # classify -> We will save coverage during archive step.
         # get a list of the days in the batch in DD/MM/YYYY format
-        days_in_batch = [
-            (start_date + datetime.timedelta(days=d)).strftime("%d/%m/%Y")
-            for d in range(batch_size)
-        ]
+        days_in_batch = pd.date_range(start_date, end_date).strftime("%d/%m/%Y").tolist()
         print(COLORS.OKCYAN, "Classifying Downloads", COLORS.ENDC)
         ah.count(save_coverage=False, days=days_in_batch)
         # save
         print(COLORS.OKCYAN, "Marking as Complete", COLORS.ENDC)
-        ah.save(orders_path)
+        ah.save(orders_path, start_date=start_date, end_date=end_date)
         # archive -> also saves coverage file
         print(COLORS.OKCYAN, "Archiving ZIPS", COLORS.ENDC)
-        ah.archive(download_path, coverage_path)
+        ah.archive(download_path, coverage_path, start_date=start_date, end_date=end_date)
         # analyse batch
         print(COLORS.OKCYAN, "Analysing Batch", COLORS.ENDC)
-        boat_csv_path = cfg["output_dir"] + "/boat_detections.csv"
+        boat_csv_path = os.path.join(cfg["output_dir"] ,"boat_detections.csv")
         ah.analyse(
             boat_csv_path,
             coverage_path,
@@ -325,6 +322,7 @@ def batch_download_with_wait(orders_path, download_path, start_date, end_date):
     # wait until all downloaded
     # Strategy  -> check every 10 minutes. If an order comes through, check every 5 minutes until all orders are downloaded
     #           -> if its been over 2 hours, exit and alert user something might be wrong
+    # start date and end date are inclusive
     # download
     wait_time = 10 * 60  # 10 minutes
     total_wait_time = 0

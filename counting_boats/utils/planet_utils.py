@@ -25,13 +25,20 @@ def PlanetSearch(
     Search a given area of interest for Planet imagery
 
     Args:
-        search_path: path to a json file containing search body
+        polygon_file: the path to the polygon file
+        min_date: the minimum date to search for (inclusive)
+        max_date: the maximum date to search for (inclusive)
+        cloud_cover: the maximum cloud cover to search for
 
     Requires:
         Planet API key be set in environment variable
 
     Returns:
         a list of Planet items (json result from API)
+    
+    Raises:
+        Exception: if the API returns a non-200 status code
+
     """
     # get the polygon
     polygon = None
@@ -53,7 +60,7 @@ def PlanetSearch(
     )
     if response.status_code != 200:
         print(response.text)
-        raise Exception("Planet API returned non-200 status code")
+        raise Exception("Planet API returned non-200 status code in search call")
     return response.json()["features"]
 
 
@@ -227,12 +234,13 @@ def extract_zip(downloadFile, aoi=None, date=None):
     """
     if aoi is None or date is None:
         try:
-            seps = os.path.basename(downloadFile).split(".")[0].split("_")
+            seps = os.path.basename(downloadFile).split(".zip")[0].split("_")
             date = seps[-1]
             aoi = "_".join(seps[:-1])
         except:
             raise Exception("AOI and date must be provided")
-    extractPath = downloadFile.split(".")[0]
+    extractPath = downloadFile.split(".zip")[0]
+    print(downloadFile, extractPath)
     with zipfile.ZipFile(downloadFile, "r") as zip_ref:
         zip_ref.extractall(extractPath)
     # move the tif file to the raw tiffs directory, naming it (date)_(aoi).tif
@@ -241,18 +249,16 @@ def extract_zip(downloadFile, aoi=None, date=None):
     if not os.path.isfile(tif):
         raise Exception(f"No tif file found in {extractPath}")
 
-    if not os.path.exists(os.path.join(cfg["proj_root"], "images", "RawImages")):
-        os.makedirs(os.path.join(cfg["proj_root"], "images", "RawImages"))
+    if not os.path.exists(cfg["tif_dir"]):
+        os.makedirs(cfg["tif_dir"], exist_ok=True)
 
     try:
         os.replace(
             tif,
-            os.path.join(cfg["proj_root"], "images", "RawImages", newfname),
+            os.path.join(cfg["tif_dir"], newfname),
         )
     except:
-        if os.path.exists(
-            os.path.join(cfg["proj_root"], "images", "RawImages", newfname)
-        ):
+        if os.path.exists(os.path.join(cfg["tif_dir"], newfname)):
             print(f"File {newfname} already exists, skipping")
         else:
             raise Exception(f"Error moving {tif} to {newfname}")
@@ -271,7 +277,17 @@ def get_orders():
     # write the response to a file
     with open("orders.json", "w") as f:
         f.write(response.text)
-    return response.json()["orders"]
+    data = response.json()
+    orders = data["orders"]
+    while "next" in data["_links"]:
+        uri = data["_links"]["next"]
+        response = requests.get(uri, auth=(API_KEY, ""))
+        data = response.json()
+        with open("orders.json", "a") as f:
+            f.write(response.text)
+        orders += data["orders"]
+    
+    return orders
 
 
 def get_aois():

@@ -19,10 +19,10 @@ STRIDE: 104
 # training Dataset
 path: C:\ML_Software\training
 train:
-  - C:\yoloDatasets\trainFinal\images
+  # - C:\yoloDatasets\trainFinal\images
   - C:\ML_Software\active_learning\data\images
 val:
-  - C:\ML_Software\MoretonVal\images
+  # - C:\ML_Software\MoretonVal\images
 names:
   0: boat
   1: movingBoat

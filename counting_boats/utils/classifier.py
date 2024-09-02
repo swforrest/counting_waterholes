@@ -9,6 +9,11 @@ import pandas as pd
 from . import image_cutting_support as ics
 from .config import cfg
 
+# instantiate posixpath for windows
+import pathlib
+
+temp = pathlib.PosixPath
+pathlib.PosixPath = pathlib.WindowsPath
 
 """
 Intended usage:
@@ -188,14 +193,14 @@ def classify_directory(directory, classify_days=None):
     )
     # write to csv
     for static_boats, moving_boats, day in daily_results:
-        write_to_csv(static_boats, day, "boat_detections")
-        write_to_csv(moving_boats, day, "boat_detections")
+        write_to_csv(static_boats, day, "boat_detections.csv")
+        write_to_csv(moving_boats, day, "boat_detections.csv")
 
     polygons = []
     if SAVE_COVERAGE:
         for file in all_tif_files:
             # check if there is a metadata file alongside the tif
-            # NOTE: a bit hacky
+            # HACK: this is a bit of a hack, but works
             possible_metadata_files = [
                 file.replace(".tif", "metadata.json"),
                 # replace everything after the 4th underscore
@@ -270,11 +275,11 @@ def classify_text(
     clusters = cluster(classifications, STAT_DISTANCE_CUTOFF_PIX)
     if save_clusters:
         # save the clusters to csv
-        write_to_csv(classifications=clusters, day=day, file=OUTFILE)
+        write_to_csv(classifications=clusters, day=day, filepath=OUTFILE)
     # process
     boats = process_clusters(clusters)
     # write to csv
-    write_to_csv(classifications=boats, day=day, file=OUTFILE)
+    write_to_csv(classifications=boats, day=day, filepath=OUTFILE)
 
 
 def prepare_temp_dirs():
@@ -338,9 +343,14 @@ def detect_from_dir(
         With boats as a list of: [x, y, confidence, class, width, height]
     """
     detect_path = path.join(yolo_dir, "detect.py")
-    os.system(
+
+    result = os.system(
         f"{python} {detect_path} --imgsz {TILE_SIZE} --save-txt --save-conf --weights {weights} --source {dir}"
     )
+
+    if result != 0:
+        raise Exception("Error running detection - check logs")
+
     return read_classifications(
         yolo_dir=yolo_dir, confidence_threshold=confidence_threshold
     )
@@ -562,7 +572,7 @@ def condense(cluster: np.ndarray) -> np.ndarray:
     return thisBoatMean
 
 
-def write_to_csv(classifications, day, file) -> None:
+def write_to_csv(classifications, day, filepath) -> None:
     """
     Write the given classifications to a csv file.
 
@@ -576,9 +586,9 @@ def write_to_csv(classifications, day, file) -> None:
     """
     # Write to output csv
     # Create output csv if it doesn't exist
-    file = os.path.join(cfg["output_dir"], file)
-    if not os.path.isfile(f"{file}.csv"):
-        with open(f"{file}.csv", "a+") as outFile:
+    filepath = os.path.join(cfg["output_dir"], filepath)
+    if not os.path.isfile(filepath):
+        with open(filepath, "a+") as outFile:
             outFile.writelines("date,class,images,latitude,longitude,confidence,w,h\n")
 
     # Write the data for that day to a csv
@@ -586,7 +596,7 @@ def write_to_csv(classifications, day, file) -> None:
         f"{day},{int(float(boat[3]))},{boat[6]},{boat[1]},{boat[0]},{boat[2]},{boat[4]},{boat[5]}\n"
         for boat in classifications
     ]
-    with open(f"{file}.csv", "a+") as outFile:
+    with open(filepath, "a+") as outFile:
         outFile.writelines(lines)
 
 

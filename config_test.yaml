@@ -3,8 +3,8 @@
 yolo_dir: C:\yolov5
 python: python
 # Configuration for Validation/Analysis Runs
-path: C:\ML_Software\MoretonVal\
-weights: C:\exp\weights\last.pt
+path: C:\ML_Software\Testing\
+weights: data/NN_weights.pt
 # weights: /Users/charlieturner/Desktop/Yolov5l.pt
 device: cuda:0
 
@@ -15,7 +15,7 @@ device: cuda:0
 pngs: . # Pngs for the tif files
 segmented_images: C:\ML_Software\MoretonVal\images # Segmented images
 labels: C:\ML_Software\MoretonVal\labels # Labels for the images
-classifications: C:\ML_Software\MoretonVal\classifications_yolox # Classifications for the images
+classifications: C:\ML_Software\MoretonVal\classifications_finaltry # Classifications for the images
 
 img_size: 416
 img_stride: 104

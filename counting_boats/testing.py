@@ -1,6 +1,9 @@
 import pathlib
 from pathlib import Path
 
+pathlib.PosixPath = pathlib.WindowsPath
+from pathlib import Path
+
 temp = pathlib.PosixPath
 pathlib.PosixPath = pathlib.WindowsPath
 import os
