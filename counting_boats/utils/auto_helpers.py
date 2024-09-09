@@ -575,7 +575,8 @@ def archive(path: str, coverage_path: str, start_date=None, end_date=None):
     import shutil
 
     print("Sending all ZIP files to storage (NOT IMPLEMENTED)")
-    archive_dir = "U:\\Research\\Projects\\sef\\livingplayingmb\\Boat Detection TMBF\\PlanetArchive"
+    archive_dir = cfg["archive_dir"]
+    # archive_dir = "U:\\Research\\Projects\\sef\\livingplayingmb\\Boat Detection TMBF\\PlanetArchive"
     if not os.path.exists(archive_dir):
         raise FileNotFoundError("Archive directory not found")
 
