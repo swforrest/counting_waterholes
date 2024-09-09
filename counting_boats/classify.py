@@ -256,7 +256,9 @@ def batch_mode(
         ah.extract(download_path, start_date, end_date)
         # classify -> We will save coverage during archive step.
         # get a list of the days in the batch in DD/MM/YYYY format
-        days_in_batch = pd.date_range(start_date, end_date).strftime("%d/%m/%Y").tolist()
+        days_in_batch = (
+            pd.date_range(start_date, end_date).strftime("%d/%m/%Y").tolist()
+        )
         print(COLORS.OKCYAN, "Classifying Downloads", COLORS.ENDC)
         ah.count(save_coverage=False, days=days_in_batch)
         # save
@@ -264,10 +266,12 @@ def batch_mode(
         ah.save(orders_path, start_date=start_date, end_date=end_date)
         # archive -> also saves coverage file
         print(COLORS.OKCYAN, "Archiving ZIPS", COLORS.ENDC)
-        ah.archive(download_path, coverage_path, start_date=start_date, end_date=end_date)
+        ah.archive(
+            download_path, coverage_path, start_date=start_date, end_date=end_date
+        )
         # analyse batch
         print(COLORS.OKCYAN, "Analysing Batch", COLORS.ENDC)
-        boat_csv_path = os.path.join(cfg["output_dir"] ,"boat_detections.csv")
+        boat_csv_path = os.path.join(cfg["output_dir"], "boat_detections.csv")
         ah.analyse(
             boat_csv_path,
             coverage_path,
@@ -275,6 +279,7 @@ def batch_mode(
             end_date=end_date,
             id=f"batch_{i}",
             exp=experiment,
+            batch=i,
         )
         # report on batch
         start_date = end_date + datetime.timedelta(days=1)
@@ -297,6 +302,20 @@ def batch_mode(
 
 
 def batch_search_and_order(aoi, start_date, end_date, orders_path):
+    orders = pd.read_csv(orders_path)
+    orders["date"] = pd.to_datetime(orders["date"])
+    # if there are orders before and after this batch, don't order because probably already ordered
+    if (
+        len(orders.loc[(orders["date"] < start_date)]) > 0
+        and len(orders.loc[(orders["date"] > end_date)]) > 0
+    ):
+        print(
+            COLORS.OKGREEN,
+            f"Orders already exist for {aoi} from {start_date.strftime('%d/%m/%Y')} to {end_date.strftime('%d/%m/%Y')} skipping",
+            COLORS.ENDC,
+        )
+        return
+
     options, dates = ah.search(
         aoi=aoi,
         start_date=start_date,
@@ -324,6 +343,17 @@ def batch_download_with_wait(orders_path, download_path, start_date, end_date):
     #           -> if its been over 2 hours, exit and alert user something might be wrong
     # start date and end date are inclusive
     # download
+
+    # first, check if we actually need to download anything
+    orders = pd.read_csv(orders_path)
+    orders["date"] = pd.to_datetime(orders["date"])
+    orders = orders.loc[(orders["date"] >= start_date) & (orders["date"] <= end_date)]
+    # possible if not marked as complete
+    possible_orders = orders.loc[orders["order_status"] != "complete"]
+    if len(possible_orders) == 0:
+        print("No orders to download")
+        return
+
     wait_time = 10 * 60  # 10 minutes
     total_wait_time = 0
     timeout = 2 * 60 * 60  # 2 hours
