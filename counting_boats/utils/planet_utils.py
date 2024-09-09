@@ -264,6 +264,25 @@ def extract_zip(downloadFile, aoi=None, date=None):
             raise Exception(f"Error moving {tif} to {newfname}")
     return newfname
 
+def get_with_retry(uri, auth, retries=5):
+    """
+    Get a URI with retries, doubling the delay each time.
+
+    Args:
+        uri: the URI to get
+        auth: the auth tuple
+        retries: the number of retries to attempt
+
+    Returns:
+        the response object
+    """
+    delay = 1
+    for i in range(retries):
+        response = requests.get(uri, auth=auth)
+        if response.status_code == 200:
+            return response
+        delay *= 2
+    return None
 
 def get_orders():
     """
@@ -273,7 +292,9 @@ def get_orders():
         a list of orders which are dictionaries. Contains the order ID, state, etc.
     """
     uri = f"https://api.planet.com/compute/ops/orders/v2"
-    response = requests.get(uri, auth=(API_KEY, ""))
+    response = get_with_retry(uri, (API_KEY, ""))
+    if response is None:
+        raise Exception("Failed to get orders")
     # write the response to a file
     with open("orders.json", "w") as f:
         f.write(response.text)
@@ -281,7 +302,9 @@ def get_orders():
     orders = data["orders"]
     while "next" in data["_links"]:
         uri = data["_links"]["next"]
-        response = requests.get(uri, auth=(API_KEY, ""))
+        response = get_with_retry(uri, (API_KEY, ""))
+        if response is None:
+            raise Exception("Failed to get orders")
         data = response.json()
         with open("orders.json", "a") as f:
             f.write(response.text)
