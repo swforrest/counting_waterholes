@@ -91,12 +91,14 @@ def process_tif(
         # add the image name to each classification (as the last column)
         static_boats = np.c_[static_boats, [file] * len(static_boats)]
         moving_boats = np.c_[moving_boats, [file] * len(moving_boats)]
-    # move the tif into the processed folder
-    os.makedirs(path.join(cfg["tif_dir"], "processed"), exist_ok=True)
-    target = path.join(cfg["tif_dir"], "processed", file)
-    if path.exists(target):
-        os.remove(target)
-    os.rename(path.join(cfg["tif_dir"], file), target)
+    # # move the tif into the processed folder
+    # NOTE: deleting here cause we are running out of storage.
+    os.remove(os.path.join(cfg["tif_dir"], file))
+    # os.makedirs(path.join(cfg["tif_dir"], "processed"), exist_ok=True)
+    # target = path.join(cfg["tif_dir"], "processed", file)
+    # if path.exists(target):
+    #     os.remove(target)
+    # os.rename(path.join(cfg["tif_dir"], file), target)
 
     return static_boats, moving_boats
 
@@ -179,6 +181,31 @@ def classify_directory(directory, classify_days=None):
 
     # sort the data by day
     daily_data = sorted(daily_data, key=lambda x: str(x[1]))
+
+    # for i, (files, day) in enumerate(daily_data):
+    #     print(f"Classifying day {day}")
+    #     if len(files) == 0 or files is None or day is None:
+    #         print(f"Nothing to do for day {day}")
+    #         continue
+    #     # process the day
+    #     static_boats, moving_boats, _ = process_day(
+    #         files,
+    #         cfg["STAT_DISTANCE_CUTOFF_PIX"],
+    #         cfg["MOVING_DISTANCE_CUTOFF_PIX"],
+    #         day,
+    #         i,
+    #         len(days),
+    #     )
+    #     # write to csv
+    #     write_to_csv(static_boats, day, "boat_detections.csv")
+    #     write_to_csv(moving_boats, day, "boat_detections.csv")
+    #     # move the tif files to the processed folder
+    #     os.makedirs(path.join(directory, "processed"), exist_ok=True)
+    #     for file in files:
+    #         target = path.join(directory, "processed", file)
+    #         if path.exists(target):
+    #             os.remove(target)
+    #         os.rename(path.join(directory, file), target)
 
     daily_results = (
         process_day(
@@ -317,9 +344,12 @@ def detect_from_tif(
         png_path, TEMP, tile_size=TILE_SIZE, stride=STRIDE
     )
     detect_path = path.join(yolo_dir, "detect.py")
-    os.system(
+    output = os.system(
         f"{python} {detect_path} --imgsz {TILE_SIZE} --save-txt --save-conf --weights {weights} --source {TEMP}"
     )
+    if output != 0:
+        raise Exception("Error running detection - check logs")
+
     return read_classifications(
         yolo_dir=yolo_dir, confidence_threshold=confidence_threshold, delete_folder=True
     )
