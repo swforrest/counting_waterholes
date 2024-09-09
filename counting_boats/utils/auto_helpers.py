@@ -226,9 +226,20 @@ def download(
     """
     history = get_history(csv_path)
     orders = planet_utils.get_orders()
+    boats = pd.read_csv("results/boat_detections.csv")
+    boats["date"] = pd.to_datetime(boats["date"], dayfirst=True)
     # normalise the date for each order
 
     for order in [o for o in orders if o["state"] == "success"]:
+        # date = history[history["order_id"] == order["id"]]["date"]
+        # if len(date) == 0:
+        #     print(
+        #         "Download:: Could not find order in history. Skipping.",
+        #         order["id"],
+        #         date,
+        #     )
+        #     continue
+        # date = date.iloc[0]
         # check if we have already downloaded (status == downloaded or complete)
         if (
             order["id"]
@@ -237,6 +248,27 @@ def download(
             ].tolist()
         ):
             continue
+        # # NOTE: This is a temp solution to a problem i found, remove this elif after the run
+        # the problem: if the program crashed midway through a batch, it was possible a day could be counted but not put in the results csv
+        # # if there are boats from this day in the results, continue
+        # elif boats[boats["date"] == pd.to_datetime(date)].shape[0] > 0:
+        #     print(
+        #         "Download:: Skipping",
+        #         order["id"],
+        #         "as there are boats in the results from " + str(pd.to_datetime(date)),
+        #     )
+        #     this_order = history[history["order_id"] == order["id"]]
+        #     if len(this_order) == 0:
+        #         print(
+        #             "Download:: Could not find order in history. Skipping.",
+        #             order["id"],
+        #             date,
+        #         )
+        #         continue
+        #     this_order = this_order.iloc[0]
+        #     history.loc[history["order_id"] == order["id"], "order_status"] = "complete"
+        #     save_history(history, csv_path)
+        #     continue
         elif (
             order["id"]
             in history[history["order_status"] == "ordered"]["order_id"].tolist()
@@ -390,6 +422,7 @@ def analyse(
     end_date=None,
     id=None,
     exp: comet_ml.Experiment = None,
+    batch=0,
 ):
     """
     do a series of analyses on the data and save it in the output directory
@@ -497,26 +530,27 @@ def analyse(
         moving = len(boats[boats["class"] == 1])
         stationary = len(boats[boats["class"] == 0])
         total = len(boats)
-        exp.log_metric("boats_batch/total", total) 
-        exp.log_metric("boats_batch/moving", moving)
-        exp.log_metric("boats_batch/stationary", stationary)
+        exp.log_metric("boats_batch/total", total, step=batch)
+        exp.log_metric("boats_batch/moving", moving, step=batch)
+        exp.log_metric("boats_batch/stationary", stationary, step=batch)
         # get the number of boats in total
         moving = len(all_boats[all_boats["class"] == 1])
         stationary = len(all_boats[all_boats["class"] == 0])
         total = len(all_boats)
-        exp.log_metric("boats_total/total", total)
-        exp.log_metric("boats_total/moving", moving)
-        exp.log_metric("boats_total/stationary", stationary)
+        exp.log_metric("boats_total/total", total, step=batch)
+        exp.log_metric("boats_total/moving", moving, step=batch)
+        exp.log_metric("boats_total/stationary", stationary, step=batch)
         # get the number of days of images in this batch
-        exp.log_metric("days", len(all_coverage["date"].unique()))
+        exp.log_metric("days", len(all_coverage["date"].unique()), step=batch)
         # get the coverage (percentage) of the area of interest for each images in this batch
         for i, row in all_coverage.iterrows():
             exp.log_metric(
                 f"coverage",
                 row["area_coverage"],
+                step=batch,
             )
         # log the detections csv
-        exp.log_asset(boat_csv_path)
+        exp.log_asset(boat_csv_path, overwrite=True)
 
 
 def archive(path: str, coverage_path: str, start_date=None, end_date=None):
