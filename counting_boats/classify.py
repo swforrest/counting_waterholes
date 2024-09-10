@@ -84,8 +84,11 @@ def auto(
     Run the entire pipeline automatically.
     """
     orders_path = os.path.join(cfg["output_dir"], "orders.csv")
+    _ = ah.get_history(orders_path) # make sure the file exists
     coverage_path = os.path.join(cfg["output_dir"], "coverage.csv")
     download_path = cfg["download_dir"]
+    if not os.path.exists(cfg["output_dir"]):
+        os.makedirs(cfg["output_dir"])
     # For all AOIS
     history_len = None
     if cfg.get("HISTORY_LENGTH") is None:

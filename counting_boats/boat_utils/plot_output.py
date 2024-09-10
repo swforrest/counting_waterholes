@@ -27,7 +27,7 @@ def main():
     # if the image is a folder, run for each image in folder
     if os.path.isdir(args.image):
         for image in os.listdir(args.image):
-            if not image.split(".")[1] in ["png", "tif"]:
+            if not ".png" in image or ".tif" in image:
                 continue
             # or if already saved in output
             if os.path.exists(
@@ -123,10 +123,11 @@ def plot(NNcsv, NNpicture, save=False, show=True):
     if save:
         os.makedirs("ImgDetections", exist_ok=True)
         plt.tight_layout()
+        # save with full quality
         plt.savefig(
             os.path.join("ImgDetections", IMAGE_NAME.split(".")[0] + ".png"),
             bbox_inches="tight",
-            dpi=1000,
+            pad_inches=0,
         )
     if show:
         plt.show()

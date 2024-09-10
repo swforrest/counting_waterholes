@@ -243,10 +243,13 @@ def cloud_coverage_udm(udm_path: str) -> tuple[float, np.ndarray]:
             # bit 2-8: missing in a color band
             cloud_mask = udm1.astype(np.uint8) & 0b00000010
 
-        imaged_mask = src.read(8).astype(np.uint8) & 0b00000001 # 1 for not imaged, 0 for imaged at this stage
+        imaged_mask = (
+            src.read(8).astype(np.uint8) & 0b00000001
+        )  # 1 for not imaged, 0 for imaged at this stage
         import matplotlib.pyplot as plt
+
         plt.imshow(cloud_mask)
-        imaged_mask = imaged_mask == 0 # 1 for imaged, 0 for not imaged
+        imaged_mask = imaged_mask == 0  # 1 for imaged, 0 for not imaged
         # calculate cloud coverage over imaged area
         cloud_coverage = np.sum(cloud_mask) / np.sum(imaged_mask)
         return cloud_coverage, cloud_mask
@@ -385,10 +388,28 @@ def polygon_latlong2crs(
     # convert from lat long to EPSG:32756
     if "geometry" in geoJSON:
         geoJSON = geoJSON["geometry"]
+    if "geometries" in geoJSON:
+        geoJSON = geoJSON["geometries"]
+        polygons = []
+        for shape in geoJSON:
+            if not (shape["type"] == "Polygon" or shape["type"] == "MultiPolygon"):
+                print("Shape type not supported", shape["type"])
+                continue
+            for i, poly in enumerate(shape["coordinates"]):
+                if shape["type"] == "MultiPolygon":
+                    poly = poly[0]  # geoJSONpologons are nested once more bit
+                poly_dict = {"coordinates": [[None] * len(poly)], "type": "Polygon"}
+                for i, val in enumerate(poly):
+                    lat, long = val
+                    x, y = ics.latlong2coord(lat, long)
+                    poly_dict["coordinates"][0][i] = [x, y]
+                polygons.append(ogr.CreateGeometryFromJson(json.dumps(poly_dict)))
+        return polygons
+
     polygons = []
     for i, poly in enumerate(geoJSON["coordinates"]):
         if geoJSON["type"] == "MultiPolygon":
-            poly = poly[0]  # Multipologons are nested once more bit
+            poly = poly[0]  # geoJSONpologons are nested once more bit
         poly_dict = {"coordinates": [[None] * len(poly)], "type": "Polygon"}
         for i, val in enumerate(poly):
             lat, long = val

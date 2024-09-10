@@ -6,8 +6,10 @@ import scipy.cluster
 import scipy.spatial
 import json
 import pandas as pd
-from . import image_cutting_support as ics
+from datetime import datetime
+from boat_utils import image_cutting_support as ics
 from .config import cfg
+from tqdm import tqdm
 
 # instantiate posixpath for windows
 import pathlib
@@ -99,6 +101,8 @@ def process_tif(
     # # move the tif into the processed folder
     # NOTE: deleting here cause we are running out of storage.
     os.remove(os.path.join(cfg["tif_dir"], file))
+
+    # Can also move to a processed file if you want
     # os.makedirs(path.join(cfg["tif_dir"], "processed"), exist_ok=True)
     # target = path.join(cfg["tif_dir"], "processed", file)
     # if path.exists(target):
@@ -138,6 +142,7 @@ def process_day(
     all_static_boats, all_moving_boats = zip(
         *[process_tif(file, stat_cutoff, moving_cutoff) for file in files]
     )
+
     all_static_boats = all_static_boats[0]
     all_moving_boats = all_moving_boats[0]
     # once a day has been classified, need to cluster again
@@ -186,31 +191,6 @@ def classify_directory(directory, classify_days=None):
 
     # sort the data by day
     daily_data = sorted(daily_data, key=lambda x: str(x[1]))
-
-    # for i, (files, day) in enumerate(daily_data):
-    #     print(f"Classifying day {day}")
-    #     if len(files) == 0 or files is None or day is None:
-    #         print(f"Nothing to do for day {day}")
-    #         continue
-    #     # process the day
-    #     static_boats, moving_boats, _ = process_day(
-    #         files,
-    #         cfg["STAT_DISTANCE_CUTOFF_PIX"],
-    #         cfg["MOVING_DISTANCE_CUTOFF_PIX"],
-    #         day,
-    #         i,
-    #         len(days),
-    #     )
-    #     # write to csv
-    #     write_to_csv(static_boats, day, "boat_detections.csv")
-    #     write_to_csv(moving_boats, day, "boat_detections.csv")
-    #     # move the tif files to the processed folder
-    #     os.makedirs(path.join(directory, "processed"), exist_ok=True)
-    #     for file in files:
-    #         target = path.join(directory, "processed", file)
-    #         if path.exists(target):
-    #             os.remove(target)
-    #         os.rename(path.join(directory, file), target)
 
     daily_results = (
         process_day(
@@ -316,7 +296,7 @@ def classify_text(
 
 def prepare_temp_dirs():
     remove(TEMP)
-    # remove(TEMP_PNG)
+    remove(TEMP_PNG)
     os.mkdir(TEMP)
     os.makedirs(TEMP_PNG, exist_ok=True)
 
@@ -345,12 +325,15 @@ def detect_from_tif(
         tif_dir, TEMP_PNG, file_name, tile_size=TILE_SIZE, stride=STRIDE
     )
     png_path = path.join(os.getcwd(), TEMP_PNG, f"{file_name[0:-4]}.png")
+    # time this bit
+    print("Segmenting image. Start:" + str(datetime.now()))
     images = ics.segment_image_for_classification_nosave(
         png_path, TEMP, tile_size=TILE_SIZE, stride=STRIDE
     )
+    print("Segmenting image. End:" + str(datetime.now()))
     # run the images through the model
     predictions = []
-    for idx, img in enumerate(images):
+    for idx, img in tqdm(enumerate(images), total=len(images)):
         [row, col, image, _, _] = img
         sub_image = np.moveaxis(image, 0, -1).squeeze()
         if np.all(sub_image == 0):
@@ -380,9 +363,9 @@ def detect_from_tif(
             prediction[:, 4],  # Confidence
             prediction[:, 5],  # Class
             prediction[:, 2],  # xWid
-            prediction[:, 3], 
-        ]  
-        # convert to float  
+            prediction[:, 3],
+        ]
+        # convert to float
         prediction = prediction.astype(np.float64)
         # adjust x and y for the full image
         prediction[:, 0] = prediction[:, 0] * TILE_SIZE + across
@@ -754,4 +737,14 @@ def pixel2latlong(classifications, tif) -> np.ndarray:
 
 
 if __name__ == "__main__":
+    # Test detect_from_tif with C:\ML_Software\Testing\moreton_20180715\20180715_moreton.tif
+    # results = detect_from_tif(
+    #     "C:\\ML_Software\\Testing\\moreton_20170703\\20170703_moreton.tif",
+    #     "C:\\ML_Software\\Testing\\moreton_20170703",
+    #     "C:\\yolov5",
+    #     "python",
+    #     "C:\\ML_Software\\data\\NN_weights.pt",
+    #     0.5,
+    # )
+
     main()
