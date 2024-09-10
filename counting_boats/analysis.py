@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
-import utils.heatmap as hm
+import boat_utils.heatmap as hm
 import json
-from utils.config import cfg
+from boat_utils.config import cfg
 import os
-import utils.image_cutting_support as ics
+import boat_utils.image_cutting_support as ics
 from PIL import Image, ImageDraw
 import zipfile
 

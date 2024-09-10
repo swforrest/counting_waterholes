@@ -6,7 +6,7 @@ import typer
 import os
 import yaml
 import numpy as np
-from utils import image_cutting_support as ics
+from boat_utils import image_cutting_support as ics
 
 app = typer.Typer()
 

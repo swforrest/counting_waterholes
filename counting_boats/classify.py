@@ -4,13 +4,13 @@ import os
 import argparse
 import time
 import typer
-import utils.planet_utils as pu
-import utils.classifier as cl
-import utils.auto_helpers as ah
+import boat_utils.planet_utils as pu
+import boat_utils.classifier as cl
+import boat_utils.auto_helpers as ah
 import pandas as pd
 import numpy as np
 import math
-from utils.config import cfg
+from boat_utils.config import cfg
 
 
 class COLORS:
