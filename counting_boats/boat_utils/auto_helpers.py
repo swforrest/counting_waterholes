@@ -541,9 +541,9 @@ def analyse(
         exp.log_metric("boats_total/moving", moving, step=batch)
         exp.log_metric("boats_total/stationary", stationary, step=batch)
         # get the number of days of images in this batch
-        exp.log_metric("days", len(all_coverage["date"].unique()), step=batch)
+        exp.log_metric("days", len(coverage["date"].unique()), step=batch)
         # get the coverage (percentage) of the area of interest for each images in this batch
-        for i, row in all_coverage.iterrows():
+        for i, row in coverage.iterrows():
             exp.log_metric(
                 f"coverage",
                 row["area_coverage"],

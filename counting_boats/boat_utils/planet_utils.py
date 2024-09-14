@@ -35,7 +35,7 @@ def PlanetSearch(
 
     Returns:
         a list of Planet items (json result from API)
-    
+
     Raises:
         Exception: if the API returns a non-200 status code
 
@@ -214,8 +214,8 @@ def PlanetDownload(orderID: str, aoi=None, date=None, downloadPath="tempDL"):
                 if chunk:
                     f.write(chunk)
                     progress += len(chunk)
-                    print(f"{orderID} \t Downloaded {progress} bytes", end="\r")
-    print()
+                    # print(f"{orderID} \t Downloaded {progress} bytes", end="\r")
+    print(f"{orderID} \t Downloaded {progress} bytes", end="\r")
     # extract the file
     return extract_zip(downloadFile, aoi, date)
 
@@ -264,6 +264,7 @@ def extract_zip(downloadFile, aoi=None, date=None):
             raise Exception(f"Error moving {tif} to {newfname}")
     return newfname
 
+
 def get_with_retry(uri, auth, retries=5):
     """
     Get a URI with retries, doubling the delay each time.
@@ -283,6 +284,7 @@ def get_with_retry(uri, auth, retries=5):
             return response
         delay *= 2
     return None
+
 
 def get_orders():
     """
@@ -309,7 +311,7 @@ def get_orders():
         with open("orders.json", "a") as f:
             f.write(response.text)
         orders += data["orders"]
-    
+
     return orders
 
 

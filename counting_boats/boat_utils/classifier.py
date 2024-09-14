@@ -333,7 +333,7 @@ def detect_from_tif(
     print("Segmenting image. End:" + str(datetime.now()))
     # run the images through the model
     predictions = []
-    for idx, img in tqdm(enumerate(images), total=len(images)):
+    for idx, img in tqdm(enumerate(images), total=len(images), mininterval=30):
         [row, col, image, _, _] = img
         sub_image = np.moveaxis(image, 0, -1).squeeze()
         if np.all(sub_image == 0):
@@ -377,6 +377,7 @@ def detect_from_tif(
         predictions.append(prediction)
     # convert to numpy
     predictions = np.concatenate(predictions)
+    print("Total Predictions: ", len(predictions))
     return remove_low_confidence(predictions, confidence_threshold)
     # ics.segment_image_for_classification(
     #     png_path, TEMP, tile_size=TILE_SIZE, stride=STRIDE
