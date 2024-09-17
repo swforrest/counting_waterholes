@@ -33,13 +33,9 @@ tasks:
 
     # Supplementary analysis, not all implemented
     plots:
-      confusion_matrix: True
-      boat_count_compare: True
+      confusion_matrix: True # Confusion matrix
+      boat_count_compare: True # Compare boat counts in each image detections to ground truth
       precision_recall: False
-      roc: False
-      mAP_50: False
-      mAP_75: False
-      mAP_90: False
     images:
       all_mistakes: False # Collate all mistakes into images with comparison
       subimage_confidence: False # Show confidence of detection for all subimages of a given boat (number of random boats to do this for)

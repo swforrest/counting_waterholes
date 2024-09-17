@@ -1,3 +1,11 @@
+"""
+This one was used create a collage image from multiple smaller images. 
+Not documented, not tested, but left here for reference.
+
+Author: Charlie Turner
+Date: 02/09/2024
+"""
+
 from PIL import Image
 from PIL import ImageDraw
 import os
@@ -99,4 +107,5 @@ def magnify():
 
 
 if __name__ == "__main__":
+    # main()
     magnify()

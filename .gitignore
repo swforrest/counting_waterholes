@@ -1,3 +1,4 @@
+ImgDetections
 .env
 case_studies
 documents
@@ -19,3 +20,6 @@ active_learning/data
 MoretonVal
 ValData.zip
 Testing
+2020results
+2024results
+testmemory
