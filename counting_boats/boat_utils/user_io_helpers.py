@@ -1,14 +1,22 @@
+"""
+This module contains functions for user interaction and input/output for a CLI tool for counting boats.
+Unfinished, untested, and possibly un-needed.
+
+Author: Charlie Turner
+Date: 17/09/2024
+"""
+
 import os
-import boat_utils.planet_utils as planet_utils
-import boat_utils.classifier as classifier
+from . import planet_utils as planet_utils
+from . import classifier as classifier
 import traceback
 import datetime
 import argparse
 import pandas as pd
-import boat_utils.area_coverage as ac
-import boat_utils.heatmap as hm
+from . import spatial_helpers as ac
+from . import heatmap as hm
 import json
-from config import cfg
+from .config import cfg
 
 """ Groups for reporting/analysing """
 groups = [

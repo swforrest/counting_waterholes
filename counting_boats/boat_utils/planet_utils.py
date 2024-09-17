@@ -1,10 +1,24 @@
+"""
+A collection of utilities to interact with the Planet API specifically for the counting boats project.
+Opinionated in that there are assumptions made about the desired workflow.
+
+The main functions are:
+- PlanetSearch: search for imagery in a given area of interest
+- PlanetSelect: select a subset of items from a search result
+- PlanetOrder: order a given search result
+- PlanetCheckOrder: check the status of an order
+
+Author: Charlie Turner
+Date: 17/09/2024
+"""
+
 import requests
 import os
 import yaml
 import json
 from .config import cfg
 from dotenv import load_dotenv
-from . import area_coverage
+from . import spatial_helpers
 import zipfile
 
 load_dotenv(override=True)
@@ -25,6 +39,7 @@ def PlanetSearch(
     Search a given area of interest for Planet imagery
 
     Args:
+
         polygon_file: the path to the polygon file
         min_date: the minimum date to search for (inclusive)
         max_date: the maximum date to search for (inclusive)
@@ -34,6 +49,7 @@ def PlanetSearch(
         Planet API key be set in environment variable
 
     Returns:
+
         a list of Planet items (json result from API)
 
     Raises:
@@ -71,12 +87,14 @@ def PlanetSelect(
     Select a subset of items from a search result
 
     Args:
+
         items: the list of items to select from
         polygon: the area of interest to check coverage against (polygon file)
         date: the date to select
         area_coverage: the minimum area coverage to select
 
     Returns:
+
         list of selected items
     """
     selected = None
@@ -115,12 +133,14 @@ def PlanetOrder(items: list, polygon_file: str, name: str):
     Order a given search result.
 
     Args:
+
         itemIDs: a list of item IDs to order
         polygon_file: a geojson file containing the area of interest to clip to
             must be of format: {"type": "Polygon", "coordinates": [[[lon, lat], ...]]}
-        name: the name of the order
+        name: the name to give the order
 
     Returns:
+
         a list of order IDs
     """
     pids = [item["id"] for item in items]
@@ -171,9 +191,11 @@ def PlanetCheckOrder(orderID: str):
     Check the status of a given order
 
     Args:
+
         orderID: the order ID to check
 
     Returns:
+
         the status of the order
     """
     uri = f"https://api.planet.com/compute/ops/orders/v2/{orderID}"
@@ -186,12 +208,14 @@ def PlanetDownload(orderID: str, aoi=None, date=None, downloadPath="tempDL"):
     Download a given order and move the tif file to the raw tiffs directory
 
     Args:
+
         orderID: the order ID to download
         aoi: the area of interest
         date: the date of the image
         downloadPath: the path to download the file to
 
     Returns:
+
         the name of the tif file after extracting
     """
     uri = f"https://api.planet.com/compute/ops/orders/v2/{orderID}"
@@ -225,11 +249,13 @@ def extract_zip(downloadFile, aoi=None, date=None):
     Extract the zip file and move the tif file to the raw tiffs directory
 
     Args:
+
         downloadFile: the path to the zip file
         aoi: the area of interest
         date: the date of the image
 
     Returns:
+
         the name of the tif file after extracting
     """
     if aoi is None or date is None:
@@ -270,11 +296,13 @@ def get_with_retry(uri, auth, retries=5):
     Get a URI with retries, doubling the delay each time.
 
     Args:
+
         uri: the URI to get
         auth: the auth tuple
         retries: the number of retries to attempt
 
     Returns:
+
         the response object
     """
     delay = 1
@@ -291,6 +319,7 @@ def get_orders():
     Get all orders from the Planet API
 
     Returns:
+
         a list of orders which are dictionaries. Contains the order ID, state, etc.
     """
     uri = f"https://api.planet.com/compute/ops/orders/v2"
@@ -320,6 +349,7 @@ def get_aois():
     Get all the areas of interest
 
     Returns:
+
         a list of area of interest names
     """
     return [
@@ -334,9 +364,11 @@ def get_polygon_file(aoi):
     Get the polygon for a given area of interest
 
     Args:
+
         aoi: the area of interest name
 
     Returns:
+
         the path to the polygon file
 
     """
@@ -355,17 +387,19 @@ def items_area_coverage(items, AOI) -> float:
     Given all the items for a particular day, and a polygon, compute the area coverage
 
     Args:
+
         items: a list of items
         AOI: the area of interest polygon
 
     Returns:
+
         the area coverage as a float
     """
     item_polys = [item["geometry"] for item in items]
     # combine the polygons
-    combined = area_coverage.combine_polygons(item_polys)
+    combined = spatial_helpers.combine_polygons(item_polys)
     # get the coverage
-    coverage = area_coverage.area_coverage_poly(AOI, combined)
+    coverage = spatial_helpers.area_coverage_poly(AOI, combined)
     return coverage
 
 

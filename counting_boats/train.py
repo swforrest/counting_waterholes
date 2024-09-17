@@ -1,19 +1,30 @@
 """
 Script for training pipeline for a model
+Can be easier to just use command line for training, but this script contains
+the other steps required - preparing the images, segmenting them, and describing the dataset
+
+Author: Charlie Turner
+Date: 16/09/2024
 """
 
 import typer
 import os
 import yaml
 import numpy as np
-from boat_utils import image_cutting_support as ics
+from  .boat_utils import image_cutting_support as ics
 
 app = typer.Typer()
 
 
-def parse_config(config: str):
+def parse_config(config: str) -> dict:
     """
     Parse the config file
+
+    Args:
+        config (str): path to the config file
+
+    Returns:
+        dict: the parsed config file
     """
     with open(config, "r") as f:
         return yaml.load(f, Loader=yaml.FullLoader)
@@ -24,7 +35,14 @@ def prepare(
     config: str = typer.Option("", help="Path to the config file"),
 ):
     """
-    Prepare the TIFF images for labelling
+    Prepare the TIFF images for labelling by converting them to PNGs
+    Does this for all TIF images in the raw_images folder specified in the config
+
+    Args:
+        config (str): path to the config
+
+    Returns:
+        None
     """
     cfg = parse_config(config)
     # Create the directory
@@ -56,7 +74,15 @@ def segment(
     ),
 ):
     """
-    Segment the images
+    Segment the images and labels into tiles for training.
+    Also split the images into training and validation sets.
+
+    Args:
+        config (str): path to the config file
+        train_val_split (float): proportion of images to use for training
+
+    Returns:
+        None
     """
     cfg = parse_config(config)
     # segment the images that have been prepared
@@ -188,7 +214,16 @@ def cull(
     config: str = typer.Option("", help="Path to the config file"),
 ):
     """
-    Remove images with no labels
+    YOLO recommends having 10% of images in the training set with no instances. 
+    We can't know how many tiles will have no instances before we segment the images,
+    so have to cull down after. This function will remove images with no labels until
+    10% of the training set has no labels
+
+    Args:
+        config (str): path to the config file
+
+    Returns:
+        None
     """
     num_images, num_tiles, num_labels, class_counts, num_tiles_no_labels = describe(
         config
@@ -239,6 +274,12 @@ def train(
 ):
     """
     Train the model
+
+    Args:
+        config (str): path to the config file
+
+    Returns:
+        None
     """
     cfg = parse_config(config)
     # train the model on the images in cfg["output_dir"]

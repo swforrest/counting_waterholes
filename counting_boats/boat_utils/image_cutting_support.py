@@ -29,6 +29,7 @@ class Classification(object):
         Instantiate the object.
 
         Args:
+
             left: The left edge of the classification
             right: The right edge of the classification
             top: The top edge of the classification
@@ -61,6 +62,7 @@ class Classification(object):
         Check if this classification is within a larger bounding box defined by the parameters of this function
 
         Args:
+
             left: The left edge of the classification
             right: The right edge of the classification
             top: The top edge of the classification
@@ -96,6 +98,7 @@ def add_margin(
     Pads an OPEN PIL (pillow/python imaging library) image on each edge by the amount specified.
 
     Args:
+
         pil_img: The open PIL image to pad.
         left: The number of pixels to pad the left edge of the image by.
         right: The number of pixels to pad the right edge of the image by.
@@ -104,6 +107,7 @@ def add_margin(
         color: What colour the padding should be as a tuple (0, 0, 0) for black (255, 255, 255) for white.
 
     Returns:
+
         The open PIL image after the padding has been applied
     """
     width, height = pil_img.size
@@ -116,6 +120,31 @@ def add_margin(
 
 
 def process_sub_image_with_labels(args):
+    """
+    segments an image and its labels into tiles for use in a neural network.
+    This function is intended to be used with multiprocessing.Pool
+
+    Args:
+
+        args (tuple): A tuple containing the following elements:
+            - i (int): The row index of the sub-image.
+            - j (int): The column index of the sub-image.
+            - stride (int): The stride value used for sub-image extraction.
+            - sub_image (np.ndarray): The sub-image array.
+            - image (np.ndarray): The original image array.
+            - allImageClassifications (list): List of all image classifications.
+            - remove_empty (bool): Flag indicating whether to remove empty images.
+            - im_outdir (str): Directory path to save processed images.
+            - labels_outdir (str): Directory path to save labels.
+            - empty_counter (multiprocessing.Value): Counter for empty images.
+            - skipped_counter (multiprocessing.Value): Counter for skipped images.
+            - progress (multiprocessing.Value): Progress counter.
+            - lock (multiprocessing.Lock): Lock for synchronizing access to shared resources.
+
+    Returns:
+
+        None
+    """
     (
         (
             i,
@@ -234,6 +263,7 @@ def segment_image(
     files in the IMGtxts directory which contain the annotations present in that sub image.
 
     Args:
+
         image: The large .tif that is to be segmented
         json_file: The json file that contains all the classifications for the image that were made in labelme.
         size: The desired size (both length and width) of the segmented images.
@@ -242,6 +272,7 @@ def segment_image(
             operation on the image/file.
 
     Returns:
+
         None
     """
     random.seed()
@@ -353,250 +384,22 @@ def segment_image(
         print(f"Skipped {skipped_counter.value} images")
         print(f"Empty {empty_counter.value} images")
 
-    # # Iterate over the original image and segment it into smaller images of the size specified in the parameters to
-    # # this function.
-    # for i in range(0, (int(height / stride) - (int(tile_size / stride)))):
-    #     for j in range(0, 1 + int(width / stride) - (int(tile_size / stride))):
-    #         cropImage = openImage.copy()
-    #         left = j * stride
-    #         top = i * stride
-    #         right = left + tile_size
-    #         bottom = top + tile_size
-
-    #         # Track how many of the image border pixels are "empty". This means it is black/its array index value is
-    #         # (0, 0, 0)
-    #         percentageEmpty = 0
-    #         total = 0
-
-    #         # Get all classifications in the original image that would be in the smaller image that has just been
-    #         # created.
-    #         subsetClassifications = [
-    #             classification
-    #             for classification in allImageClassifications
-    #             if classification.in_bounds(left, right, top, bottom)
-    #         ]
-
-    #         if remove_empty > 0 and (
-    #             subsetClassifications is None or subsetClassifications == []
-    #         ):
-    #             subsetClassifications = []
-    #             if random.uniform(0, 1) < remove_empty:
-    #                 continue
-
-    #         for f in range(0, tile_size - 1, 8):
-    #             # Iterate over the top edge of the image
-    #             if openImage.getpixel((left + f, top)) == (0, 0, 0):
-    #                 percentageEmpty += 1
-    #                 total += 1
-    #             else:
-    #                 total += 1
-    #             # Iterate over the left edge of the image
-    #             if openImage.getpixel((left, top + f)) == (0, 0, 0):
-    #                 percentageEmpty += 1
-    #                 total += 1
-    #             else:
-    #                 total += 1
-    #             # Iterate over the right edge of the image
-    #             if openImage.getpixel((right - 1, top + f)) == (0, 0, 0):
-    #                 percentageEmpty += 1
-    #                 total += 1
-    #             else:
-    #                 total += 1
-    #             # Iterate over the bottom edge of the image
-    #             if openImage.getpixel((left + f, bottom - 1)) == (0, 0, 0):
-    #                 percentageEmpty += 1
-    #                 total += 1
-    #             else:
-    #                 total += 1
-
-    #         # If more than 93% of the edge of the image is empty/black do NOT create a smaller image.
-    #         # NOTE: This is a magic number and I have no idea why it is this value
-    #         if percentageEmpty / total > 0.93:
-    #             continue
-
-    #         # Crop image
-    #         croppedImage = cropImage.crop((left, top, right, bottom))
-
-    #         if im_outdir is None:
-    #             im_outdir = os.path.join(os.getcwd(), "SegmentedImages")
-
-    #         # Save image
-    #         path = os.path.join(im_outdir, os.path.basename(image).split(".")[0])
-    #         croppedImage.save(
-    #             path + "_" + str(i) + "_" + str(j) + ".png",
-    #             quality=100,
-    #             compress_level=0,
-    #         )
-
-    #         # Write all of these classifications to a master set containing each time a classification appears in a
-    #         # smaller/segmented image.
-    #         im_name = (
-    #             os.path.basename(image).split(".")[0]
-    #             + "_"
-    #             + str(i)
-    #             + "_"
-    #             + str(j)
-    #             + ".txt"
-    #         )
-
-    #         if labels_outdir is None:
-    #             labels_outdir = os.path.join(os.getcwd(), "Labels")
-
-    #         path = os.path.join(labels_outdir, im_name)
-    #         outfile = open(path, "a+")
-
-    #         if len(subsetClassifications) > 0:
-    #             for elem in subsetClassifications:
-    #                 if type(elem) == type(1):
-    #                     continue
-    #                 if elem.get_label() == "tanker":
-    #                     continue
-    #                 if elem.get_label() == "boat":
-    #                     classLabel = 0
-    #                 else:
-    #                     classLabel = 1
-    #                 outfile.write(
-    #                     str(classLabel)
-    #                     + " "
-    #                     + str(
-    #                         (((elem.get_left() + elem.get_right()) / 2) - j * stride)
-    #                         / tile_size
-    #                     )
-    #                     + " "
-    #                     + str(
-    #                         (((elem.get_top() + elem.get_bottom()) / 2) - i * stride)
-    #                         / tile_size
-    #                     )
-    #                     + " "
-    #                     + str(
-    #                         (((elem.get_right()) - (elem.get_left())) / 2) / tile_size
-    #                     )
-    #                     + " "
-    #                     + str(((elem.get_bottom() - elem.get_top()) / 2) / tile_size)
-    #                     + "\n"
-    #                 )
-
-    #         outfile.close()
-    #     print(
-    #         str(
-    #             "Progress: " + str(int(float(i / ((height / stride) - 5)) * 100)) + "%"
-    #         ),
-    #         end="\r",
-    #     )
-    # print()
-
-
-# def segment_image_for_classification(image, data_path, tile_size, stride):
-#     """
-#     Segments a large .tif file into smaller .png files for use in a neural network.
-
-#     Args:
-#         image: The large .tif that is to be segmented
-#         size: The desired size (both length and width) of the segmented images.
-#         overlap_size: The desired amount of overlap that the segmented images should have
-
-#     Returns:
-#         None
-#     """
-#     # Open the image with pillow - this reads the image in as a 2d array
-#     openImage = Image.open(image)
-
-#     # Get width and height by indexing the image array
-#     width, height = openImage.size
-#     width = int(width)
-#     height = int(height)
-
-#     print(width, height)
-
-#     # Ensure that the image is divisible by the desired size with no remainder.
-#     if width % stride != 0 or height % stride != 0:
-#         raise Exception(
-#             "The image is not exactly divisible by the desired size of subset images"
-#         )
-
-#     # Ensure that the desired size is divisible by the desired overlap with no remainder.
-#     if tile_size % stride != 0:
-#         raise Exception(
-#             "The subset image size indicated is not divisible by the input overlap size"
-#         )
-
-#     # Iterate over the original image and segment it into smaller images of the size specified in the parameters to
-#     # this function.
-#     for i in range(0, (int(height / stride) - (int(tile_size / stride)))):
-#         for j in range(0, 1 + int(width / stride) - (int(tile_size / stride))):
-#             cropImage = openImage.copy()
-#             left = j * stride
-#             top = i * stride
-#             right = left + tile_size
-#             bottom = top + tile_size
-
-#             # Track how many of the image border pixels are "empty". This means it is black/it's array index value is
-#             # (0, 0, 0)
-#             percentageEmpty = 0
-#             total = 0
-
-#             for f in range(0, tile_size - 1, 8):
-#                 # Iterate over the top edge of the image
-#                 if openImage.getpixel((left + f, top)) == (0, 0, 0):
-#                     percentageEmpty += 1
-#                     total += 1
-#                 else:
-#                     total += 1
-#                 # Iterate over the left edge of the image
-#                 if openImage.getpixel((left, top + f)) == (0, 0, 0):
-#                     percentageEmpty += 1
-#                     total += 1
-#                 else:
-#                     total += 1
-#                 # Iterate over the right edge of the image
-#                 if openImage.getpixel((right - 1, top + f)) == (0, 0, 0):
-#                     percentageEmpty += 1
-#                     total += 1
-#                 else:
-#                     total += 1
-#                 # Iterate over the bottom edge of the image
-#                 if openImage.getpixel((left + f, bottom - 1)) == (0, 0, 0):
-#                     percentageEmpty += 1
-#                     total += 1
-#                 else:
-#                     total += 1
-
-#             # If more than 93% of the edge of the image is empty/black do NOT create a smaller image.
-#             if percentageEmpty / total > 0.93:
-#                 continue
-
-#             # Crop image
-#             croppedImage = cropImage.crop((left, top, right, bottom))
-
-#             # Save image
-#             # make sure data_path exists
-#             if not os.path.exists(data_path):
-#                 os.makedirs(data_path)
-#             savePath = os.path.join(data_path, os.path.basename(image).split(".")[0])
-#             croppedImage.save(
-#                 savePath + "_" + str(i) + "_" + str(j) + ".png",
-#                 quality=100,
-#                 compress_level=0,
-#             )
-
-#         print(
-#             str(
-#                 "Progress: " + str(int(float(i / ((height / stride) - 5)) * 100)) + "%"
-#             ),
-#             end="\r",
-#         )
 
 def segment_image_for_classification_nosave(image, data_path, tile_size, stride):
     """
     Segments a large .tif file into smaller .png files for use in a neural network.
+    Does not save the images to disk, but returns them as an array of views into 
+    a larger numpy array.
 
     Args:
+
         image: The large .tif that is to be segmented
         tile_size: The desired size (both length and width) of the segmented images.
         data_path: The path to the directory where the segmented images will be saved.
         stride: The desired amount of overlap that the segmented images should have
 
     Returns:
+
         The images as an array with:
             i, j, sub_image, image, data_path
     """
@@ -648,6 +451,27 @@ def segment_image_for_classification_nosave(image, data_path, tile_size, stride)
 
 
 def process_sub_image(args):
+    """
+    segments an image into tiles for use in a neural network.
+    This function is intended to be used with multiprocessing.Pool
+
+    Args:
+
+        args (tuple): A tuple containing the following elements:
+            - (i, j, sub_image, image, data_path) (tuple): 
+                - i (int): The row index of the sub-image.
+                - j (int): The column index of the sub-image.
+                - sub_image (np.ndarray): The sub-image array.
+                - image (str): The path to the original image file.
+                - data_path (str): The directory path to save processed images.
+            - skipped_counter (multiprocessing.Value): Counter for skipped images.
+            - progress (multiprocessing.Value): Progress counter.
+            - lock (multiprocessing.Lock): Lock for synchronizing access to shared resources.
+
+    Returns:
+
+        None
+    """
     (i, j, sub_image, image, data_path), skipped_counter, progress, lock = args
     sub_image = np.moveaxis(sub_image, 0, -1).squeeze()
     if np.all(sub_image == 0):
@@ -670,12 +494,14 @@ def segment_image_for_classification(image, data_path, tile_size, stride):
     Segments a large .tif file into smaller .png files for use in a neural network.
 
     Args:
+
         image: The large .tif that is to be segmented
         tile_size: The desired size (both length and width) of the segmented images.
         data_path: The path to the directory where the segmented images will be saved.
         stride: The desired amount of overlap that the segmented images should have
 
     Returns:
+
         None
     """
     # Open the image with pillow - this reads the image in as a 2d array
@@ -743,31 +569,6 @@ def segment_image_for_classification(image, data_path, tile_size, stride):
                 pass
         print(f"Skipped {skipped_counter.value} images")
 
-    # for i in range(sub_images.shape[0]):
-    #     for j in range(sub_images.shape[1]):
-    #         sub_image = sub_images[i, j]
-    #         sub_image = np.moveaxis(sub_image, 0, -1).squeeze()
-    #         # don't save if the image is empty
-    #         if np.all(sub_image == 0):
-    #             skipped += 1
-    #             continue
-    #         out_image = Image.fromarray(sub_image)
-    #         save_path = os.path.join(
-    #             data_path, f"{os.path.basename(image).split('.')[0]}_{i}_{j}.png"
-    #         )
-    #         out_image.save(save_path)
-    #         print(
-    #             str(
-    #                 "Progress: "
-    #                 + str(int(float(i * sub_images.shape[1] + j) / num_images * 100))
-    #                 + "%. Skipped: "
-    #                 + str(skipped)
-    #             ),
-    #             end="\r",
-    #         )
-    # exit(1)
-
-
 def create_padded_png(
     raw_dir, output_dir, file_name, tile_size=416, stride=104, rename=False
 ):
@@ -776,11 +577,16 @@ def create_padded_png(
     the images expecting that the size of sub-images created from this images will be 416x416 pixels.
 
     Args:
+
         raw_dir: Directory where raw .tif files downloaded from Planet are located
         output_dir: The name of the directory where the padded .png files will be created.
         file_name: The name of the .tif file that is to be padded.
+        tile_size: The size of the sub-images that will be created from this image.
+        stride: The amount of overlap that the sub-images will have.
+        rename: The name that the padded image will be saved as. If False, the image will be saved as the original name but with a .png extension.
 
     Returns:
+
         None
     """
     rawImageDirectory = os.path.join(os.getcwd(), raw_dir)
@@ -814,49 +620,15 @@ def create_padded_png(
     # Get new width and height in preparation of padding the image
     width, height = colourImage.size
 
-    # Calculate required padding to make image divisible by 416
-    subImageSize = tile_size
-    overlapAmount = stride
-
-    # Calculate vertical and horizontal padding
-
-    pad = (
-        subImageSize - overlapAmount
-    )  # The minimum amount of padding to add to the image
-    # use 'pad' padding on left and top
-    # fix right and bottom so that width and height % (n*stride + tile_size) = 0
-    newW = width + (2 * pad)
-    # workout right pad
-    rem = newW % (subImageSize + overlapAmount)  # remainder of width
-    rightPad = subImageSize + overlapAmount - rem
-
-    newH = height + (2 * pad)
-    # workout bottom pad
-    rem = newH % (subImageSize + overlapAmount)  # remainder of height
-    bottomPad = subImageSize + overlapAmount - rem
-
-    # widthPadding = (
-    #     math.ceil(width / stride) * stride
-    # ) - width  # fix to make divisible by stride
-    # heightPadding = (
-    #     math.ceil(height / stride) * stride
-    # ) - height  # fix to make divisible by stride
-
-    # Calculate individual padding for each edge
-    # leftPad = math.floor(widthPadding / 2)
-    # leftPad = pad
-    # rightPad = math.ceil(widthPadding / 2)
-    # topPad = math.floor(heightPadding / 2)
-    # topPad = pad #math.floor(heightPadding / 2)
-    # bottomPad = math.ceil(heightPadding / 2)
+    leftPad, rightPad, topPad, bottomPad = get_required_padding(colorImagePath, tile_size, stride)
 
     # Pad the edges (add_margin is a function in imageCuttingSupport.py that adds a margin to an opened PIL image.)
     im_new = add_margin(
         colourImage,
-        pad,
-        pad + rightPad,
-        pad,
-        pad + bottomPad,
+        leftPad,
+        rightPad,
+        topPad,
+        bottomPad,
         (0, 0, 0),
     )
 
@@ -882,11 +654,13 @@ def create_unpadded_png(raw_dir, output_dir, file_name):
     Creates an image which is NOT padded but converts raw .tif to .png files.
 
     Args:
+
         raw_dir: Directory where raw .tif files downloaded from Planet are located
         output_dir: The name of the directory where the padded .png files will be created.
         file_name: The name of the .tif file that is to be padded.
 
     Returns:
+
         None
     """
     rawImageDirectory = os.path.join(os.getcwd(), raw_dir)
@@ -905,16 +679,20 @@ def create_unpadded_png(raw_dir, output_dir, file_name):
     )
 
 
-def get_required_padding(filepath, tilesize=416, stride=104):
+def get_required_padding(filepath, tilesize=416, stride=104) -> tuple[int, int, int, int]:
     """
     Determines how much padding is required on each edge of an image so that the image lengths and widths will be
     divisible by 416 and that each part of the images will be seen by the neural networm 16 times in either training
     or classification.
 
     Args:
+
         filepath: The path of the file to evaluate.
+        tilesize: The size of the sub-images that will be created from this image.
+        stride: The amount of overlap that the sub-images will have.
 
     Returns:
+
         (L, R, T, B) - A tuple containing the padding required on the left (L), right (R), top (T), and bottom (b)
             of the images to make it suitable for use in the neural network.
     """
@@ -934,27 +712,31 @@ def get_required_padding(filepath, tilesize=416, stride=104):
     width = int(size.split(",")[0].split(" ")[-1])
 
     # Calculate individual padding for each edge
-    pad = tilesize - stride
-    # widthPadding = (math.ceil(width / stride) * stride) - width
-    # heightPadding = (math.ceil(height / stride) * stride) - height
+    # we have to go at least (tilesize/stride) * stride pixels in each direction
+    # in the case of 416/104, this is 4*104 = 416 padding. This means the first tile is all padding but the rest will be seen by the network properly
+    min_pad = (tilesize / stride) * stride
 
-    # leftPad = math.floor(widthPadding / 2)
-    # rightPad = math.ceil(widthPadding / 2)
-    # topPad = math.floor(heightPadding / 2)
-    # bottomPad = math.ceil(heightPadding / 2)
+    leftPad = min_pad
+    topPad = min_pad
+    bottomPad = 0
+    rightPad = 0
 
-    leftPad = pad
-    topPad = pad
+    min_h = height + 2 * min_pad
+    min_w = width + 2 * min_pad
+    # ensure the image will be divisible by the tile size and stride
+    if min_h % tilesize != 0:
+        topPad += tilesize - (min_h % tilesize)
+    if min_w % tilesize != 0:
+        leftPad += tilesize - (min_w % tilesize)
+    
+    # ensure integer padding
+    leftPad = int(leftPad)
+    rightPad = int(rightPad)
+    topPad = int(topPad)
+    bottomPad = int(bottomPad)
 
-    newW = width + (2 * pad)
-    rem = newW % (tilesize + stride)  # remainder of width
-    rightPad = tilesize + stride - rem
 
-    newH = height + (2 * pad)
-    rem = newH % (tilesize + stride)  # remainder of height
-    bottomPad = tilesize + stride - rem
-
-    return leftPad, rightPad + pad, topPad, bottomPad + pad
+    return leftPad, rightPad, topPad, bottomPad
 
 
 def get_crs(filepath: str) -> int:
@@ -962,9 +744,11 @@ def get_crs(filepath: str) -> int:
     Get the EPSG code of the coordinate reference system of a .tif file.
 
     Args:
+
         filepath: The path of the file to evaluate.
 
     Returns:
+
         The EPSG code of the coordinate reference system of the .tif file.
     """
     ds = gdal.Open(filepath)
@@ -984,12 +768,14 @@ def pixel2coord(x: int, y: int, original_image_path: str) -> tuple[float, float]
         Returns global coordinates to pixel center using base-0 raster index
 
         Args:
+
             x: The x coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
             y: The y coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
             original_image_path: The path of the file to evaluate - a .tif files should be located here. This file will
                 also need geospatial metadata. Images obtained from Planet have the required metadata.
     e
         Returns:
+
             (xp, yp) - A tuple containing the global coordinates of the provided pixel coordinates.
     """
     ds = gdal.Open(original_image_path)
@@ -1006,12 +792,16 @@ def coord2pixel(
     Returns pixel coordinates to pixel center using base-0 raster index
 
     Args:
+
+    
         x: The x coordinate (global coordinates) of the object in the image to be converted to pixel coordinates.
         y: The y coordinate (global coordinates) of the object in the image to be converted to pixel coordinates.
         original_image_path: The path of the file to evaluate - a .tif files should be located here. This file will
             also need geospatial metadata. Images obtained from Planet have the required metadata.
 
     Returns:
+
+
         (xp, yp) - A tuple containing the pixel coordinates of the provided global coordinates.
     """
     ds = gdal.Open(original_image_path)
@@ -1026,10 +816,13 @@ def coord2latlong(x: float, y: float, crs: int = 32756) -> tuple[float, float]:
     Converts global coordinates to latitude/longitude coordinates
 
     Args:
+
         x: The x coordinate in a pair of global coordinates.
         y: The y coordinate in a pair of global coordinates.
+        crs: The coordinate reference system of the global coordinates.
 
     Returns:
+
         (long, lat) - A tuple containing the longitude and latitude at the provided global coordinates.
     """
     proj = pyproj.Transformer.from_crs(crs, 4326, always_xy=True)
@@ -1042,10 +835,12 @@ def latlong2coord(lat, long, crs: int = 32756) -> tuple[float, float]:
     Converts latitude/longitude coordinates to global coordinates
 
     Args:
+
         long: The longitude coordinate in a pair of latitude/longitude coordinates.
         lat: The latitude coordinate in a pair of latitude/longitude coordinates.
 
     Returns:
+
         (x, y) - A tuple containing the global coordinates at the provided latitude/longitude coordinates.
     """
     proj = pyproj.Transformer.from_crs(4326, crs)
@@ -1058,9 +853,11 @@ def get_date_from_filename(filename: str):
         Get the date from a file. The file must have a date in the format "yyyymmdd_" at the start of the filename .
     first
         Args:
+
             filename: The name of the file to extract the date from.
 
         Returns:
+
             The date in the format "dd/mm/yyyy" from the filename.
     """
     str_date = filename.split("_")[0]
@@ -1077,9 +874,11 @@ def get_cartesian_top_left(metadata_components: list[str]) -> tuple[float, float
     Calculates the lat long at the top left point of a given satellite image
 
     Args:
+
         metadata_components: The metadata components stripped from a .tif file
 
     Returns:
+
         (long, lat) - A tuple containing the longitude and latitude at the top left point of the satellite image.
     """
     for component in metadata_components:
@@ -1143,9 +942,11 @@ def get_cartesian_bottom_left(metadata_components: list[str]) -> tuple[float, fl
     Calculates the lat long at the bottom left point of a given satellite image
 
     Args:
+
         metadata_components: The metadata components stripped from a .tif file
 
     Returns:
+
         (long, lat) - A tuple containing the longitude and latitude at the bottom left point of the satellite image
     """
     for component in metadata_components:
@@ -1178,9 +979,11 @@ def get_cartesian_bottom_right(metadata_components: list[str]) -> tuple[float, f
     Calculates the lat long at the bottom right point of a given satellite image
 
     Args:
+
         metadata_components: The metadata components stripped from a .tif file
 
     Returns:
+
         (long, lat) - A tuple containing the longitude and latitude at the bottom right point of the
             satellite image.
     """
@@ -1214,9 +1017,11 @@ def metadata_get_w_h(metadata_components: list[str]) -> tuple[int, int] | None:
     Obtains the width and height of a given satellite image
 
     Args:
+
         metadata_components: The metadata components stripped from a .tif file
 
     Returns:
+
         (width, height) - A tuple containing the width and height of a given satellite image.
     """
     for component in metadata_components:

@@ -7,7 +7,7 @@ import scipy.spatial
 import json
 import pandas as pd
 from datetime import datetime
-from boat_utils import image_cutting_support as ics
+from . import image_cutting_support as ics
 from .config import cfg
 from tqdm import tqdm
 
@@ -190,9 +190,9 @@ def classify_directory(directory, classify_days=None):
     )
 
     # sort the data by day
-    daily_data = sorted(daily_data, key=lambda x: str(x[1]))
+    daily_data = sorted(daily_data, key=lambda x: x[1])
 
-    daily_results = (
+    daily_results = [
         process_day(
             files,
             cfg["STAT_DISTANCE_CUTOFF_PIX"],
@@ -202,7 +202,8 @@ def classify_directory(directory, classify_days=None):
             len(days),
         )
         for i, (files, day) in enumerate(daily_data)
-    )
+    ]
+
     # write to csv
     for static_boats, moving_boats, day in daily_results:
         write_to_csv(static_boats, day, "boat_detections.csv")
@@ -653,6 +654,7 @@ def write_to_csv(classifications, day, filepath) -> None:
     Returns:
         None
     """
+    print(f"Writing {len(classifications)} boats to {filepath} for {day}")
     # Write to output csv
     # Create output csv if it doesn't exist
     filepath = os.path.join(cfg["output_dir"], filepath)

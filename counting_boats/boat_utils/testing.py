@@ -1,5 +1,15 @@
 """
-Utility functions for training/validation pipeline.  Includes: Preparing tif files for labelling Using labelme 
+Utility functions for training/validation pipeline.  
+Includes: 
+    - prepare: Prepare the images for segmentation
+    - segment: Segment the images
+    - run_detection: Run the YoloV5 detection
+    - backwards_annotation: Generate labelme style annotations from the classifications
+    - compare_detections_to_ground_truth: Match up labels and detections, compare them, and save the results
+    - confusion_matrix: Summarize the results of the comparison
+
+Author: Charlie Turner
+Date: 17/09/2024
 """
 
 import os
@@ -13,6 +23,7 @@ import random
 from .classifier import cluster, process_clusters, read_classifications, pixel2latlong
 from .config import cfg
 from . import image_cutting_support as ics
+from . import heatmap as hm
 from PIL import Image, ImageDraw
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
@@ -25,10 +36,12 @@ def prepare(run_folder, config):
     Also rename tif files if required.
 
     Args:
+
         run_folder (str): The folder to prepare
         config (dict): The configuration dictionary
 
     Returns:
+
         None
     """
     img_folder = config["raw_images"]  # folder with the tif files
@@ -76,10 +89,12 @@ def segment(run_folder, config):
     Places segmented images in the 'SegmentedImages' folder, and Labels in the 'Labels' folder.
 
     Args:
+
         run_folder (str): The folder to segment
         config (dict): The configuration dictionary
 
     Returns:
+
         None
     """
     tile_size = config.get("img_size", 416)
@@ -125,6 +140,7 @@ def run_detection(run_folder, run_config):
     the detections to a sibling directory for analysis.
 
     Args:
+
         run_folder (str): The folder to run detection on.
         run_config (dict): The configuration dictionary.
 
@@ -132,6 +148,7 @@ def run_detection(run_folder, run_config):
         Exception: If there is an error running detection on a directory.
 
     Returns:
+
         None
     """
     weights = run_config["weights"]
@@ -182,6 +199,15 @@ def backwards_annotation(run_folder, config):
     Generate labelme style annotations (json) from the classifications.
     1. Read classifications
     2. Generate json file {image}_labelme_auto.json with:
+
+    Args:
+
+        run_folder (str): The folder to run detection on.
+        config (dict): The configuration dictionary.
+
+    Returns:
+
+        None
     """
     detection_dir = os.path.join(config["path"], config["classifications"])
     for root, _, files in os.walk(detection_dir):
@@ -281,10 +307,12 @@ def compare_detections_to_ground_truth(run_folder, config):
     Match up labels and detections, compare them, and save the results
 
     Args:
+
         run_folder (str): The folder to run detection on.
         config (dict): The configuration dictionary.
 
     Returns:
+
         None
 
     """
@@ -305,10 +333,12 @@ def confusion_matrix(run_folder, config):
     Summarize the results of the comparison. Reads all csvs and creates a confusion matrix
 
     Args:
+
         run_folder (str): The folder to run detection on.
         config (dict): The configuration dictionary.
 
     Returns:
+
         None
     """
     if os.path.exists(os.path.join(run_folder, "all_boats.csv")):
@@ -357,10 +387,12 @@ def process_image(
     Compare the detections and labels for a single image
 
     Args:
+
         detections (str): The directory of detections for the iamge
         labels_root (str): The root directory of labels
 
     Returns:
+
         list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]
     """
     # labels will be in a parallel directory to detections
@@ -424,10 +456,12 @@ def compare(ml: np.ndarray, manual: np.ndarray, cutoff):
     , and this boat should be noted as being in both sets
 
     Args:
+
         ml: list of clusters in form [x, y, confidence, class, width, height, filename]
         manual: list of clusters in form [x, y, confidence, class, width, height, filename]
 
     Returns:
+
         list of clusters in form [x, y, ml_class, manual_class]
     """
     all_clusters, all_points = combine_detections_and_labels(ml, manual)
@@ -487,10 +521,12 @@ def combine_detections_and_labels(ml, manual):
     Combine the detections and labels into one list of annotated clusters for comparison
 
     Args:
+
         ml: list of clusters in form [x, y, confidence, class, width, height, filename]
         manual: list of clusters in form [x, y, confidence, class, width, height, filename]
 
     Returns:
+
         list of clusters in form [x, y, confidence, class, width, height, filename, source]
     """
     # add "ml" to the end of each ml cluster
@@ -518,10 +554,12 @@ def comparisons_to_csv(comparisons, filename):
     Write the comparisons to a csv file
 
     Args:
+
         comparisons: list of clusters in form [x, y, ml_class, manual_class]
         filename: the name of the file to write to
 
     Returns:
+
         None
 
     """
@@ -534,10 +572,12 @@ def classifications_to_lat_long(run_folder, run_config):
     Convert x and y of image classifications to lat/long and saves csv
 
     Args:
+
         run_folder (str): The folder to run detection on.
         run_config (dict): The configuration dictionary.
 
     Returns:
+
         None
     """
     # Initialise dataframe
@@ -601,10 +641,12 @@ def boat_count_compare(run_folder, config):
     Column graph with each group being one image, showing number of labelled and number of detected boats next to each other
 
     Args:
+
         run_folder (str): The folder to run detection on.
         config (dict): The configuration dictionary.
 
     Returns:
+
         None
     """
     if os.path.exists(os.path.join(run_folder, "all_boats.csv")):
@@ -653,10 +695,12 @@ def plot_boats(csvs: str, imgs: str, **kwargs):
     given a directory of csvs, plot the boats on the images and save the images
 
     Args:
+
         csvs: directory containing csvs. Must be of form: x, y, ml_class, manual_class
         imgs: base folder with the images (png), or a folder with subfolders with images (stitched.png)
 
     Returns:
+
         None
     """
     if "outdir" in kwargs:
@@ -828,10 +872,12 @@ def all_mistakes(run_folder, config):
     to a new directory with the type of mistake (e.g "false_positive")
 
     Args:
+
         run_folder (str): The folder to run detection on.
         config (dict): The configuration dictionary.
 
     Returns:
+
         None
     """
     output_dir = os.path.join(run_folder, "mistakes")
@@ -1022,6 +1068,15 @@ def subimage_confidence(run_folder, config):
     """
     For config["subimage_confidence"] (int) boats, plot the 16 squares around the boat
     and their confidence scores.
+
+    Args:
+
+        run_folder (str): The folder to run detection on.
+        config (dict): The configuration dictionary.
+
+    Returns:
+        
+        None
     """
     class_dir = config["classifications"]
     days = [
@@ -1126,12 +1181,20 @@ def subimage_confidence(run_folder, config):
             im.save(subimg_path)
 
 
-import boat_utils.heatmap as hm
 
 
 def coverage_heatmap(run_folder, config):
     """
     Generate the coverage heatmap for all TIF files used in the run
+
+    Args:
+    
+            run_folder (str): The folder to run detection on.
+            config (dict): The configuration dictionary.
+
+    Returns:
+    
+            None
     """
     tif_dir = config["raw_images"]
     # walk
@@ -1144,7 +1207,7 @@ def coverage_heatmap(run_folder, config):
     tifs = [tif for tif in tifs if "composite" not in tif]
     tifs = tifs[0:1]
 
-    polygons = [hm.polygons_from_tif(tif) for tif in tifs]
+    polygons = [hm.polygon_from_tif(tif) for tif in tifs]
     # flatten
     polygons = [poly for sublist in polygons for poly in sublist]
     # convert to
@@ -1159,11 +1222,13 @@ def all_possible_imgs(x, y, stride=104):
     return a list of tuples (row, col) that would contain the given x and y coords
 
     Args:
+
         x: x coord
         y: y coord
         stride: stride of the images
 
     Returns:
+
         list of tuples (row, col)
     """
     row = y // stride - 1
@@ -1188,8 +1253,12 @@ def segregate(directory):
     Segregate the directory by day and image
 
     Args:
+
         directory (str): The directory to segregate
 
+    Returns:
+    
+            None
     """
     # separate by day
     days = segregate_by_day(directory)
@@ -1204,10 +1273,12 @@ def segregate_by_day(directory, into=None):
     Files must have the date as the last part of the filename.
 
     Args:
+
         directory (str): The directory to segregate
         into (str): The directory to move the files into
 
     Returns:
+
         list of directories
     """
     if into is None:
@@ -1236,10 +1307,12 @@ def segregate_by_image(directory, into=None):
     Files must have the image name as the middle part of the filename.
 
     Args:
+
         directory (str): The directory to segregate
         into (str): The directory to move the files into
 
     Returns:
+
         list of directories
     """
     if into is None:

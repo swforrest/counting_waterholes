@@ -1,12 +1,19 @@
+"""
+A few analysis functions. These are not fully polished at all and poorly documented but are left here for reference.
+
+Author: Charlie Turner
+Date: 19/03/2024
+"""
+
 import numpy as np
 import pandas as pd
-import boat_utils.heatmap as hm
-import json
-from boat_utils.config import cfg
 import os
-import boat_utils.image_cutting_support as ics
-from PIL import Image, ImageDraw
 import zipfile
+import json
+from PIL import Image, ImageDraw
+from .boat_utils.config import cfg
+from .boat_utils import heatmap as hm
+from .boat_utils import image_cutting_support as ics
 
 import matplotlib.pyplot as plt
 
@@ -28,6 +35,7 @@ def get_data(file):
     df["aoi"] = df.apply(
         lambda x: aoi_of_point(x["latitude"], x["longitude"], None), axis=1
     )
+
     return df
 
 

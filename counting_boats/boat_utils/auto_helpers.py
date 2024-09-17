@@ -3,18 +3,18 @@ This module contains functions which help with the automatic detection pipeline.
 """
 
 import traceback
-from boat_utils.config import cfg
+from .config import cfg
 import pandas as pd
 import os
 import datetime
 import json
 import shutil
-from boat_utils import classifier
-from boat_utils import planet_utils
-from boat_utils import heatmap as hm
-from boat_utils import area_coverage as ac
-from boat_utils import planet_utils
-from boat_utils.image_cutting_support import latlong2coord
+from . import classifier
+from . import planet_utils
+from . import heatmap as hm
+from . import spatial_helpers as ac
+from . import planet_utils
+from .image_cutting_support import latlong2coord
 import numpy as np
 import base64
 import comet_ml
@@ -44,6 +44,9 @@ def get_history(csv_path: str) -> pd.DataFrame:
 
 
 def save_history(history, csv_path):
+    """
+    Save the history DataFrame to the csv file at the provided path.
+    """
     history.to_csv(csv_path, index=False)
 
 
@@ -112,7 +115,8 @@ def search(
 
 def select(aoi: str, options: list, dates: list) -> list[list]:
     """
-    Select images from the given options that are not in history for the AOI.
+    Select images from the given options that are not in history for the AOI, and within 
+    the provided dates.
 
     Args:
         aoi: Area of Interest name
@@ -120,7 +124,7 @@ def select(aoi: str, options: list, dates: list) -> list[list]:
         dates: list of dates that we want to select for
 
     Returns:
-        list of items for each date
+        list of: list of items for each date. 
 
     """
     polygon = planet_utils.get_polygon_file(aoi)
@@ -160,7 +164,6 @@ def order(aoi: str, items: list, csv_path: str) -> str:
 
     Returns:
         order_id: the ID of the order placed
-
     """
     polygon = planet_utils.get_polygon_file(aoi)
     if polygon is None:
@@ -212,17 +215,17 @@ def download(
 ) -> pd.DataFrame:
     """
     Download all completed orders from planet, as per the history csv path
-    Places the downloaded files in the download_path.
+    Places the downloaded files in the download_path. If start_date and end_date are provided,
+    will only download orders from between those dates.
 
     Args:
         csv_path: path to the history csv. Will check this to ensure we don't download the same file twice.
         download_path: path to store the downloaded zip files
-        download_ids: list of order_ids to download. If None, will attempt download all orders that are in the "ordered" state.
         start_date: start date to download from (inclusive)
         end_date: end date to download to (inclusive)
 
     Returns:
-        Remaining orders that haven't been downloaded yet
+        Any remaining orders that haven't been downloaded yet
     """
     history = get_history(csv_path)
     orders = planet_utils.get_orders()
@@ -305,16 +308,25 @@ def download(
                 "downloaded"
             )
             save_history(history, csv_path)
+    for order in [o for o in orders if o["state"] == "failed"]:
+        # failed orders need to be marked as 'failed'
+        history.loc[history["order_id"] == order["id"], "order_status"] = "failed"
+        save_history(history, csv_path)
+
     # return remaining orders
     return history[history["order_status"] == "ordered"]
 
 
 def extract(download_path, start_date=None, end_date=None):
     """
-    Extract any downloaded images we haven't processed.
+    Extract any downloaded images we haven't processed. Will 
+    extract all images if start_date and end_date are None, otherwise
+    will only extract images between those dates.
 
     Args:
         download_path: path to the downloaded zip files
+        start_date: start date to extract from
+        end_date: end date to extract to
 
     Returns:
         None
@@ -345,7 +357,15 @@ def count(save_coverage=False, days=None) -> None:
     """
     Run the classifier to count boats in the extracted images
 
-    Essentially calls the main function of the classifier module. Most of the time here we will save coverage later.
+    Essentially calls the main function of the classifier module. Most of the time here we will save coverage later, 
+    so we don't need to save it here. 
+
+    Args:
+        save_coverage: whether to save the coverage of the images
+        days: the number of days to count boats for
+
+    Returns:
+        None
     """
     classifier.main(save_coverage=save_coverage, days=days)
     # add the aoi column to the classifications and save again
@@ -425,7 +445,8 @@ def analyse(
     batch=0,
 ):
     """
-    do a series of analyses on the data and save it in the output directory
+    Do a series of analyses on the data and save it in the output directory. Also log to comet if an experiment is provided.
+    Lots of the time parts of this function will be commented out, as we don't always want to do everything because its expensive.
 
     Args:
         csv_path: path to the history csv
@@ -434,11 +455,11 @@ def analyse(
         end_date: end date to analyse to
         id: id to prefix the output files with
         exp: comet experiment to log to
+        batch: the batch number
 
     Returns:
         None
     """
-    #
     all_coverage = pd.read_csv(coverage_path)
     all_coverage["date"] = pd.to_datetime(all_coverage["date"])
     boats = pd.read_csv(boat_csv_path)
@@ -556,11 +577,13 @@ def analyse(
 def archive(path: str, coverage_path: str, start_date=None, end_date=None):
     """
     Deal with folder of raw data after processing. Send zip files to archive,
-    delete the folders, update coverage file.
+    delete the folders, update coverage file. Start and end dates are optional.
 
     Args:
         path: path to the folder of raw data
         coverage_path: path to the coverage csv
+        start_date: start date to archive from
+        end_date: end date to archive to
 
     Returns:
         None

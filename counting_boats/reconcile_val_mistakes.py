@@ -2,6 +2,9 @@
 Simple GUI used to reconcile issues with ML detections for labelled images.
 1. Displays an image, and three buttons: "Boat", "Moving Boat", "Neither"
 2. User clicks the appropriate button, and the result is saved to a CSV file, and that image's labels updated.
+
+Not super useful but left here for reference. General usage was to:
+    label images -> run ML inference -> check labels with this tool -> train the model
 """
 
 import os
@@ -11,7 +14,7 @@ import json
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 from PIL import Image
-from boat_utils.config import cfg
+from .boat_utils.config import cfg
 
 label_json_str = """{
       "label": "boat",
@@ -29,15 +32,23 @@ label_json_str = """{
       "description": "",
       "shape_type": "rectangle",
       "flags": {}
-    }"""
+    }
+    """
 
-folder = input("Enter img folder: ")
-labels = input("Enter labels root folder: ")
 
-fig, ax = plt.subplots()
-plt.subplots_adjust(bottom=0.2)
-plt.axis("off")
-title = plt.title("Select what you see in the center of the square.")
+def get_inputs():
+    folder = input("Enter img folder: ")
+
+    labels = input("Enter labels root folder: ")
+    return folder, labels
+
+
+def build_ui():
+
+    fig, ax = plt.subplots()
+    plt.subplots_adjust(bottom=0.2)
+    plt.axis("off")
+    title = plt.title("Select what you see in the center of the square.")
 
 
 def all_possible_imgs(x, y):
@@ -161,19 +172,22 @@ class Reconcile:
         self.write_result(-1)
         self.display_next_image()
 
+if __name__ == "__main__":
+    folder, labels = get_inputs()
+    build_ui()
 
-callback = Reconcile(folder)
-# build the buttons
-boat_btn_ax = plt.axes([0.1, 0.05, 0.2, 0.075])
-boat_btn = Button(boat_btn_ax, "Boat")
-boat_btn.on_clicked(callback.is_boat)
+    callback = Reconcile(folder)
+    # build the buttons
+    boat_btn_ax = plt.axes([0.1, 0.05, 0.2, 0.075])
+    boat_btn = Button(boat_btn_ax, "Boat")
+    boat_btn.on_clicked(callback.is_boat)
 
-moving_boat_btn_ax = plt.axes([0.4, 0.05, 0.2, 0.075])
-moving_boat_btn = Button(moving_boat_btn_ax, "Moving Boat")
-moving_boat_btn.on_clicked(callback.is_moving_boat)
+    moving_boat_btn_ax = plt.axes([0.4, 0.05, 0.2, 0.075])
+    moving_boat_btn = Button(moving_boat_btn_ax, "Moving Boat")
+    moving_boat_btn.on_clicked(callback.is_moving_boat)
 
-neither_btn_ax = plt.axes([0.7, 0.05, 0.2, 0.075])
-neither_btn = Button(neither_btn_ax, "Neither")
-neither_btn.on_clicked(callback.is_neither)
+    neither_btn_ax = plt.axes([0.7, 0.05, 0.2, 0.075])
+    neither_btn = Button(neither_btn_ax, "Neither")
+    neither_btn.on_clicked(callback.is_neither)
 
-plt.show()
+    plt.show()

@@ -1,19 +1,32 @@
+"""
+Testing/Validation Script
+
+Runs a variety of tasks to test the validity of a model. Designed to be used with labelled data.
+Config file should be a yaml file following the 'config_test.yaml' format.
+
+Author: Charlie Turner
+Date: 16/09/2024
+"""
+
 import pathlib
 from pathlib import Path
-
-pathlib.PosixPath = pathlib.WindowsPath
-from pathlib import Path
-
-temp = pathlib.PosixPath
-pathlib.PosixPath = pathlib.WindowsPath
 import os
-import boat_utils.testing as val_utils
 import argparse
 import yaml
 
+from .boat_utils import testing as val_utils
 
-def init_run(config_file: str):
-    # create a new folder
+
+def init_run(config_file: str) -> str:
+    """
+    Create a new run folder for the validation tasks
+
+    Args:
+        config_file (str): path to the config file
+
+    Returns:
+        str: path to the new run folder
+    """
     os.makedirs(os.path.join("runs", "val"), exist_ok=True)
     # name it "val" + the next number
     run_num = 0
@@ -34,6 +47,19 @@ def init_run(config_file: str):
 
 
 def run_tasks(tasks: dict, config: dict, level=0):
+    """
+    Run a series of tasks. Tasks is a dict of tasks, and any with the
+    value False will be skipped. Tasks can have subtasks, which will be run
+    recursively. Essentially tasks have to be functions in val_utils.
+
+    Args:
+        tasks (dict): dict of tasks to run (or not Run)
+        config (dict): config dict
+        level (int): level of recursion (do not set)
+
+    Returns:
+        None
+    """
     for task in tasks:
         if tasks[task] == False:
             print(f"{'  ' * level}Task '{task}' disabled, skipping...")

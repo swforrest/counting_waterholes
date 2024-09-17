@@ -22,7 +22,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from osgeo import gdal, ogr, osr
 
-from .area_coverage import polygon_latlong2crs
+from .spatial_helpers import polygon_latlong2crs
 from .image_cutting_support import coord2latlong
 from tqdm import tqdm
 
@@ -34,7 +34,18 @@ def get_bbox(polygons: list[ogr.Geometry | None]):
     Get the bounding box of a list of polygons.
 
     Args:
+
         polygons: List of polygons, must be in global coordinate system (not latlong)
+
+    Returns:
+
+        x_min: Minimum x value
+
+        x_max: Maximum x value
+
+        y_min: Minimum y value
+
+        y_max: Maximum y value
     """
     x_min = np.inf
     x_max = -np.inf
@@ -56,11 +67,15 @@ def get_polygons_from_folder(folder, name=None):
     Get the polygons from a folder of json files.
 
     Args:
+
         folder: Path to folder
+
         name: Optional, name of file to search for
 
+
     Returns:
-        List of polygons in global coordinate system
+
+        List of polygons in global coordinate system EPSG:32756
     """
     polygons = []
     for root, _, files in os.walk(folder):
@@ -82,11 +97,14 @@ def get_polygons_from_file(csv_path, group=None):
     Group optionally is a group of aois to use
 
     Args:
+
         csv_path: Path to csv file
         group: Optional, list of aois to use
 
     Returns:
-        List of polygons in global coordinate system
+
+        List of polygons in global coordinate system EPSG:32756
+
     """
     df = pd.read_csv(csv_path)
     return get_polygons_from_df(df, group)
@@ -96,6 +114,15 @@ def get_polygons_from_df(df, group=None) -> list[ogr.Geometry | None]:
     """
     Get the polygons from a dataframe with 'polygon' column.
     Group optionally is a group of aois to use
+
+    Args:
+
+        df: Dataframe with 'polygon' column
+        group: Optional, list of aois to use
+
+    Returns:
+
+        List of polygons in global coordinate system EPSG:32756
     """
     # filter where df[aoi] is in group
     if group is not None:
@@ -115,6 +142,7 @@ def create_grid(
     Create's a grid of pixels that covers the area of the bounding box.
 
     Args:
+
         x_min: Minimum x value
         x_max: Maximum x value
         y_min: Minimum y value
@@ -122,6 +150,7 @@ def create_grid(
         size: Size of each pixel in meters
 
     Returns:
+
         A tuple of:
             grid: 2D numpy array of zeros
             x_step: Size of each pixel in x direction
@@ -145,6 +174,7 @@ def paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly):
     Populate the given grid as per whether each pixel's center is covered by the polygon.
 
     Args:
+
         grid: 2D numpy array of zeros
         x_min: Minimum x value
         x_max: Maximum x value
@@ -155,13 +185,14 @@ def paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly):
         poly: Polygon to paint onto the grid
 
     Returns:
+
         None
     """
 
-    cols = range(grid.shape[0]) 
+    cols = range(grid.shape[0])
     rows = range(grid.shape[1])
 
-    for (row, col) in [(row, col) for row in rows for col in cols]:
+    for row, col in [(row, col) for row in rows for col in cols]:
         x = x_min + col * x_step
         y = y_min + row * y_step
         point = ogr.Geometry(ogr.wkbPoint)
@@ -185,6 +216,7 @@ def export_data(
     Export the grid as a GEOTIFF.
 
     Args:
+
         grid: 2D numpy array of zeros
         x_min: Minimum x value
         x_max: Maximum x value
@@ -196,6 +228,7 @@ def export_data(
         geojson: Whether to save a geojson file as well
 
     Returns:
+
         None
     """
     driver = gdal.GetDriverByName("GTiff")
@@ -242,6 +275,7 @@ def grid_to_geojson(
     - value: The value of the square (number of times this square was painted on)
 
     Args:
+    
         grid: 2D numpy array of zeros
         x_min: Minimum x value
         x_max: Maximum x value
@@ -252,6 +286,7 @@ def grid_to_geojson(
         filename: Name of file to save
 
     Returns:
+
         None
     """
     features = []
@@ -288,15 +323,17 @@ def grid_to_geojson(
         json.dump({"type": "FeatureCollection", "features": features}, f)
 
 
-def polygon_from_tif(tif) -> None:
+def polygon_from_tif(tif) -> list:
     """
     Get the coordinates of a polygon from a tif file.
 
     Args:
+
         tif: Path to tif file
 
     Returns:
-        None
+
+        List of polygons as ogr polygons in the source coordinate system of the tif
     """
     ds = gdal.Open(tif)
     print("Getting polygons from: ", tif, end="")
@@ -335,10 +372,12 @@ def add_to_heatmap(heatmap: str, polygons: list):
     together.
 
     Args:
+
         heatmap: Path to raster file e.g. 'heatmap.tif'
         polygons: List of polygons as ogr polygons
 
     Returns:
+
         None
     """
     x_min, x_max, y_min, y_max = get_bbox(polygons)
@@ -346,7 +385,17 @@ def add_to_heatmap(heatmap: str, polygons: list):
     for poly in polygons:
         paint_grid(grid, x_min, x_max, y_min, y_max, x_step, y_step, poly)
     grid = np.rot90(grid)  # Grid has to be rotated for some reason
-    export_data(grid, x_min, x_max, y_min, y_max, x_step, y_step, filename="temp.tif", geojson=False)
+    export_data(
+        grid,
+        x_min,
+        x_max,
+        y_min,
+        y_max,
+        x_step,
+        y_step,
+        filename="temp.tif",
+        geojson=False,
+    )
     # add the rasters together
     ds1 = gdal.Open(heatmap, gdal.GA_Update)
     ds2 = gdal.Open("temp.tif")
@@ -368,13 +417,16 @@ def create_heatmap_from_polygons(
 ):
     """
     Create and save a heatmap from a list of polygons.
+    Optionally show the heatmap.
 
     Args:
+
         polygons: List of polygons
         save_file: Name of file to save
         show: Whether to show the heatmap
 
     Returns:
+
         None
     """
     if len(polygons) == 0:

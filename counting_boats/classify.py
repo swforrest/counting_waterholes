@@ -1,16 +1,48 @@
+"""
+The main file for the pipeline. Classifying boats will be done with this file in most cases.
+
+Requires a config file to be present in the root directory of the project (one level up from this file).
+See project README for more information on the config file.
+
+Usage:
+1. **For Automatic Mode:**
+
+    python -m counting_boats.classify auto
+
+Auto mode will run the entire pipeline: search, order, download, classify, archive, analyse.
+
+2. **For Manual Mode:**
+
+    python -m counting_boats.classify \\<command\\>
+
+    Commands:
+    - archive: Archive the images in the downloads folder.
+    - search: Search for images on planet. (Not implemented)
+    - order: Order the given images from Planet. (Not implemented)
+    - download: Downloads the images from the orders in the input file (Not implemented)
+    - classify: Run the classifier on the given images in the config file (Not implemented)
+
+Not implemented commands will raise a NotImplementedError - all functionality for them is 
+available in either boat_utils/planet_utils.py or boat_utils/user_io_helpers.py.
+
+Author: Charlie Turner
+
+Date: 16/09/2024
+"""
+
 import comet_ml
 import datetime
 import os
 import argparse
 import time
 import typer
-import boat_utils.planet_utils as pu
-import boat_utils.classifier as cl
-import boat_utils.auto_helpers as ah
 import pandas as pd
 import numpy as np
 import math
-from boat_utils.config import cfg
+from .boat_utils.config import cfg
+from .boat_utils import planet_utils as pu
+from .boat_utils import classifier as cl
+from .boat_utils import auto_helpers as ah
 
 
 class COLORS:
@@ -24,33 +56,6 @@ class COLORS:
     FAIL = "\033[91m"
     ENDC = "\033[0m"
 
-
-"""
-Argparse, typer, rich for CLI in this file
-
-utils/whatever for the actual functionality
-
-Workflow for manual:
-1. Fill out config file.
-2. Searching Planet (search {aoi} {start_date} {end_date} {cloud_cover} {area_cover}):
-    Input       : AOI, start date, end date, cloud cover, area cover
-    Output      : list of images, total area, output .txt with one image per line
-                    runs/{this}/images.txt
-3. Ordering Images (order {items}):
-    Input       : .txt file | list[items]
-    Output      : List of order ids, output .txt with one order id per line 
-                    runs/{this}/orders.txt
-    Side effects: Orders the images, updates auto_orders.csv file with statuses
-4. Downloading Images (download {orders}):
-    Input       : .txt file | list[order ids]
-    Output      : Zip file with images, list of zip files with images
-                    runs/{this}/images.txt
-    Side effects: Downloads the images, updates auto_orders.csv file with statuses
-5. Classifying Images (classify {images}):
-    Input       : .txt file | list[zip files of tif] | list[images (png)]
-    Output      : classification .csv file
-    Side effects: Creates classified images, updates coverage.csv file, archives zip files
-"""
 
 app = typer.Typer(
     name="CountTheBoats",
@@ -70,7 +75,9 @@ def archive():
     print("Archive complete. Results in", cfg["output_dir"])
 
 
-@app.command()
+@app.command(
+    help="Run the end to end classification pipeline automatically as per the config.yml file."
+)
 def auto(
     skip_order: bool = typer.Option(
         False, help="Skip ordering images (Just check existing orders)"
@@ -84,7 +91,7 @@ def auto(
     Run the entire pipeline automatically.
     """
     orders_path = os.path.join(cfg["output_dir"], "orders.csv")
-    _ = ah.get_history(orders_path) # make sure the file exists
+    _ = ah.get_history(orders_path)  # make sure the file exists
     coverage_path = os.path.join(cfg["output_dir"], "coverage.csv")
     download_path = cfg["download_dir"]
     if not os.path.exists(cfg["output_dir"]):
@@ -143,6 +150,7 @@ def auto(
                             os.remove(os.path.join(processed_dir, f))
                         except:
                             print(COLORS.FAIL, "Failed to remove", f, COLORS.ENDC)
+
     elif cfg["AUTO_MODE"] == "batch":  # --------------- BATCH MODE ----------------
         if history_len is not None:
             batch_mode(
@@ -405,6 +413,9 @@ def batch_download_with_wait(orders_path, download_path, start_date, end_date):
             padding_string,
             datetime.datetime.now().strftime("%H:%M:%S"),  # hh:mm:ss = 8 characters
         )
+        # print the order ids
+        print("Order IDs:")
+        print(remaining_orders["order_id"].to_string(index=False))
         time.sleep(wait_time)
         total_wait_time += wait_time
         wait_time = 5 * 60
@@ -416,7 +427,7 @@ def search(aoi: str, start_date: str, end_date: str, cloud_cover: str, area_cove
     Search for images on planet.
     """
     # TODO: implement search functionality
-    pass
+    raise NotImplementedError("Search cli not implemented yet.")
 
 
 @app.command()
@@ -425,7 +436,7 @@ def order(items: str):
     Order the given images from Planet.
     """
     # TODO: implement order functionality
-    pass
+    raise NotImplementedError("Order cli not implemented yet.")
 
 
 @app.command()
@@ -434,7 +445,7 @@ def download(orders: str):
     Downloads the images from the orders in the input file.
     """
     # TODO: implement download functionality
-    pass
+    raise NotImplementedError("Download cli not implemented yet.")
 
 
 @app.command()
@@ -450,7 +461,8 @@ def classify(images: str):
     # if is folder
     if os.path.isdir(images):
         cl.classify_directory(images)
-    pass
+    else:
+        raise NotImplementedError("Classify cli not implemented yet.")
 
 
 if __name__ == "__main__":

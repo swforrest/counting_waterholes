@@ -6,7 +6,11 @@ from PIL import Image
 Given the training image grids, stitch them back together into one image
 
 Hopefully never need to do this ever again
+
+Author: Charlie Turner
+Date: 20/02/2024
 """
+
 
 def main():
     # get the current directory
@@ -28,6 +32,12 @@ def stitch(dir):
     images have names like imagessdfasdf_x_y.png
     They are all 416x416, and overlap 104 pixels.
     need to stich them back together into one image
+
+    Args:
+        dir (str): directory containing images to stitch
+
+    Returns:
+        None
     """
     # get list of files in directory
     if "stitched.png" in os.listdir(dir):
@@ -37,18 +47,23 @@ def stitch(dir):
     imgs = filter(lambda x: x.endswith(".png"), imgs)
     # for each file, get the x and y coords
     coords = [
-        (img, int(img.split("_")[-1].split(".")[0]), int(img.split("_")[-2])) for img in imgs if img != "stitched.png"
-            ]
+        (img, int(img.split("_")[-1].split(".")[0]), int(img.split("_")[-2]))
+        for img in imgs
+        if img != "stitched.png"
+    ]
     # get the maximum x and y values
     max_x = max([x[1] for x in coords])
     max_y = max([x[2] for x in coords])
     print("Max x: {}, Max y: {}".format(max_x, max_y))
     # we want to use every 4th of each from 0-max_x and 0-max_y
-    image = Image.new("RGB", (104*(max_x+1), 104*(max_y+1)))
+    image = Image.new("RGB", (104 * (max_x + 1), 104 * (max_y + 1)))
     # for each image, paste it into the new image
-    [image.paste(Image.open(os.path.join(dir, img)), (x*104, y*104)) for img, x, y in coords]
+    [
+        image.paste(Image.open(os.path.join(dir, img)), (x * 104, y * 104))
+        for img, x, y in coords
+    ]
     image.save(os.path.join(dir, "stitched.png"))
+
 
 if __name__ == "__main__":
     main()
-
