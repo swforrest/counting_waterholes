@@ -18,6 +18,7 @@ import numpy as np
 from osgeo import gdal, ogr
 import rasterio
 import os
+import matplotlib.pyplot as plt
 
 from . import image_cutting_support as ics
 
@@ -91,7 +92,7 @@ def get_array_from_tif(tif_path: str, band=1, grid_size=None):
         array = in_band.ReadAsArray()
         # Get the new top left corner
         x_top_left, _, _, y_top_left, _, _ = tif.GetGeoTransform()
-    
+
     tif = None
     in_band = None
     return x_top_left, y_top_left, array
@@ -215,9 +216,7 @@ def cloud_coverage_udm(udm_path: str) -> tuple[float, np.ndarray]:
         imaged_mask = (
             src.read(8).astype(np.uint8) & 0b00000001
         )  # 1 for not imaged, 0 for imaged at this stage
-        import matplotlib.pyplot as plt
 
-        plt.imshow(cloud_mask)
         imaged_mask = imaged_mask == 0  # 1 for imaged, 0 for not imaged
         # calculate cloud coverage over imaged area
         cloud_coverage = np.sum(cloud_mask) / np.sum(imaged_mask)
@@ -399,16 +398,24 @@ def polygon_latlong2crs(
 def is_inside(polygon, point):
     """
     Check if a point is inside a polygon
-    :param polygon: path to polygon file (geojson format)
+    :param polygon: polygon or list of polygons
     :param point: (lat, long)
     :return: True if point is inside polygon, False otherwise
     """
-    poly = polygon_latlong2crs(polygon)[0]
+    # poly = polygon_latlong2crs(polygon)[0]
     point_obj = ogr.Geometry(ogr.wkbPoint)
     point_obj.AddPoint(point[0], point[1])
     # point is in lat long, convert to EPSG:32756
+    print(point_obj)
     point_obj.TransformTo("EPSG:32756")
-    return poly.Contains(point_obj)
+    if type(polygon) == list:
+        for poly in polygon:
+            if poly.Contains(point_obj):
+                return True
+    else:
+        if polygon.Contains(point_obj):
+            return True
+    return False
 
 
 if __name__ == "__main__":

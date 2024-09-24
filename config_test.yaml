@@ -28,15 +28,14 @@ tasks:
   backwards_annotation: False # Generate annotations from the classifier output
 
   analyse:
-    # Main analysis step: cluster and compare
+    # Main analysis step: cluster and compare outputs a comparison csv
     compare_detections_to_ground_truth: True # Cluster and compare results to ground truth (have to do this for all analysis below)
 
-    # Supplementary analysis, not all implemented
+    # Supplementary analysis
     plots:
       confusion_matrix: True # Confusion matrix
-      boat_count_compare: True # Compare boat counts in each image detections to ground truth
-      precision_recall: False
+      boat_count_compare: True # Compare boat counts in each image detections to ground truth and output a graph
     images:
       all_mistakes: False # Collate all mistakes into images with comparison
       subimage_confidence: False # Show confidence of detection for all subimages of a given boat (number of random boats to do this for)
-      coverage_heatmap: False
+      coverage_heatmap: False # generate a tif file with a heatmap of coverage of images in the test data

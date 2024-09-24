@@ -431,6 +431,21 @@ def search(aoi: str, start_date: str, end_date: str, cloud_cover: str, area_cove
 
 
 @app.command()
+def get_all_orders():
+    """
+    Get all orders from Planet and save them to an all_orders.csv file.
+    """
+    all_orders = pu.get_orders()
+    # sort the orders by their name
+    all_orders = sorted(all_orders, key=lambda x: x["name"])
+    with open("all_orders.csv", "w+") as f:
+        f.write("id,name,created_on\n")
+        for order in all_orders:
+            f.write(f"{order['id']},{order['name']},{order['created_on']}\n")
+    print("All orders saved to all_orders.csv")
+
+
+@app.command()
 def order(items: str):
     """
     Order the given images from Planet.
