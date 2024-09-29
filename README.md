@@ -65,7 +65,7 @@ By altering `config_test.yaml`, you can change the test data and test tasks that
 #### Deployment
 
 ```
-python counting_boats.classify {auto} --config config_classify.yaml
+python counting_boats.classify auto
 ```
 
 ## Acknowledgements
