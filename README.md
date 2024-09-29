@@ -35,7 +35,7 @@ Running the following will then install all required dependencies:
 conda env create --file env.yaml
 ```
 
-Activate the environment (if not already) with `conda activate CountingBoats`, and you should be good to go.
+Activate the environment (if not already) with `conda activate Boats`, and you should be good to go.
 
 ### Setup
 
