@@ -32,7 +32,7 @@ It's recommended to install a conda-based package manager such as [Miniconda](ht
 Running the following will then install all required dependencies:
 
 ```
-conda create --name CountingBoats --file env.yaml
+conda env create --file env.yaml
 ```
 
 Activate the environment (if not already) with `conda activate CountingBoats`, and you should be good to go.
