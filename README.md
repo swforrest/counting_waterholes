@@ -42,7 +42,7 @@ Activate the environment (if not already) with `conda activate Boats`, and you s
 #### Configuration
 
 Set the variables in `config.yaml` to align with your environment and preferences.
-Similarly for 'config_train.yaml' or 'config_test.yaml' for training and testing respectively.
+Similarly for `config_train.yaml` or `config_test.yaml` for training and testing respectively.
 
 ### Running
 
