@@ -10,12 +10,13 @@ from datetime import datetime
 from . import image_cutting_support as ics
 from .config import cfg
 from tqdm import tqdm
+import torch
 
-# instantiate posixpath for windows
+# instantiate posixpath for windows if using windows
 import pathlib
 
-temp = pathlib.PosixPath
-pathlib.PosixPath = pathlib.WindowsPath
+if os.name == "nt":
+    pathlib.PosixPath = pathlib.WindowsPath
 
 """
 Intended usage:
@@ -36,10 +37,8 @@ STRIDE = cfg["STRIDE"]
 
 SAVE_COVERAGE = True
 
-# load the model
-import torch
 
-model = torch.hub.load("C:\\yolov5", "custom", path=cfg["weights"], source="local")
+model = torch.hub.load(cfg["yolo_dir"], "custom", path=cfg["weights"], source="local")
 
 
 def main(save_coverage=True, days=None):

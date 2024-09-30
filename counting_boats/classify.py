@@ -223,17 +223,20 @@ def batch_mode(
     ordered_batches = np.zeros(n_batches)
     is_batch_ordered = lambda i: ordered_batches[i] == 1
 
-    # start a comet experiment
-    experiment = comet_ml.Experiment(project_name="count-the-boats")
-    experiment.log_parameters(
-        {
-            "aois": aois,
-            "batch_size": batch_size,
-            "start_date": start_date.strftime("%d/%m/%Y"),
-            "final_date": final_date.strftime("%d/%m/%Y"),
-        }
-    )
-    experiment.log_parameters(cfg, prefix="cfg")
+    # start a comet experiment if enabled
+    # check if comet is enabled
+    experiment = None
+    if cfg["use_comet"]:
+        experiment = comet_ml.Experiment(project_name="count-the-boats")
+        experiment.log_parameters(
+            {
+                "aois": aois,
+                "batch_size": batch_size,
+                "start_date": start_date.strftime("%d/%m/%Y"),
+                "final_date": final_date.strftime("%d/%m/%Y"),
+            }
+        )
+        experiment.log_parameters(cfg, prefix="cfg")
 
     for i in range(n_batches):
         print(
@@ -309,7 +312,8 @@ def batch_mode(
                             print(COLORS.FAIL, "Failed to remove", f, COLORS.ENDC)
         print(COLORS.OKGREEN, "Batch", i + 1, "complete", COLORS.ENDC)
         time.sleep(3)
-    experiment.end()
+    if experiment is not None:
+        experiment.end()
 
 
 def batch_search_and_order(aoi, start_date, end_date, orders_path):
@@ -418,7 +422,7 @@ def batch_download_with_wait(orders_path, download_path, start_date, end_date):
         print(remaining_orders["order_id"].to_string(index=False))
         time.sleep(wait_time)
         total_wait_time += wait_time
-        wait_time = 5 * 60
+        wait_time = 2 * 60
 
 
 @app.command()
