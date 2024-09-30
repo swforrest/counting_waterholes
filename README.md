@@ -82,7 +82,7 @@ e.g.
 
 ```
 
-python -m counting_boats.plot_output --detections Results/boat_detections.csv --zip "U:\Research\Projects\sef\livingplayingmb\Boat Detection TMBF\PlanetArchive\moreton_20171106.zip"
+python -m counting_boats.plot_output --detections "U:\Research\Projects\sef\livingplayingmb\Boat Detection TMBF\BoatDetectionResults\boat_detections.csv" --zip "U:\Research\Projects\sef\livingplayingmb\Boat Detection TMBF\PlanetArchive\moreton_20171106.zip"
 
 ```
 
