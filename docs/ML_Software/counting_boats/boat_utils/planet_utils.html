@@ -715,32 +715,24 @@ Date: 17/09/2024</p>
 
             <div class="docstring"><p>Search a given area of interest for Planet imagery</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>polygon_file:</strong>  the path to the polygon file</li>
-<li><strong>min_date:</strong>  the minimum date to search for (inclusive)</li>
-<li><strong>max_date:</strong>  the maximum date to search for (inclusive)</li>
-<li><strong>cloud_cover:</strong>  the maximum cloud cover to search for</li>
-</ul>
+<pre><code>polygon_file: the path to the polygon file
+min_date: the minimum date to search for (inclusive)
+max_date: the maximum date to search for (inclusive)
+cloud_cover: the maximum cloud cover to search for
+</code></pre>
 
-<h6 id="requires">Requires:</h6>
+<p>Requires:
+    Planet API key be set in environment variable</p>
 
-<blockquote>
-  <p>Planet API key be set in environment variable</p>
-</blockquote>
+<p>Returns:</p>
 
-<h6 id="returns">Returns:</h6>
+<pre><code>a list of Planet items (json result from API)
+</code></pre>
 
-<blockquote>
-  <p>a list of Planet items (json result from API)</p>
-</blockquote>
-
-<h6 id="raises">Raises:</h6>
-
-<ul>
-<li><strong>Exception:</strong>  if the API returns a non-200 status code</li>
-</ul>
+<p>Raises:
+    Exception: if the API returns a non-200 status code</p>
 </div>
 
 
@@ -807,20 +799,18 @@ Date: 17/09/2024</p>
 
             <div class="docstring"><p>Select a subset of items from a search result</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>items:</strong>  the list of items to select from</li>
-<li><strong>polygon:</strong>  the area of interest to check coverage against (polygon file)</li>
-<li><strong>date:</strong>  the date to select</li>
-<li><strong>area_coverage:</strong>  the minimum area coverage to select</li>
-</ul>
+<pre><code>items: the list of items to select from
+polygon: the area of interest to check coverage against (polygon file)
+date: the date to select
+area_coverage: the minimum area coverage to select
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>list of selected items</p>
-</blockquote>
+<pre><code>list of selected items
+</code></pre>
 </div>
 
 
@@ -897,20 +887,18 @@ Date: 17/09/2024</p>
 
             <div class="docstring"><p>Order a given search result.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>itemIDs:</strong>  a list of item IDs to order</li>
-<li><strong>polygon_file:</strong>  a geojson file containing the area of interest to clip to
-must be of format: {"type": "Polygon", "coordinates": [[[lon, lat], ...]]}</li>
-<li><strong>name:</strong>  the name to give the order</li>
-</ul>
+<pre><code>itemIDs: a list of item IDs to order
+polygon_file: a geojson file containing the area of interest to clip to
+    must be of format: {"type": "Polygon", "coordinates": [[[lon, lat], ...]]}
+name: the name to give the order
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>a list of order IDs</p>
-</blockquote>
+<pre><code>a list of order IDs
+</code></pre>
 </div>
 
 
@@ -946,17 +934,15 @@ must be of format: {"type": "Polygon", "coordinates": [[[lon, lat], ...]]}</li>
 
             <div class="docstring"><p>Check the status of a given order</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>orderID:</strong>  the order ID to check</li>
-</ul>
+<pre><code>orderID: the order ID to check
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>the status of the order</p>
-</blockquote>
+<pre><code>the status of the order
+</code></pre>
 </div>
 
 
@@ -1016,20 +1002,18 @@ must be of format: {"type": "Polygon", "coordinates": [[[lon, lat], ...]]}</li>
 
             <div class="docstring"><p>Download a given order and move the tif file to the raw tiffs directory</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>orderID:</strong>  the order ID to download</li>
-<li><strong>aoi:</strong>  the area of interest</li>
-<li><strong>date:</strong>  the date of the image</li>
-<li><strong>downloadPath:</strong>  the path to download the file to</li>
-</ul>
+<pre><code>orderID: the order ID to download
+aoi: the area of interest
+date: the date of the image
+downloadPath: the path to download the file to
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>the name of the tif file after extracting</p>
-</blockquote>
+<pre><code>the name of the tif file after extracting
+</code></pre>
 </div>
 
 
@@ -1095,19 +1079,17 @@ must be of format: {"type": "Polygon", "coordinates": [[[lon, lat], ...]]}</li>
 
             <div class="docstring"><p>Extract the zip file and move the tif file to the raw tiffs directory</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>downloadFile:</strong>  the path to the zip file</li>
-<li><strong>aoi:</strong>  the area of interest</li>
-<li><strong>date:</strong>  the date of the image</li>
-</ul>
+<pre><code>downloadFile: the path to the zip file
+aoi: the area of interest
+date: the date of the image
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>the name of the tif file after extracting</p>
-</blockquote>
+<pre><code>the name of the tif file after extracting
+</code></pre>
 </div>
 
 
@@ -1149,19 +1131,17 @@ must be of format: {"type": "Polygon", "coordinates": [[[lon, lat], ...]]}</li>
 
             <div class="docstring"><p>Get a URI with retries, doubling the delay each time.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>uri:</strong>  the URI to get</li>
-<li><strong>auth:</strong>  the auth tuple</li>
-<li><strong>retries:</strong>  the number of retries to attempt</li>
-</ul>
+<pre><code>uri: the URI to get
+auth: the auth tuple
+retries: the number of retries to attempt
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>the response object</p>
-</blockquote>
+<pre><code>the response object
+</code></pre>
 </div>
 
 
@@ -1210,11 +1190,10 @@ must be of format: {"type": "Polygon", "coordinates": [[[lon, lat], ...]]}</li>
 
             <div class="docstring"><p>Get all orders from the Planet API</p>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>a list of orders which are dictionaries. Contains the order ID, state, etc.</p>
-</blockquote>
+<pre><code>a list of orders which are dictionaries. Contains the order ID, state, etc.
+</code></pre>
 </div>
 
 
@@ -1248,11 +1227,10 @@ must be of format: {"type": "Polygon", "coordinates": [[[lon, lat], ...]]}</li>
 
             <div class="docstring"><p>Get all the areas of interest</p>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>a list of area of interest names</p>
-</blockquote>
+<pre><code>a list of area of interest names
+</code></pre>
 </div>
 
 
@@ -1294,17 +1272,15 @@ must be of format: {"type": "Polygon", "coordinates": [[[lon, lat], ...]]}</li>
 
             <div class="docstring"><p>Get the polygon for a given area of interest</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>aoi:</strong>  the area of interest name</li>
-</ul>
+<pre><code>aoi: the area of interest name
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>the path to the polygon file</p>
-</blockquote>
+<pre><code>the path to the polygon file
+</code></pre>
 </div>
 
 
@@ -1344,18 +1320,16 @@ must be of format: {"type": "Polygon", "coordinates": [[[lon, lat], ...]]}</li>
 
             <div class="docstring"><p>Given all the items for a particular day, and a polygon, compute the area coverage</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>items:</strong>  a list of items</li>
-<li><strong>AOI:</strong>  the area of interest polygon</li>
-</ul>
+<pre><code>items: a list of items
+AOI: the area of interest polygon
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>the area coverage as a float</p>
-</blockquote>
+<pre><code>the area coverage as a float
+</code></pre>
 </div>
 
 

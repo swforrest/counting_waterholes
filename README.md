@@ -68,4 +68,22 @@ By altering `config_test.yaml`, you can change the test data and test tasks that
 python counting_boats.classify auto
 ```
 
+### Visualisation
+
+There are some visualisation notebooks in the visualisation folder. These can be run to perform some visualisations of the data.
+The `plot_output` script is also a useful tool for visualising the output of the detection model on individual images. Run:
+
+```
+python -m counting_boats.plot_output --detections {path_to_detections} { --image {path_to_image} | --zip {path_to_zip} }
+```
+
+If you have an image already e.g 'AOI_date.tif', use the `--image` flag. If you want to run on a zip file straight from Planet, use the `--zip` flag.
+e.g.
+
+```
+
+python -m counting_boats.plot_output --detections Results/boat_detections.csv --zip "U:\Research\Projects\sef\livingplayingmb\Boat Detection TMBF\PlanetArchive\moreton_20171106.zip"
+
+```
+
 ## Acknowledgements

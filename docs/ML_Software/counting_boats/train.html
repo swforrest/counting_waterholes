@@ -421,17 +421,11 @@ Date: 16/09/2024</p>
 
             <div class="docstring"><p>Parse the config file</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:
+    config (str): path to the config file</p>
 
-<ul>
-<li><strong>config (str):</strong>  path to the config file</li>
-</ul>
-
-<h6 id="returns">Returns:</h6>
-
-<blockquote>
-  <p>dict: the parsed config file</p>
-</blockquote>
+<p>Returns:
+    dict: the parsed config file</p>
 </div>
 
 
@@ -488,17 +482,11 @@ Date: 16/09/2024</p>
             <div class="docstring"><p>Prepare the TIFF images for labelling by converting them to PNGs
 Does this for all TIF images in the raw_images folder specified in the config</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:
+    config (str): path to the config</p>
 
-<ul>
-<li><strong>config (str):</strong>  path to the config</li>
-</ul>
-
-<h6 id="returns">Returns:</h6>
-
-<blockquote>
-  <p>None</p>
-</blockquote>
+<p>Returns:
+    None</p>
 </div>
 
 
@@ -579,18 +567,12 @@ Does this for all TIF images in the raw_images folder specified in the config</p
             <div class="docstring"><p>Segment the images and labels into tiles for training.
 Also split the images into training and validation sets.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:
+    config (str): path to the config file
+    train_val_split (float): proportion of images to use for training</p>
 
-<ul>
-<li><strong>config (str):</strong>  path to the config file</li>
-<li><strong>train_val_split (float):</strong>  proportion of images to use for training</li>
-</ul>
-
-<h6 id="returns">Returns:</h6>
-
-<blockquote>
-  <p>None</p>
-</blockquote>
+<p>Returns:
+    None</p>
 </div>
 
 
@@ -691,17 +673,12 @@ Also split the images into training and validation sets.</p>
 </span></pre></div>
 
 
-            <div class="docstring"><h6 id="work-out-and-display">Work out and display:</h6>
-
-<blockquote>
-  <ul>
-  <li>Number of original images (unique filenames excluding locations)</li>
-  <li>Number of tiles</li>
-  <li>Number of labels total</li>
-  <li>Number of labels per class</li>
-  <li>Number of images with no labels</li>
-  </ul>
-</blockquote>
+            <div class="docstring"><p>Work out and display:
+    - Number of original images (unique filenames excluding locations)
+    - Number of tiles
+    - Number of labels total
+    - Number of labels per class
+    - Number of images with no labels</p>
 
 <p>Each also as a percentage of total</p>
 
@@ -801,17 +778,11 @@ We can't know how many tiles will have no instances before we segment the images
 so have to cull down after. This function will remove images with no labels until
 10% of the training set has no labels</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:
+    config (str): path to the config file</p>
 
-<ul>
-<li><strong>config (str):</strong>  path to the config file</li>
-</ul>
-
-<h6 id="returns">Returns:</h6>
-
-<blockquote>
-  <p>None</p>
-</blockquote>
+<p>Returns:
+    None</p>
 </div>
 
 
@@ -857,17 +828,11 @@ so have to cull down after. This function will remove images with no labels unti
 
             <div class="docstring"><p>Train the model</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:
+    config (str): path to the config file</p>
 
-<ul>
-<li><strong>config (str):</strong>  path to the config file</li>
-</ul>
-
-<h6 id="returns">Returns:</h6>
-
-<blockquote>
-  <p>None</p>
-</blockquote>
+<p>Returns:
+    None</p>
 </div>
 
 

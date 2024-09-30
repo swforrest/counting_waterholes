@@ -17,10 +17,10 @@ TILE_SIZE: 416
 STRIDE: 104
 
 # training Dataset
-path: C:\ML_Software\training
+path: \\hpc-fs.qut.edu.au\turner30\Projects\Boats\Training\trainOrig\trainFinal
 train:
   # - C:\yoloDatasets\trainFinal\images
-  - C:\ML_Software\active_learning\data\images
+  - \\hpc-fs.qut.edu.au\turner30\Projects\Boats\Training\trainOrig\trainFinal\images
 val:
   # - C:\ML_Software\MoretonVal\images
 names:

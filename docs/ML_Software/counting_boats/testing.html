@@ -210,17 +210,11 @@ Date: 16/09/2024</p>
 
             <div class="docstring"><p>Create a new run folder for the validation tasks</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:
+    config_file (str): path to the config file</p>
 
-<ul>
-<li><strong>config_file (str):</strong>  path to the config file</li>
-</ul>
-
-<h6 id="returns">Returns:</h6>
-
-<blockquote>
-  <p>str: path to the new run folder</p>
-</blockquote>
+<p>Returns:
+    str: path to the new run folder</p>
 </div>
 
 
@@ -281,19 +275,13 @@ Date: 16/09/2024</p>
 value False will be skipped. Tasks can have subtasks, which will be run
 recursively. Essentially tasks have to be functions in val_utils.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:
+    tasks (dict): dict of tasks to run (or not Run)
+    config (dict): config dict
+    level (int): level of recursion (do not set)</p>
 
-<ul>
-<li><strong>tasks (dict):</strong>  dict of tasks to run (or not Run)</li>
-<li><strong>config (dict):</strong>  config dict</li>
-<li><strong>level (int):</strong>  level of recursion (do not set)</li>
-</ul>
-
-<h6 id="returns">Returns:</h6>
-
-<blockquote>
-  <p>None</p>
-</blockquote>
+<p>Returns:
+    None</p>
 </div>
 
 

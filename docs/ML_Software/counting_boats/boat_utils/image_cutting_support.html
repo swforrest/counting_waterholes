@@ -1297,15 +1297,14 @@ ML_Software<wbr>.<a href="./../../counting_boats.html">counting_boats</a><wbr>.<
 
             <div class="docstring"><p>Instantiate the object.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>left:</strong>  The left edge of the classification</li>
-<li><strong>right:</strong>  The right edge of the classification</li>
-<li><strong>top:</strong>  The top edge of the classification</li>
-<li><strong>bottom:</strong>  The bottom edge of the classification</li>
-<li><strong>label:</strong>  The label assigned to the classification</li>
-</ul>
+<pre><code>left: The left edge of the classification
+right: The right edge of the classification
+top: The top edge of the classification
+bottom: The bottom edge of the classification
+label: The label assigned to the classification
+</code></pre>
 </div>
 
 
@@ -1444,14 +1443,13 @@ ML_Software<wbr>.<a href="./../../counting_boats.html">counting_boats</a><wbr>.<
 
             <div class="docstring"><p>Check if this classification is within a larger bounding box defined by the parameters of this function</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>left:</strong>  The left edge of the classification</li>
-<li><strong>right:</strong>  The right edge of the classification</li>
-<li><strong>top:</strong>  The top edge of the classification</li>
-<li><strong>bottom:</strong>  The bottom edge of the classification</li>
-</ul>
+<pre><code>left: The left edge of the classification
+right: The right edge of the classification
+top: The top edge of the classification
+bottom: The bottom edge of the classification
+</code></pre>
 
 <p>Returns
     True if the classification is within the bounding box specified; false otherwise.</p>
@@ -1527,22 +1525,20 @@ ML_Software<wbr>.<a href="./../../counting_boats.html">counting_boats</a><wbr>.<
 
             <div class="docstring"><p>Pads an OPEN PIL (pillow/python imaging library) image on each edge by the amount specified.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>pil_img:</strong>  The open PIL image to pad.</li>
-<li><strong>left:</strong>  The number of pixels to pad the left edge of the image by.</li>
-<li><strong>right:</strong>  The number of pixels to pad the right edge of the image by.</li>
-<li><strong>top:</strong>  The number of pixels to pad the top edge of the image by.</li>
-<li><strong>bottom:</strong>  The number of pixels to pad the bottom edge of the image by.</li>
-<li><strong>color:</strong>  What colour the padding should be as a tuple (0, 0, 0) for black (255, 255, 255) for white.</li>
-</ul>
+<pre><code>pil_img: The open PIL image to pad.
+left: The number of pixels to pad the left edge of the image by.
+right: The number of pixels to pad the right edge of the image by.
+top: The number of pixels to pad the top edge of the image by.
+bottom: The number of pixels to pad the bottom edge of the image by.
+color: What colour the padding should be as a tuple (0, 0, 0) for black (255, 255, 255) for white.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>The open PIL image after the padding has been applied</p>
-</blockquote>
+<pre><code>The open PIL image after the padding has been applied
+</code></pre>
 </div>
 
 
@@ -1691,32 +1687,28 @@ ML_Software<wbr>.<a href="./../../counting_boats.html">counting_boats</a><wbr>.<
             <div class="docstring"><p>segments an image and its labels into tiles for use in a neural network.
 This function is intended to be used with multiprocessing.Pool</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>args (tuple):</strong>  A tuple containing the following elements:
-<ul>
-<li>i (int): The row index of the sub-image.</li>
-<li>j (int): The column index of the sub-image.</li>
-<li>stride (int): The stride value used for sub-image extraction.</li>
-<li>sub_image (np.ndarray): The sub-image array.</li>
-<li>image (np.ndarray): The original image array.</li>
-<li>allImageClassifications (list): List of all image classifications.</li>
-<li>remove_empty (bool): Flag indicating whether to remove empty images.</li>
-<li>im_outdir (str): Directory path to save processed images.</li>
-<li>labels_outdir (str): Directory path to save labels.</li>
-<li>empty_counter (multiprocessing.Value): Counter for empty images.</li>
-<li>skipped_counter (multiprocessing.Value): Counter for skipped images.</li>
-<li>progress (multiprocessing.Value): Progress counter.</li>
-<li>lock (multiprocessing.Lock): Lock for synchronizing access to shared resources.</li>
-</ul></li>
-</ul>
+<pre><code>args (tuple): A tuple containing the following elements:
+    - i (int): The row index of the sub-image.
+    - j (int): The column index of the sub-image.
+    - stride (int): The stride value used for sub-image extraction.
+    - sub_image (np.ndarray): The sub-image array.
+    - image (np.ndarray): The original image array.
+    - allImageClassifications (list): List of all image classifications.
+    - remove_empty (bool): Flag indicating whether to remove empty images.
+    - im_outdir (str): Directory path to save processed images.
+    - labels_outdir (str): Directory path to save labels.
+    - empty_counter (multiprocessing.Value): Counter for empty images.
+    - skipped_counter (multiprocessing.Value): Counter for skipped images.
+    - progress (multiprocessing.Value): Progress counter.
+    - lock (multiprocessing.Lock): Lock for synchronizing access to shared resources.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -1873,22 +1865,20 @@ This function is intended to be used with multiprocessing.Pool</p>
             <div class="docstring"><p>Segments a large .tif file into smaller .png files for use in a neural network. Also created
 files in the IMGtxts directory which contain the annotations present in that sub image.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>image:</strong>  The large .tif that is to be segmented</li>
-<li><strong>json_file:</strong>  The json file that contains all the classifications for the image that were made in labelme.</li>
-<li><strong>size:</strong>  The desired size (both length and width) of the segmented images.</li>
-<li><strong>overlap_size:</strong>  The desired amount of overlap that the segmented images should have</li>
-<li><strong>metadata_components:</strong>  The metadata of the image - useful if the metadata is stripped out in a previous
-operation on the image/file.</li>
-</ul>
+<pre><code>image: The large .tif that is to be segmented
+json_file: The json file that contains all the classifications for the image that were made in labelme.
+size: The desired size (both length and width) of the segmented images.
+overlap_size: The desired amount of overlap that the segmented images should have
+metadata_components: The metadata of the image - useful if the metadata is stripped out in a previous
+    operation on the image/file.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -1974,21 +1964,19 @@ operation on the image/file.</li>
 Does not save the images to disk, but returns them as an array of views into 
 a larger numpy array.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>image:</strong>  The large .tif that is to be segmented</li>
-<li><strong>tile_size:</strong>  The desired size (both length and width) of the segmented images.</li>
-<li><strong>data_path:</strong>  The path to the directory where the segmented images will be saved.</li>
-<li><strong>stride:</strong>  The desired amount of overlap that the segmented images should have</li>
-</ul>
+<pre><code>image: The large .tif that is to be segmented
+tile_size: The desired size (both length and width) of the segmented images.
+data_path: The path to the directory where the segmented images will be saved.
+stride: The desired amount of overlap that the segmented images should have
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>The images as an array with:
-      i, j, sub_image, image, data_path</p>
-</blockquote>
+<pre><code>The images as an array with:
+    i, j, sub_image, image, data_path
+</code></pre>
 </div>
 
 
@@ -2047,30 +2035,24 @@ a larger numpy array.</p>
             <div class="docstring"><p>segments an image into tiles for use in a neural network.
 This function is intended to be used with multiprocessing.Pool</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>args (tuple):</strong>  A tuple containing the following elements:
-<ul>
-<li>(i, j, sub_image, image, data_path) (tuple): 
-<ul>
-<li>i (int): The row index of the sub-image.</li>
-<li>j (int): The column index of the sub-image.</li>
-<li>sub_image (np.ndarray): The sub-image array.</li>
-<li>image (str): The path to the original image file.</li>
-<li>data_path (str): The directory path to save processed images.</li>
-</ul></li>
-<li>skipped_counter (multiprocessing.Value): Counter for skipped images.</li>
-<li>progress (multiprocessing.Value): Progress counter.</li>
-<li>lock (multiprocessing.Lock): Lock for synchronizing access to shared resources.</li>
-</ul></li>
-</ul>
+<pre><code>args (tuple): A tuple containing the following elements:
+    - (i, j, sub_image, image, data_path) (tuple): 
+        - i (int): The row index of the sub-image.
+        - j (int): The column index of the sub-image.
+        - sub_image (np.ndarray): The sub-image array.
+        - image (str): The path to the original image file.
+        - data_path (str): The directory path to save processed images.
+    - skipped_counter (multiprocessing.Value): Counter for skipped images.
+    - progress (multiprocessing.Value): Progress counter.
+    - lock (multiprocessing.Lock): Lock for synchronizing access to shared resources.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -2170,20 +2152,18 @@ This function is intended to be used with multiprocessing.Pool</p>
 
             <div class="docstring"><p>Segments a large .tif file into smaller .png files for use in a neural network.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>image:</strong>  The large .tif that is to be segmented</li>
-<li><strong>tile_size:</strong>  The desired size (both length and width) of the segmented images.</li>
-<li><strong>data_path:</strong>  The path to the directory where the segmented images will be saved.</li>
-<li><strong>stride:</strong>  The desired amount of overlap that the segmented images should have</li>
-</ul>
+<pre><code>image: The large .tif that is to be segmented
+tile_size: The desired size (both length and width) of the segmented images.
+data_path: The path to the directory where the segmented images will be saved.
+stride: The desired amount of overlap that the segmented images should have
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -2283,22 +2263,20 @@ This function is intended to be used with multiprocessing.Pool</p>
             <div class="docstring"><p>Creates an image which is padded for use in training/classifying within a neural network. Note: this images pads
 the images expecting that the size of sub-images created from this images will be 416x416 pixels.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>raw_dir:</strong>  Directory where raw .tif files downloaded from Planet are located</li>
-<li><strong>output_dir:</strong>  The name of the directory where the padded .png files will be created.</li>
-<li><strong>file_name:</strong>  The name of the .tif file that is to be padded.</li>
-<li><strong>tile_size:</strong>  The size of the sub-images that will be created from this image.</li>
-<li><strong>stride:</strong>  The amount of overlap that the sub-images will have.</li>
-<li><strong>rename:</strong>  The name that the padded image will be saved as. If False, the image will be saved as the original name but with a .png extension.</li>
-</ul>
+<pre><code>raw_dir: Directory where raw .tif files downloaded from Planet are located
+output_dir: The name of the directory where the padded .png files will be created.
+file_name: The name of the .tif file that is to be padded.
+tile_size: The size of the sub-images that will be created from this image.
+stride: The amount of overlap that the sub-images will have.
+rename: The name that the padded image will be saved as. If False, the image will be saved as the original name but with a .png extension.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -2347,19 +2325,17 @@ the images expecting that the size of sub-images created from this images will b
 
             <div class="docstring"><p>Creates an image which is NOT padded but converts raw .tif to .png files.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>raw_dir:</strong>  Directory where raw .tif files downloaded from Planet are located</li>
-<li><strong>output_dir:</strong>  The name of the directory where the padded .png files will be created.</li>
-<li><strong>file_name:</strong>  The name of the .tif file that is to be padded.</li>
-</ul>
+<pre><code>raw_dir: Directory where raw .tif files downloaded from Planet are located
+output_dir: The name of the directory where the padded .png files will be created.
+file_name: The name of the .tif file that is to be padded.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -2440,20 +2416,18 @@ the images expecting that the size of sub-images created from this images will b
 divisible by 416 and that each part of the images will be seen by the neural networm 16 times in either training
 or classification.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>filepath:</strong>  The path of the file to evaluate.</li>
-<li><strong>tilesize:</strong>  The size of the sub-images that will be created from this image.</li>
-<li><strong>stride:</strong>  The amount of overlap that the sub-images will have.</li>
-</ul>
+<pre><code>filepath: The path of the file to evaluate.
+tilesize: The size of the sub-images that will be created from this image.
+stride: The amount of overlap that the sub-images will have.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>(L, R, T, B) - A tuple containing the padding required on the left (L), right (R), top (T), and bottom (b)
-      of the images to make it suitable for use in the neural network.</p>
-</blockquote>
+<pre><code>(L, R, T, B) - A tuple containing the padding required on the left (L), right (R), top (T), and bottom (b)
+    of the images to make it suitable for use in the neural network.
+</code></pre>
 </div>
 
 
@@ -2496,17 +2470,15 @@ or classification.</p>
 
             <div class="docstring"><p>Get the EPSG code of the coordinate reference system of a .tif file.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>filepath:</strong>  The path of the file to evaluate.</li>
-</ul>
+<pre><code>filepath: The path of the file to evaluate.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>The EPSG code of the coordinate reference system of the .tif file.</p>
-</blockquote>
+<pre><code>The EPSG code of the coordinate reference system of the .tif file.
+</code></pre>
 </div>
 
 
@@ -2604,20 +2576,18 @@ or classification.</p>
 
             <div class="docstring"><p>Returns pixel coordinates to pixel center using base-0 raster index</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>x:</strong>  The x coordinate (global coordinates) of the object in the image to be converted to pixel coordinates.</li>
-<li><strong>y:</strong>  The y coordinate (global coordinates) of the object in the image to be converted to pixel coordinates.</li>
-<li><strong>original_image_path:</strong>  The path of the file to evaluate - a .tif files should be located here. This file will
-also need geospatial metadata. Images obtained from Planet have the required metadata.</li>
-</ul>
+<pre><code>x: The x coordinate (global coordinates) of the object in the image to be converted to pixel coordinates.
+y: The y coordinate (global coordinates) of the object in the image to be converted to pixel coordinates.
+original_image_path: The path of the file to evaluate - a .tif files should be located here. This file will
+    also need geospatial metadata. Images obtained from Planet have the required metadata.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>(xp, yp) - A tuple containing the pixel coordinates of the provided global coordinates.</p>
-</blockquote>
+<pre><code>(xp, yp) - A tuple containing the pixel coordinates of the provided global coordinates.
+</code></pre>
 </div>
 
 
@@ -2655,19 +2625,17 @@ also need geospatial metadata. Images obtained from Planet have the required met
 
             <div class="docstring"><p>Converts global coordinates to latitude/longitude coordinates</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>x:</strong>  The x coordinate in a pair of global coordinates.</li>
-<li><strong>y:</strong>  The y coordinate in a pair of global coordinates.</li>
-<li><strong>crs:</strong>  The coordinate reference system of the global coordinates.</li>
-</ul>
+<pre><code>x: The x coordinate in a pair of global coordinates.
+y: The y coordinate in a pair of global coordinates.
+crs: The coordinate reference system of the global coordinates.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>(long, lat) - A tuple containing the longitude and latitude at the provided global coordinates.</p>
-</blockquote>
+<pre><code>(long, lat) - A tuple containing the longitude and latitude at the provided global coordinates.
+</code></pre>
 </div>
 
 
@@ -2704,18 +2672,16 @@ also need geospatial metadata. Images obtained from Planet have the required met
 
             <div class="docstring"><p>Converts latitude/longitude coordinates to global coordinates</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>long:</strong>  The longitude coordinate in a pair of latitude/longitude coordinates.</li>
-<li><strong>lat:</strong>  The latitude coordinate in a pair of latitude/longitude coordinates.</li>
-</ul>
+<pre><code>long: The longitude coordinate in a pair of latitude/longitude coordinates.
+lat: The latitude coordinate in a pair of latitude/longitude coordinates.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>(x, y) - A tuple containing the global coordinates at the provided latitude/longitude coordinates.</p>
-</blockquote>
+<pre><code>(x, y) - A tuple containing the global coordinates at the provided latitude/longitude coordinates.
+</code></pre>
 </div>
 
 
@@ -2818,17 +2784,15 @@ Returns:
 
             <div class="docstring"><p>Calculates the lat long at the top left point of a given satellite image</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>metadata_components:</strong>  The metadata components stripped from a .tif file</li>
-</ul>
+<pre><code>metadata_components: The metadata components stripped from a .tif file
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>(long, lat) - A tuple containing the longitude and latitude at the top left point of the satellite image.</p>
-</blockquote>
+<pre><code>(long, lat) - A tuple containing the longitude and latitude at the top left point of the satellite image.
+</code></pre>
 </div>
 
 
@@ -2944,17 +2908,15 @@ Returns:
 
             <div class="docstring"><p>Calculates the lat long at the bottom left point of a given satellite image</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>metadata_components:</strong>  The metadata components stripped from a .tif file</li>
-</ul>
+<pre><code>metadata_components: The metadata components stripped from a .tif file
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>(long, lat) - A tuple containing the longitude and latitude at the bottom left point of the satellite image</p>
-</blockquote>
+<pre><code>(long, lat) - A tuple containing the longitude and latitude at the bottom left point of the satellite image
+</code></pre>
 </div>
 
 
@@ -3011,18 +2973,16 @@ Returns:
 
             <div class="docstring"><p>Calculates the lat long at the bottom right point of a given satellite image</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>metadata_components:</strong>  The metadata components stripped from a .tif file</li>
-</ul>
+<pre><code>metadata_components: The metadata components stripped from a .tif file
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>(long, lat) - A tuple containing the longitude and latitude at the bottom right point of the
-      satellite image.</p>
-</blockquote>
+<pre><code>(long, lat) - A tuple containing the longitude and latitude at the bottom right point of the
+    satellite image.
+</code></pre>
 </div>
 
 
@@ -3061,17 +3021,15 @@ Returns:
 
             <div class="docstring"><p>Obtains the width and height of a given satellite image</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>metadata_components:</strong>  The metadata components stripped from a .tif file</li>
-</ul>
+<pre><code>metadata_components: The metadata components stripped from a .tif file
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>(width, height) - A tuple containing the width and height of a given satellite image.</p>
-</blockquote>
+<pre><code>(width, height) - A tuple containing the width and height of a given satellite image.
+</code></pre>
 </div>
 
 

@@ -3,6 +3,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 import argparse
 import os
+import zipfile
 from datetime import datetime
 from .boat_utils.config import cfg
 from .boat_utils import image_cutting_support as ics
@@ -34,9 +35,46 @@ def main():
         "-d", "--detections", help="The path to the detections csv file", required=True
     )
     parser.add_argument(
-        "-i", "--image", help="The path to the image file", required=True
+        "-i",
+        "--image",
+        help="The path to the image file, or folder containing images either tif or png. Must be named the same as the image in the detections csv file",
+        required=False,
     )
+    parser.add_argument(
+        "-z",
+        "--zip",
+        help="The path to a zip file containing the image. Zip file should be named the same as the image in the detections csv file",
+        required=False,
+    )
+
     args = parser.parse_args()
+
+    if args.zip:
+        # if a zip, need to extract the zip.
+        # extract into ./temp folder
+        if not os.path.exists(args.zip):
+            print(f"Zip file {args.zip} does not exist")
+            return
+        # make temp folder and make it empty
+        if not os.path.exists("temp"):
+            os.mkdir("temp")
+        else:
+            for file in os.listdir("temp"):
+                os.remove(os.path.join("temp", file))
+        print("Extracting zip file...")
+        with zipfile.ZipFile(args.zip, "r") as zip_ref:
+            zip_ref.extractall("temp")
+        print("Zip file extracted")
+        # get the zipfile name
+        zip_name = os.path.basename(args.zip).split(".")[0]
+        date = zip_name.split("_")[1]
+        aoi = zip_name.split("_")[0]
+        # name the image the same as the zip file
+        os.rename(
+            os.path.join("temp", "composite" + ".tif"),
+            os.path.join("temp", f"{date}_{aoi}.tif"),
+        )
+        args.image = os.path.join("temp", f"{date}_{aoi}.tif")
 
     # if the image is a folder, run for each image in folder
     if os.path.isdir(args.image):
@@ -129,7 +167,6 @@ def plot(NNcsv, NNpicture, save=False, show=True):
         draw.rectangle([(x - w, y - h), (x + w, y + h)], outline=color, width=1)
 
         # Optional: Add confidence text near the rectangle
-        # You can also load a custom font using ImageFont if needed
         # draw.text((x - w / 2, y - h / 2), f"{round(conf, 2)}", fill=color)
 
     # Save the image with full quality
@@ -143,41 +180,6 @@ def plot(NNcsv, NNpicture, save=False, show=True):
     # Optionally display the image
     if show:
         im.show()
-
-    # fig, ax = plt.subplots(1)
-    # ax.imshow(im)
-    # colors = ["r", "g"]
-    # for coord in coords:
-    #     # plot different classes in different colours (numbered)
-    #     x, y, w, h, conf, class_type = coord
-    #     rect = plt.Rectangle(
-    #         (x - w, y - h),
-    #         w * 2,
-    #         h * 2,
-    #         fill=False,
-    #         edgecolor=colors[int(float(class_type))],
-    #         linewidth=0.2,
-    #     )
-    #     ax.add_patch(rect)
-    #     # plt.text(x - w/2, y - h/2, round(conf, 2), color=colors[int(float(class_type))], size=6)
-    # # legend with colors
-    # legend = []
-    # for i in range(len(colors)):
-    #     legend.append(plt.Rectangle((0, 0), 1, 1, fc=colors[i]))
-    # ax.legend(legend, ["Stationary", "Moving"])
-    # plt.axis("off")
-    # # save
-    # if save:
-    #     os.makedirs("ImgDetections", exist_ok=True)
-    #     plt.tight_layout()
-    #     # save with full quality
-    #     plt.savefig(
-    #         os.path.join("ImgDetections", IMAGE_NAME.split(".")[0] + ".png"),
-    #         bbox_inches="tight",
-    #         pad_inches=0,
-    #     )
-    # if show:
-    #     plt.show()
 
     # remove the temp png
     print("Removing temporary files...")

@@ -1539,18 +1539,16 @@ Date: 17/09/2024</p>
             <div class="docstring"><p>Given a folder, find all the tif files are create a png for each one.
 Also rename tif files if required.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>run_folder (str):</strong>  The folder to prepare</li>
-<li><strong>config (dict):</strong>  The configuration dictionary</li>
-</ul>
+<pre><code>run_folder (str): The folder to prepare
+config (dict): The configuration dictionary
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -1621,18 +1619,16 @@ Also rename tif files if required.</p>
             <div class="docstring"><p>Segment (labelled) png's in the given base.
 Places segmented images in the 'SegmentedImages' folder, and Labels in the 'Labels' folder.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>run_folder (str):</strong>  The folder to segment</li>
-<li><strong>config (dict):</strong>  The configuration dictionary</li>
-</ul>
+<pre><code>run_folder (str): The folder to segment
+config (dict): The configuration dictionary
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -1712,24 +1708,19 @@ Places segmented images in the 'SegmentedImages' folder, and Labels in the 'Labe
             <div class="docstring"><p>Run the YoloV5 detection on the segmented images, and move
 the detections to a sibling directory for analysis.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>run_folder (str):</strong>  The folder to run detection on.</li>
-<li><strong>run_config (dict):</strong>  The configuration dictionary.</li>
-</ul>
+<pre><code>run_folder (str): The folder to run detection on.
+run_config (dict): The configuration dictionary.
+</code></pre>
 
-<h6 id="raises">Raises:</h6>
+<p>Raises:
+    Exception: If there is an error running detection on a directory.</p>
 
-<ul>
-<li><strong>Exception:</strong>  If there is an error running detection on a directory.</li>
-</ul>
+<p>Returns:</p>
 
-<h6 id="returns">Returns:</h6>
-
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -1861,18 +1852,16 @@ the detections to a sibling directory for analysis.</p>
 <li>Generate json file {image}_labelme_auto.json with:</li>
 </ol>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>run_folder (str):</strong>  The folder to run detection on.</li>
-<li><strong>config (dict):</strong>  The configuration dictionary.</li>
-</ul>
+<pre><code>run_folder (str): The folder to run detection on.
+config (dict): The configuration dictionary.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -1917,18 +1906,16 @@ the detections to a sibling directory for analysis.</p>
 
             <div class="docstring"><p>Match up labels and detections, compare them, and save the results</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>run_folder (str):</strong>  The folder to run detection on.</li>
-<li><strong>config (dict):</strong>  The configuration dictionary.</li>
-</ul>
+<pre><code>run_folder (str): The folder to run detection on.
+config (dict): The configuration dictionary.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -1991,18 +1978,16 @@ the detections to a sibling directory for analysis.</p>
 
             <div class="docstring"><p>Summarize the results of the comparison. Reads all csvs and creates a confusion matrix</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>run_folder (str):</strong>  The folder to run detection on.</li>
-<li><strong>config (dict):</strong>  The configuration dictionary.</li>
-</ul>
+<pre><code>run_folder (str): The folder to run detection on.
+config (dict): The configuration dictionary.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -2139,18 +2124,16 @@ the detections to a sibling directory for analysis.</p>
 
             <div class="docstring"><p>Compare the detections and labels for a single image</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>detections (str):</strong>  The directory of detections for the iamge</li>
-<li><strong>labels_root (str):</strong>  The root directory of labels</li>
-</ul>
+<pre><code>detections (str): The directory of detections for the iamge
+labels_root (str): The root directory of labels
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]</p>
-</blockquote>
+<pre><code>list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]
+</code></pre>
 </div>
 
 
@@ -2238,18 +2221,16 @@ the detections to a sibling directory for analysis.</p>
 e.g if ml has the point (52, 101), and manual has (51.8, 101.2), they should be clustered together
 , and this boat should be noted as being in both sets</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>ml:</strong>  list of clusters in form [x, y, confidence, class, width, height, filename]</li>
-<li><strong>manual:</strong>  list of clusters in form [x, y, confidence, class, width, height, filename]</li>
-</ul>
+<pre><code>ml: list of clusters in form [x, y, confidence, class, width, height, filename]
+manual: list of clusters in form [x, y, confidence, class, width, height, filename]
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>list of clusters in form [x, y, ml_class, manual_class]</p>
-</blockquote>
+<pre><code>list of clusters in form [x, y, ml_class, manual_class]
+</code></pre>
 </div>
 
 
@@ -2301,18 +2282,16 @@ e.g if ml has the point (52, 101), and manual has (51.8, 101.2), they should be 
 
             <div class="docstring"><p>Combine the detections and labels into one list of annotated clusters for comparison</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>ml:</strong>  list of clusters in form [x, y, confidence, class, width, height, filename]</li>
-<li><strong>manual:</strong>  list of clusters in form [x, y, confidence, class, width, height, filename]</li>
-</ul>
+<pre><code>ml: list of clusters in form [x, y, confidence, class, width, height, filename]
+manual: list of clusters in form [x, y, confidence, class, width, height, filename]
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>list of clusters in form [x, y, confidence, class, width, height, filename, source]</p>
-</blockquote>
+<pre><code>list of clusters in form [x, y, confidence, class, width, height, filename, source]
+</code></pre>
 </div>
 
 
@@ -2349,18 +2328,16 @@ e.g if ml has the point (52, 101), and manual has (51.8, 101.2), they should be 
 
             <div class="docstring"><p>Write the comparisons to a csv file</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>comparisons:</strong>  list of clusters in form [x, y, ml_class, manual_class]</li>
-<li><strong>filename:</strong>  the name of the file to write to</li>
-</ul>
+<pre><code>comparisons: list of clusters in form [x, y, ml_class, manual_class]
+filename: the name of the file to write to
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -2448,18 +2425,16 @@ e.g if ml has the point (52, 101), and manual has (51.8, 101.2), they should be 
 
             <div class="docstring"><p>Convert x and y of image classifications to lat/long and saves csv</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>run_folder (str):</strong>  The folder to run detection on.</li>
-<li><strong>run_config (dict):</strong>  The configuration dictionary.</li>
-</ul>
+<pre><code>run_folder (str): The folder to run detection on.
+run_config (dict): The configuration dictionary.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -2529,18 +2504,16 @@ e.g if ml has the point (52, 101), and manual has (51.8, 101.2), they should be 
 
             <div class="docstring"><p>Column graph with each group being one image, showing number of labelled and number of detected boats next to each other</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>run_folder (str):</strong>  The folder to run detection on.</li>
-<li><strong>config (dict):</strong>  The configuration dictionary.</li>
-</ul>
+<pre><code>run_folder (str): The folder to run detection on.
+config (dict): The configuration dictionary.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -2733,18 +2706,16 @@ e.g if ml has the point (52, 101), and manual has (51.8, 101.2), they should be 
 
             <div class="docstring"><p>given a directory of csvs, plot the boats on the images and save the images</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>csvs:</strong>  directory containing csvs. Must be of form: x, y, ml_class, manual_class</li>
-<li><strong>imgs:</strong>  base folder with the images (png), or a folder with subfolders with images (stitched.png)</li>
-</ul>
+<pre><code>csvs: directory containing csvs. Must be of form: x, y, ml_class, manual_class
+imgs: base folder with the images (png), or a folder with subfolders with images (stitched.png)
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -2966,18 +2937,16 @@ Since the x and y in the summary refer to the entire image, we need to
 calculate the subimage(s) that the boat is in. save the best subimage (most central)
 to a new directory with the type of mistake (e.g "false_positive")</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>run_folder (str):</strong>  The folder to run detection on.</li>
-<li><strong>config (dict):</strong>  The configuration dictionary.</li>
-</ul>
+<pre><code>run_folder (str): The folder to run detection on.
+config (dict): The configuration dictionary.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -3114,18 +3083,16 @@ to a new directory with the type of mistake (e.g "false_positive")</p>
             <div class="docstring"><p>For config["subimage_confidence"] (int) boats, plot the 16 squares around the boat
 and their confidence scores.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>run_folder (str):</strong>  The folder to run detection on.</li>
-<li><strong>config (dict):</strong>  The configuration dictionary.</li>
-</ul>
+<pre><code>run_folder (str): The folder to run detection on.
+config (dict): The configuration dictionary.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -3178,18 +3145,16 @@ and their confidence scores.</p>
 
             <div class="docstring"><p>Generate the coverage heatmap for all TIF files used in the run</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>run_folder (str):</strong>  The folder to run detection on.</li>
-<li><strong>config (dict):</strong>  The configuration dictionary.</li>
-</ul>
+<pre><code>    run_folder (str): The folder to run detection on.
+    config (dict): The configuration dictionary.
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>    None
+</code></pre>
 </div>
 
 
@@ -3236,19 +3201,17 @@ and their confidence scores.</p>
 
             <div class="docstring"><p>return a list of tuples (row, col) that would contain the given x and y coords</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>x:</strong>  x coord</li>
-<li><strong>y:</strong>  y coord</li>
-<li><strong>stride:</strong>  stride of the images</li>
-</ul>
+<pre><code>x: x coord
+y: y coord
+stride: stride of the images
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>list of tuples (row, col)</p>
-</blockquote>
+<pre><code>list of tuples (row, col)
+</code></pre>
 </div>
 
 
@@ -3286,17 +3249,15 @@ and their confidence scores.</p>
 
             <div class="docstring"><p>Segregate the directory by day and image</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>directory (str):</strong>  The directory to segregate</li>
-</ul>
+<pre><code>directory (str): The directory to segregate
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>    None
+</code></pre>
 </div>
 
 
@@ -3350,18 +3311,16 @@ and their confidence scores.</p>
             <div class="docstring"><p>Separate files in a directory into subdirectories by day.
 Files must have the date as the last part of the filename.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>directory (str):</strong>  The directory to segregate</li>
-<li><strong>into (str):</strong>  The directory to move the files into</li>
-</ul>
+<pre><code>directory (str): The directory to segregate
+into (str): The directory to move the files into
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>list of directories</p>
-</blockquote>
+<pre><code>list of directories
+</code></pre>
 </div>
 
 
@@ -3412,18 +3371,16 @@ Files must have the date as the last part of the filename.</p>
             <div class="docstring"><p>Separate files in a directory into subdirectories by image.
 Files must have the image name as the middle part of the filename.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>directory (str):</strong>  The directory to segregate</li>
-<li><strong>into (str):</strong>  The directory to move the files into</li>
-</ul>
+<pre><code>directory (str): The directory to segregate
+into (str): The directory to move the files into
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>list of directories</p>
-</blockquote>
+<pre><code>list of directories
+</code></pre>
 </div>
 
 

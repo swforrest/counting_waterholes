@@ -611,23 +611,21 @@ covered by the polygon</li>
 
             <div class="docstring"><p>Get the bounding box of a list of polygons.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>polygons:</strong>  List of polygons, must be in global coordinate system (not latlong)</li>
-</ul>
+<pre><code>polygons: List of polygons, must be in global coordinate system (not latlong)
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>x_min: Minimum x value</p>
-  
-  <p>x_max: Maximum x value</p>
-  
-  <p>y_min: Minimum y value</p>
-  
-  <p>y_max: Maximum y value</p>
-</blockquote>
+<pre><code>x_min: Minimum x value
+
+x_max: Maximum x value
+
+y_min: Minimum y value
+
+y_max: Maximum y value
+</code></pre>
 </div>
 
 
@@ -675,18 +673,17 @@ covered by the polygon</li>
 
             <div class="docstring"><p>Get the polygons from a folder of json files.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>folder:</strong>  Path to folder</li>
-<li><strong>name:</strong>  Optional, name of file to search for</li>
-</ul>
+<pre><code>folder: Path to folder
 
-<h6 id="returns">Returns:</h6>
+name: Optional, name of file to search for
+</code></pre>
 
-<blockquote>
-  <p>List of polygons in global coordinate system EPSG:32756</p>
-</blockquote>
+<p>Returns:</p>
+
+<pre><code>List of polygons in global coordinate system EPSG:32756
+</code></pre>
 </div>
 
 
@@ -725,18 +722,16 @@ covered by the polygon</li>
             <div class="docstring"><p>Get the polygons from a csv file with 'polygon' column.
 Group optionally is a group of aois to use</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>csv_path:</strong>  Path to csv file</li>
-<li><strong>group:</strong>  Optional, list of aois to use</li>
-</ul>
+<pre><code>csv_path: Path to csv file
+group: Optional, list of aois to use
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>List of polygons in global coordinate system EPSG:32756</p>
-</blockquote>
+<pre><code>List of polygons in global coordinate system EPSG:32756
+</code></pre>
 </div>
 
 
@@ -781,18 +776,16 @@ Group optionally is a group of aois to use</p>
             <div class="docstring"><p>Get the polygons from a dataframe with 'polygon' column.
 Group optionally is a group of aois to use</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>df:</strong>  Dataframe with 'polygon' column</li>
-<li><strong>group:</strong>  Optional, list of aois to use</li>
-</ul>
+<pre><code>df: Dataframe with 'polygon' column
+group: Optional, list of aois to use
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>List of polygons in global coordinate system EPSG:32756</p>
-</blockquote>
+<pre><code>List of polygons in global coordinate system EPSG:32756
+</code></pre>
 </div>
 
 
@@ -845,24 +838,22 @@ Group optionally is a group of aois to use</p>
 
             <div class="docstring"><p>Create's a grid of pixels that covers the area of the bounding box.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>x_min:</strong>  Minimum x value</li>
-<li><strong>x_max:</strong>  Maximum x value</li>
-<li><strong>y_min:</strong>  Minimum y value</li>
-<li><strong>y_max:</strong>  Maximum y value</li>
-<li><strong>size:</strong>  Size of each pixel in meters</li>
-</ul>
+<pre><code>x_min: Minimum x value
+x_max: Maximum x value
+y_min: Minimum y value
+y_max: Maximum y value
+size: Size of each pixel in meters
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>A tuple of:
-      grid: 2D numpy array of zeros
-      x_step: Size of each pixel in x direction
-      y_step: Size of each pixel in y direction</p>
-</blockquote>
+<pre><code>A tuple of:
+    grid: 2D numpy array of zeros
+    x_step: Size of each pixel in x direction
+    y_step: Size of each pixel in y direction
+</code></pre>
 </div>
 
 
@@ -913,24 +904,22 @@ Group optionally is a group of aois to use</p>
 
             <div class="docstring"><p>Populate the given grid as per whether each pixel's center is covered by the polygon.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>grid:</strong>  2D numpy array of zeros</li>
-<li><strong>x_min:</strong>  Minimum x value</li>
-<li><strong>x_max:</strong>  Maximum x value</li>
-<li><strong>y_min:</strong>  Minimum y value</li>
-<li><strong>y_max:</strong>  Maximum y value</li>
-<li><strong>x_step:</strong>  Size of each pixel in x direction</li>
-<li><strong>y_step:</strong>  Size of each pixel in y direction</li>
-<li><strong>poly:</strong>  Polygon to paint onto the grid</li>
-</ul>
+<pre><code>grid: 2D numpy array of zeros
+x_min: Minimum x value
+x_max: Maximum x value
+y_min: Minimum y value
+y_max: Maximum y value
+x_step: Size of each pixel in x direction
+y_step: Size of each pixel in y direction
+poly: Polygon to paint onto the grid
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -1014,25 +1003,23 @@ Group optionally is a group of aois to use</p>
 
             <div class="docstring"><p>Export the grid as a GEOTIFF.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>grid:</strong>  2D numpy array of zeros</li>
-<li><strong>x_min:</strong>  Minimum x value</li>
-<li><strong>x_max:</strong>  Maximum x value</li>
-<li><strong>y_min:</strong>  Minimum y value</li>
-<li><strong>y_max:</strong>  Maximum y value</li>
-<li><strong>x_step:</strong>  Size of each pixel in x direction</li>
-<li><strong>y_step:</strong>  Size of each pixel in y direction</li>
-<li><strong>filename:</strong>  Name of file to save</li>
-<li><strong>geojson:</strong>  Whether to save a geojson file as well</li>
-</ul>
+<pre><code>grid: 2D numpy array of zeros
+x_min: Minimum x value
+x_max: Maximum x value
+y_min: Minimum y value
+y_max: Maximum y value
+x_step: Size of each pixel in x direction
+y_step: Size of each pixel in y direction
+filename: Name of file to save
+geojson: Whether to save a geojson file as well
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -1113,24 +1100,22 @@ Group optionally is a group of aois to use</p>
 <li>value: The value of the square (number of times this square was painted on)</li>
 </ul>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>grid:</strong>  2D numpy array of zeros</li>
-<li><strong>x_min:</strong>  Minimum x value</li>
-<li><strong>x_max:</strong>  Maximum x value</li>
-<li><strong>y_min:</strong>  Minimum y value</li>
-<li><strong>y_max:</strong>  Maximum y value</li>
-<li><strong>x_step:</strong>  Size of each pixel in x direction</li>
-<li><strong>y_step:</strong>  Size of each pixel in y direction</li>
-<li><strong>filename:</strong>  Name of file to save</li>
-</ul>
+<pre><code>grid: 2D numpy array of zeros
+x_min: Minimum x value
+x_max: Maximum x value
+y_min: Minimum y value
+y_max: Maximum y value
+x_step: Size of each pixel in x direction
+y_step: Size of each pixel in y direction
+filename: Name of file to save
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -1191,17 +1176,15 @@ Group optionally is a group of aois to use</p>
 
             <div class="docstring"><p>Get the coordinates of a polygon from a tif file.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>tif:</strong>  Path to tif file</li>
-</ul>
+<pre><code>tif: Path to tif file
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>List of polygons as ogr polygons in the source coordinate system of the tif</p>
-</blockquote>
+<pre><code>List of polygons as ogr polygons in the source coordinate system of the tif
+</code></pre>
 </div>
 
 
@@ -1269,18 +1252,16 @@ Group optionally is a group of aois to use</p>
 then adding the polygons to the raster, and then adding the rasters
 together.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>heatmap:</strong>  Path to raster file e.g. 'heatmap.tif'</li>
-<li><strong>polygons:</strong>  List of polygons as ogr polygons</li>
-</ul>
+<pre><code>heatmap: Path to raster file e.g. 'heatmap.tif'
+polygons: List of polygons as ogr polygons
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 
@@ -1338,19 +1319,17 @@ together.</p>
             <div class="docstring"><p>Create and save a heatmap from a list of polygons.
 Optionally show the heatmap.</p>
 
-<h6 id="arguments">Arguments:</h6>
+<p>Args:</p>
 
-<ul>
-<li><strong>polygons:</strong>  List of polygons</li>
-<li><strong>save_file:</strong>  Name of file to save</li>
-<li><strong>show:</strong>  Whether to show the heatmap</li>
-</ul>
+<pre><code>polygons: List of polygons
+save_file: Name of file to save
+show: Whether to show the heatmap
+</code></pre>
 
-<h6 id="returns">Returns:</h6>
+<p>Returns:</p>
 
-<blockquote>
-  <p>None</p>
-</blockquote>
+<pre><code>None
+</code></pre>
 </div>
 
 

@@ -1,3 +1,12 @@
+"""
+This file is used to create coverage heatmaps for the UDM images.
+The coverage heatmaps show the number of times each grid cell has been imaged by a UDM image.
+The grid cells are defined by a grid size (e.g. 500m x 500m) and the extent of the area of interest.
+The coverage heatmaps are saved to a CSV file with columns: year, gridx, gridy, count.
+For efficiency, the coverage heatmaps are generated in parallel using multiprocessing and cached to disk in .pkl files.
+The UDM clear masks are also cached to disk in .npz files for faster loading.
+"""
+
 from multiprocessing import Pool
 from functools import partial
 import rasterio
@@ -22,9 +31,9 @@ from counting_boats.boat_utils.image_cutting_support import latlong2coord, coord
 DETECTION_CSV = "C:/ML_Software/All_Results/boat_detections.csv"
 COVERAGE_CSV = "C:/ML_Software/All_Results/coverage.csv"
 ORDERS_CSV = "C:/ML_Software/All_Results/orders.csv"
-UDM_DIR = "D:/Results/UDM"
-GRID_SIZE = 500  # Meters
-RESULTS_DIR = "D:/Results/udm_results"
+UDM_DIR = "U:\\Research\\Projects\\sef\\livingplayingmb\\Boat Detection TMBF\\UDM"
+GRID_SIZE = 1000  # Meters
+RESULTS_DIR = "C:/ML_Software/All_Results/COV"
 
 
 def udm_clear(udm_name):
