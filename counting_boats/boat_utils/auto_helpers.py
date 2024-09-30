@@ -18,6 +18,7 @@ from .image_cutting_support import latlong2coord
 import numpy as np
 import base64
 import comet_ml
+import stat
 
 
 def get_history(csv_path: str) -> pd.DataFrame:
@@ -653,4 +654,8 @@ def archive(path: str, coverage_path: str, start_date=None, end_date=None):
                     )
                     # save the coverage
                     coverage.to_csv(coverage_path, index=False)
-            shutil.rmtree(os.path.join(root, d))
+            shutil.rmtree(os.path.join(root, d), onerror=remove_readonly)
+        
+def remove_readonly(func, path, excinfo):
+    os.chmod(path, stat.S_IWRITE)
+    func(path)

@@ -11,6 +11,8 @@ from . import image_cutting_support as ics
 from .config import cfg
 from tqdm import tqdm
 import torch
+import stat
+import shutil
 
 # instantiate posixpath for windows if using windows
 import pathlib
@@ -713,7 +715,11 @@ def remove(path, del_folder=True):
         elif os.path.isdir(file_path):
             remove(file_path)
     if del_folder:
-        os.rmdir(path)
+        shutil.rmtree(path, onerror=remove_readonly)
+
+def remove_readonly(func, path, excinfo):
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
 
 
 def pixel2latlong(classifications, tif) -> np.ndarray:
