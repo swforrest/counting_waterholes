@@ -1,4 +1,4 @@
-# Counting Boats
+# Counting Waterholes Project
 
 ## What
 
