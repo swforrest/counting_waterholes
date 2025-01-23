@@ -1,13 +1,25 @@
-yolo_dir: C:\yolov5
+#Updates to run on Adriano Fossati (AF) comupter. Commented out the base directories
+
+# yolo_dir: C:\yolov5
+#AF:
+yolo_dir: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\yolov5
+#AF:
 python: python
-raw_images: C:\ML_Software\active_learning\data\downloads
+#raw_images: C:\ML_Software\active_learning\data\downloads
+#AF: 
+raw_images: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes\docs\ML_Software\active_learning\data\downloads
 
 # reccommended to change outdir for each run if using different images/params!!!
-output_dir: C:\ML_Software\active_learning\data
-weights: C:\yolov5\runs\train\63ImageTraim_19Mar_(S300)\weights\best.pt
+#base dir: output_dir:C:\ML_Software\active_learning\data
+#AF:
+output_dir: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes\docs\ML_Software\active_learning\data
+#base dir: weights: C:\yolov5\runs\train\63ImageTraim_19Mar_(S300)\weights\best.pt
+#AF:
+weights: C:\yolov5\runs\train\63ImageTraim_19Mar_(S300)\weights\best.pt #AF: file not existing for now. to be checked later. 
 cache: False
 
 # yaml config describing the training data and classes
+#AF: all int to be rechecked later and see what we want to put in there. 
 workers: 6
 
 BATCH_SIZE: 8
@@ -24,5 +36,8 @@ train:
 val:
   # - C:\ML_Software\MoretonVal\images
 names:
-  0: boat
-  1: movingBoat
+  0: boat #AF -> waterhole but for now let's just leave the boat naming 
+  #1: movingBoat 
+  #AF: what if it need two categories in the whole script? 
+  #If I delete the second one, or don't put a second cat, might fuck up all the scripts workflow...
+
