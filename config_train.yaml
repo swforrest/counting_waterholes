@@ -7,7 +7,7 @@ yolo_dir: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByt
 python: python
 #raw_images: C:\ML_Software\active_learning\data\downloads
 #AF: 
-raw_images: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes\docs\ML_Software\active_learning\data\downloads
+raw_images: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes\images\RawImages
 
 # reccommended to change outdir for each run if using different images/params!!!
 #base dir: output_dir:C:\ML_Software\active_learning\data
@@ -29,7 +29,7 @@ TILE_SIZE: 416
 STRIDE: 104
 
 # training Dataset
-path: \\hpc-fs.qut.edu.au\turner30\Projects\Boats\Training\trainOrig\trainFinal
+path: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes
 train:
   # - C:\yoloDatasets\trainFinal\images
   - \\hpc-fs.qut.edu.au\turner30\Projects\Boats\Training\trainOrig\trainFinal\images

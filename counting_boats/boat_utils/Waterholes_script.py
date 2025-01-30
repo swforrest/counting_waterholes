@@ -1,6 +1,12 @@
+"""
+AF: runing parts of the boat_detection workflow to prepare tif images to annotate them as PNGs with labelme.
+
+WIP
+
+"""
 import os
-print("Python works with Miniconda!")
 import shutil
+import yaml
 
 import numpy as np
 import pandas as pd
@@ -9,8 +15,8 @@ import random
 
 from counting_boats.boat_utils.classifier import cluster, process_clusters, read_classifications, pixel2latlong
 from counting_boats.boat_utils.config import cfg
-from counting_boats.boat_utils import image_cutting_support as ics
-from counting_boats.boat_utils import heatmap as hm
+from . import image_cutting_support as ics
+from . import heatmap as hm
 from PIL import Image, ImageDraw
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
@@ -33,10 +39,16 @@ def prepare(run_folder, config):
 
         None
     """
+    print(config)
+    with open(config, "r") as ymlfile:
+        config = yaml.load(ymlfile, Loader=yaml.FullLoader)
+    print(type(config), config)
+    print("Hello World")
     img_folder = config["raw_images"]  # folder with the tif files
     save_folder = os.path.join(config["path"], config["pngs"])
     os.makedirs(save_folder, exist_ok=True)
     for root, _, files in os.walk(img_folder):
+        print("Hello does this one works?")
         for file in files:
             if file == "composite.tif":
                 # find the json file:
@@ -71,6 +83,5 @@ def prepare(run_folder, config):
                         stride=config["img_stride"],
                     )
 
-prepare(r"C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes\images\RawImages\waterhole_test_20250116_psscene_analytic_8b_sr_udm2.zip", 
-        r"C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes")
+prepare(r"C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes\images\RawImages", r"C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes\config_train.yaml")
 
