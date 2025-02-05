@@ -40,7 +40,7 @@ def PlanetSearch(
     Search a given area of interest for Planet imagery
 
     Args:
-    
+
         polygon_file: the path to the polygon file
         min_date: the minimum date to search for (inclusive)
         max_date: the maximum date to search for (inclusive)
@@ -221,6 +221,9 @@ def PlanetDownload(orderID: str, aoi=None, date=None, downloadPath="tempDL"):
         the name of the tif file after extracting
     """
     uri = f"https://api.planet.com/compute/ops/orders/v2/{orderID}"
+
+    print(uri)
+
     response = requests.get(uri, auth=(API_KEY, ""))
     if response.status_code != 200:
         raise Exception("Planet API returned non-200 status code")
