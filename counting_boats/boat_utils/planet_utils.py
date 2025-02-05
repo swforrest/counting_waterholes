@@ -25,7 +25,7 @@ import argparse #addition from gpt to allow execution from the command line
 load_dotenv(override=True)
 
 # api key is either set in the environment variable or config.yml
-#API_KEY = os.environ.get("PLANET_API_KEY", cfg["planet"]["api_key"])
+API_KEY = os.environ.get("PLANET_API_KEY", cfg["planet"]["api_key"])
 #if API_KEY is None or API_KEY == "ENV":
     #raise Exception("Planet API key not found in environment variable or config.yml")
 #AF: deleted for now
