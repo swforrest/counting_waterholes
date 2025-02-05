@@ -1,3 +1,13 @@
+"""
+AF: runing parts of the boat_detection workflow to prepare tif images to annotate them as PNGs with labelme.
+
+Script to run with pythonin order to subselect some function in different .py files in the repo. 
+
+want to a. extract zip from our downloaded image. And b. prepare the image to cut it as a png. 
+
+WIP
+
+"""
 #Script to run with pythonin order to subselect some function in different .py files in the repo. 
 #want to a. extract zip from our downloaded image. And b. prepare the image to cut it as a png. 
 
