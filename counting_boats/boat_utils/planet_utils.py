@@ -296,17 +296,6 @@ def extract_zip(downloadFile, aoi=None, date=None):
             raise Exception(f"Error moving {tif} to {newfname}")
     return newfname
 
-#addition of gpt command-line interface:
-#if __name__ == "__main__" 
-    parser = argparse.ArgumentParser(description="Extract ZIP and move TIFs")
-    parser.add_argument("zip_path", type=str, help="Path to the ZIP file")
-    parser.add_argument("--aoi", type=str, default=None, help="Area of interest")
-    parser.add_argument("--date", type=str, default=None, help="Date of image")
-
-    args = parser.parse_args()
-    extract_zip(args.zip_path, args.aoi, args.date)
-
-
 
 
 def get_with_retry(uri, auth, retries=5):
