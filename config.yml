@@ -11,7 +11,7 @@ proj_root: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\R
 weights: ./data/NN_weights.pt # yolov5 weights file % same directory as for AF
 planet:
   api_key:
-    ENV #left as ENV for now but will need to be put once we are sure the workflow is working as we want
+    PLAK96bb84fd45394e0cadfb141d08e09643
     # If api_key is 'ENV', there must be a '.env' file in the same directory as this file with PLANET_API_KEY={your_api_key}
 output_dir: ./results #AF: created the folder in accordance
 tif_dir: ./images/RawImages #AF: created the subfolder in accordance and adapted the path
