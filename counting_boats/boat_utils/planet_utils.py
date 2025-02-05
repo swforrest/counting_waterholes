@@ -25,10 +25,10 @@ import argparse #addition from gpt to allow execution from the command line
 load_dotenv(override=True)
 
 # api key is either set in the environment variable or config.yml
-API_KEY = os.environ.get("PLANET_API_KEY", cfg["planet"]["api_key"])
-if API_KEY is None or API_KEY == "ENV":
-    raise Exception("Planet API key not found in environment variable or config.yml")
-
+#API_KEY = os.environ.get("PLANET_API_KEY", cfg["planet"]["api_key"])
+#if API_KEY is None or API_KEY == "ENV":
+    #raise Exception("Planet API key not found in environment variable or config.yml")
+#AF: deleted for now
 
 def PlanetSearch(
     polygon_file: str,
@@ -296,7 +296,7 @@ def extract_zip(downloadFile, aoi=None, date=None):
     return newfname
 
 #addition of gpt command-line interface:
-if __name__ == "__main__" 
+#if __name__ == "__main__" 
     parser = argparse.ArgumentParser(description="Extract ZIP and move TIFs")
     parser.add_argument("zip_path", type=str, help="Path to the ZIP file")
     parser.add_argument("--aoi", type=str, default=None, help="Area of interest")
