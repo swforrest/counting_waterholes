@@ -40,20 +40,23 @@ def PlanetSearch(
     Search a given area of interest for Planet imagery
 
     Args:
+    
         polygon_file: the path to the polygon file
         min_date: the minimum date to search for (inclusive)
         max_date: the maximum date to search for (inclusive)
         cloud_cover: the maximum cloud cover to search for
 
     Requires:
+
         Planet API key be set in environment variable
 
     Returns:
+
         a list of Planet items (json result from API)
 
     Raises:
-        Exception: if the API returns a non-200 status code
 
+        Exception: if the API returns a non-200 status code
     """
     # get the polygon
     polygon = None
