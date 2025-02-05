@@ -40,7 +40,6 @@ def PlanetSearch(
     Search a given area of interest for Planet imagery
 
     Args:
-
         polygon_file: the path to the polygon file
         min_date: the minimum date to search for (inclusive)
         max_date: the maximum date to search for (inclusive)
