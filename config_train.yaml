@@ -35,7 +35,7 @@ img_stride: 104
 path: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes
 #added the pngs path on the script as it was missing and it was called by my personal script. 
 pngs: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images\pngs
-segmented_images: .\image\SegmentedImages # Segmented images
+segmented_images: .\images\SegmentedImages # Segmented images
 labels: .\images\Labels # Labels for the images
 classifications: .\images\classifications # Classifications for the images
 

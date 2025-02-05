@@ -14,7 +14,7 @@ Date: 17/09/2024
 
 import os
 import shutil
-import yaml #added from gpt to accept command-line arguments
+import yaml 
 import argparse
 
 
