@@ -2,11 +2,11 @@
 
 # yolo_dir: /yolov5  % base directory
 # AF directory:
-yolo_dir: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\yolov5
+yolo_dir: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\yolov5
 python: python
 # proj_root: C:/CountingBoats # root of project (where this file is) % base directory
 #AF directory: 
-proj_root: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes # root of project (where this file is) % base directory
+proj_root: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes # root of project (where this file is) % base directory
 #AF directory: 
 weights: ./data/NN_weights.pt # yolov5 weights file % same directory as for AF
 planet:
@@ -17,7 +17,7 @@ output_dir: ./results #AF: created the folder in accordance
 tif_dir: ./images/RawImages #AF: created the subfolder in accordance and adapted the path
 download_dir: ./images/downloads #AF: created the subfolder in accordance and adapted the path
 # archive_dir: U:\Research\Projects\sef\livingplayingmb % base directory from Charlie
-archive_dir: U:\Research\Projects\sef\livingplayingmb #AF: Archive folder in the same OneDrive but other folder
+archive_dir: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\archive_counting_waterholes #AF: Archive folder in the same OneDrive but other folder
 use_comet: False # If true, make sure comet is setup (needs env vars or a .comet.config file)
 
 # Technical Configuration

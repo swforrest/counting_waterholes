@@ -1,9 +1,9 @@
 # Validation run with Best weights from TrainFinalandOld
 
-yolo_dir: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\yolov5
+yolo_dir: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\yolov5
 python: python
 # Configuration for Validation/Analysis Runs
-path: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes
+path:  C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes
 weights: ./data/NN_weights.pt
 # weights: /Users/charlieturner/Desktop/Yolov5l.pt
 device: cuda:0

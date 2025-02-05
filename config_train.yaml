@@ -15,7 +15,7 @@ raw_images: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\
 output_dir: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\results
 #base dir: weights: C:\yolov5\runs\train\63ImageTraim_19Mar_(S300)\weights\best.pt
 #AF:
-weights: C:\yolov5\runs\train\63ImageTraim_19Mar_(S300)\weights\best.pt #AF: file not existing for now. to be checked later. 
+weights: ./data/NN_weights.pt #AF: file existing but from the general config for now. to be checked later. 
 cache: False
 
 # yaml config describing the training data and classes
