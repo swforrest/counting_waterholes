@@ -49,7 +49,6 @@ def PlanetSearch(
         Planet API key be set in environment variable
 
     Returns:
-
         a list of Planet items (json result from API)
 
     Raises:
