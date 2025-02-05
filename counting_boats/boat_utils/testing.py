@@ -96,17 +96,7 @@ def prepare(run_folder, config):
                         tile_size=config["img_size"],
                         stride=config["img_stride"],
                     )
-# addition of gpt Command-line interface: 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Prepare TIF files and convert to PNG")
-    parser.add_argument("config_path", type=str, help="Path to the YAML configuration file")
 
-    args = parser.parse_args()
-
-    with open(args.config_path, "r") as file:
-        config = yaml.safe_load(file)
-
-    prepare(config["raw_images"], config)
 
 
 

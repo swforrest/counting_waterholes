@@ -9,6 +9,8 @@ python: python
 #AF: 
 raw_images: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images\raw_images
 
+proj_root: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes
+
 # reccommended to change outdir for each run if using different images/params!!!
 #base dir: output_dir:C:\ML_Software\active_learning\data
 #AF:
