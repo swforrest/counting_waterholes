@@ -21,6 +21,7 @@ sys.path.append(os.path.abspath(r"C:\Users\adria\OneDrive - AdrianoFossati\Docum
 
 from counting_boats.boat_utils.planet_utils import extract_zip
 from counting_boats.boat_utils.testing import prepare
+from counting_boats.boat_utils.testing import segment
 
 
 # Define the path to your zip file
@@ -42,8 +43,8 @@ with open("config_train.yaml", "r") as ymlfile:
 #Run preparation of the tif files into png and renamed the tif. 
 #prepare(r"C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images\RawImages", cfg)
  
+segment(r"C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images", cfg)
 
 
- 
 print('hello')
 
