@@ -14,6 +14,9 @@ Date: 17/09/2024
 
 import os
 import shutil
+import yaml #added from gpt to accept command-line arguments
+import argparse
+
 
 import numpy as np
 import pandas as pd
@@ -28,6 +31,8 @@ from PIL import Image, ImageDraw
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 import json
+
+
 
 
 def prepare(run_folder, config):
@@ -47,20 +52,29 @@ def prepare(run_folder, config):
     img_folder = config["raw_images"]  # folder with the tif files
     save_folder = os.path.join(config["path"], config["pngs"])
     os.makedirs(save_folder, exist_ok=True)
+    
     for root, _, files in os.walk(img_folder):
         for file in files:
             if file == "composite.tif":
                 # find the json file:
                 date_file = [f for f in files if f.endswith("xml")][0]
+                if not date_file: 
+                    print(f"Warning: No XML file found in {root}, skipping renaming.")
+                    continue
+
                 date = date_file.split("_")[0]
                 aoi = os.path.basename(root).split("_")[-2].split("/")[-1]
                 print(root, aoi)
                 name = f"{date}_{aoi}.tif"
                 print(name)
+                print(f"Renaming {file} to {name}")
+
                 os.rename(os.path.join(root, file), os.path.join(root, name))
+
                 # want to create a png for this
                 new_name = os.path.join(save_folder, f"{name.split('.')[0]}.png")
                 if not os.path.exists(new_name):
+                    print(f"Creating PNG for {name}")
                     ics.create_padded_png(
                         root,
                         save_folder,
@@ -68,6 +82,7 @@ def prepare(run_folder, config):
                         tile_size=config["img_size"],
                         stride=config["img_stride"],
                     )
+                    
             # if the file is a tif and first part is a date, don't need to rename
             elif file.endswith("tif") and file.split("_")[0].isdigit():
                 # check if we have already created a png for this
@@ -81,6 +96,19 @@ def prepare(run_folder, config):
                         tile_size=config["img_size"],
                         stride=config["img_stride"],
                     )
+# addition of gpt Command-line interface: 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Prepare TIF files and convert to PNG")
+    parser.add_argument("config_path", type=str, help="Path to the YAML configuration file")
+
+    args = parser.parse_args()
+
+    with open(args.config_path, "r") as file:
+        config = yaml.safe_load(file)
+
+    prepare(config["raw_images"], config)
+
+
 
 
 def segment(run_folder, config):

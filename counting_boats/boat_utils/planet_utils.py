@@ -20,6 +20,7 @@ from .config import cfg
 from dotenv import load_dotenv
 from . import spatial_helpers
 import zipfile
+import argparse #addition from gpt to allow execution from the command line 
 
 load_dotenv(override=True)
 
@@ -265,13 +266,17 @@ def extract_zip(downloadFile, aoi=None, date=None):
             aoi = "_".join(seps[:-1])
         except:
             raise Exception("AOI and date must be provided")
+        
     extractPath = downloadFile.split(".zip")[0]
     print(downloadFile, extractPath)
+    
     with zipfile.ZipFile(downloadFile, "r") as zip_ref:
         zip_ref.extractall(extractPath)
+    
     # move the tif file to the raw tiffs directory, naming it (date)_(aoi).tif
     newfname = f"{date}_{aoi}.tif"
     tif = os.path.join(extractPath, "composite.tif")
+    
     if not os.path.isfile(tif):
         raise Exception(f"No tif file found in {extractPath}")
 
@@ -289,6 +294,18 @@ def extract_zip(downloadFile, aoi=None, date=None):
         else:
             raise Exception(f"Error moving {tif} to {newfname}")
     return newfname
+
+#addition of gpt command-line interface:
+if __name__ == "__main__" 
+    parser = argparse.ArgumentParser(description="Extract ZIP and move TIFs")
+    parser.add_argument("zip_path", type=str, help="Path to the ZIP file")
+    parser.add_argument("--aoi", type=str, default=None, help="Area of interest")
+    parser.add_argument("--date", type=str, default=None, help="Date of image")
+
+    args = parser.parse_args()
+    extract_zip(args.zip_path, args.aoi, args.date)
+
+
 
 
 def get_with_retry(uri, auth, retries=5):
