@@ -221,9 +221,6 @@ def PlanetDownload(orderID: str, aoi=None, date=None, downloadPath="tempDL"):
         the name of the tif file after extracting
     """
     uri = f"https://api.planet.com/compute/ops/orders/v2/{orderID}"
-
-    print(uri)
-
     response = requests.get(uri, auth=(API_KEY, ""))
     if response.status_code != 200:
         raise Exception("Planet API returned non-200 status code")
