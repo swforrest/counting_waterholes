@@ -39,7 +39,11 @@ with open("config_train.yaml", "r") as ymlfile:
         "tif_dir", os.path.join(cfg["proj_root"], "images", "RawImages")
     )  # This is generated so not included in the config file
 
-prepare(r"C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images\RawImages", cfg)
+#Run preparation of the tif files into png and renamed the tif. 
+#prepare(r"C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images\RawImages", cfg)
+ 
+
+
  
 print('hello')
 
