@@ -2,17 +2,17 @@
 
 # yolo_dir: C:\yolov5
 #AF:
-yolo_dir: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\yolov5
+yolo_dir: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\yolov5
 #AF:
 python: python
 #raw_images: C:\ML_Software\active_learning\data\downloads
 #AF: 
-raw_images: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes\images\RawImages
+raw_images: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images\raw_images
 
 # reccommended to change outdir for each run if using different images/params!!!
 #base dir: output_dir:C:\ML_Software\active_learning\data
 #AF:
-output_dir: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes\docs\ML_Software\active_learning\data
+output_dir: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\results
 #base dir: weights: C:\yolov5\runs\train\63ImageTraim_19Mar_(S300)\weights\best.pt
 #AF:
 weights: C:\yolov5\runs\train\63ImageTraim_19Mar_(S300)\weights\best.pt #AF: file not existing for now. to be checked later. 
@@ -29,7 +29,9 @@ TILE_SIZE: 416
 STRIDE: 104
 
 # training Dataset
-path: C:\Users\adria\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes
+path: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes
+#added the pngs path on the script as it was missing and it was called by my personal script. 
+pngs: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images
 train:
   # - C:\yoloDatasets\trainFinal\images
   - \\hpc-fs.qut.edu.au\turner30\Projects\Boats\Training\trainOrig\trainFinal\images
