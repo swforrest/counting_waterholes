@@ -7,7 +7,7 @@ yolo_dir: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA
 python: python
 #raw_images: C:\ML_Software\active_learning\data\downloads
 #AF: 
-raw_images: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images\raw_images
+raw_images: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images\RawImages
 
 proj_root: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes
 

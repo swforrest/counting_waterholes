@@ -41,9 +41,9 @@ with open("config_train.yaml", "r") as ymlfile:
     )  # This is generated so not included in the config file
 
 #Run preparation of the tif files into png and renamed the tif. 
-#prepare(r"C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images\RawImages", cfg)
+prepare(r"C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images\RawImages", cfg)
  
-segment(r"C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images", cfg)
+#segment(r"C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images", cfg)
 
 
 print('hello')
