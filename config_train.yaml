@@ -31,6 +31,9 @@ EPOCHS: 500
 img_size: 416
 img_stride: 104
 
+TILE_SIZE: 416
+STRIDE: 104
+
 # training Dataset
 path: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes
 #added the pngs path on the script as it was missing and it was called by my personal script. 
@@ -45,8 +48,12 @@ train:
 val:
   # - C:\ML_Software\MoretonVal\images
 names:
-  0: boat #AF -> waterhole but for now let's just leave the boat naming 
-  #1: movingBoat 
+  0: Dry_WH
+  1: WH_swamp
+  2: WH_wet
+  3: WH_sink
+  4: U
+
   #AF: what if it need two categories in the whole script? 
   #If I delete the second one, or don't put a second cat, might fuck up all the scripts workflow...
 

@@ -84,18 +84,23 @@ def segment(
     Returns:
         None
     """
+    
     cfg = parse_config(config)
+    print(cfg)
     # segment the images that have been prepared
     labels = [
         os.path.join(cfg["output_dir"], f)
         for f in os.listdir(cfg["output_dir"])
         if f.endswith(".json")
     ]
+    
     images = [l.replace(".json", ".png") for l in labels]
     label_out = os.path.join(cfg["output_dir"], "labels")
     image_out = os.path.join(cfg["output_dir"], "images")
     os.makedirs(label_out, exist_ok=True)
     os.makedirs(image_out, exist_ok=True)
+    
+
     for i, (image, label) in enumerate(zip(images, labels)):
         ics.segment_image(
             image,

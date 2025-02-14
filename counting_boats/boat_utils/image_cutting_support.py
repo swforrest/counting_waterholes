@@ -227,10 +227,15 @@ def process_sub_image_with_labels(args):
             c._bottom += 1
 
         classLabel = (
-            0 if c.get_label() == "boat" else 1 if c.get_label() == "movingBoat" else -1
+            0 if c.get_label() == "Dry_WH" \
+                else 1 if c.get_label() == "WH_swamp" \
+                    else 2 if c.get_label() == "WH_wet" \
+                        else 3 if c.get_label() == "WH_sink" \
+                            else 4 if c.get_label() == "U" \
+                                else -1
         )
         if classLabel == -1:
-            continue  # Skip tankers
+             continue  # Skip tankers
         outfile.write(
             str(classLabel)
             + " "
@@ -314,7 +319,8 @@ def segment_image(
             )
 
     # Ensure that the image is divisible by the desired size with no remainder.
-    if width % (stride + tile_size) != 0 or height % (stride + tile_size) != 0:
+    #if width % (stride + tile_size) != 0 or height % (stride + tile_size) != 0:
+    if width % (tile_size) != 0 or height % (tile_size) != 0: # AF
         raise Exception(
             "The image is not exactly divisible by the desired size of subset images",
             "Width: ",
