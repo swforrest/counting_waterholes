@@ -7,14 +7,14 @@ yolo_dir: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA
 python: python
 #raw_images: C:\ML_Software\active_learning\data\downloads
 #AF: 
-raw_images: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images\RawImages
+raw_images: .\images\RawImages
 
-proj_root: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes
+proj_root: .
 
 # reccommended to change outdir for each run if using different images/params!!!
 #base dir: output_dir:C:\ML_Software\active_learning\data
 #AF:
-output_dir: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\results
+output_dir: .\results
 #base dir: weights: C:\yolov5\runs\train\63ImageTraim_19Mar_(S300)\weights\best.pt
 #AF:
 weights: ./data/NN_weights.pt #AF: file existing but from the general config for now. to be checked later. 
@@ -35,9 +35,9 @@ TILE_SIZE: 416
 STRIDE: 104
 
 # training Dataset
-path: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes
+path: .
 #added the pngs path on the script as it was missing and it was called by my personal script. 
-pngs: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes\images\pngs
+pngs: .\images\pngs
 segmented_images: .\images\SegmentedImages # Segmented images
 labels: .\images\Labels # Labels for the images
 classifications: .\images\classifications # Classifications for the images
