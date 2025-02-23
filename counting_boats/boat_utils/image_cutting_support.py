@@ -234,8 +234,8 @@ def process_sub_image_with_labels(args):
                             else 4 if c.get_label() == "U" \
                                 else -1
         )
-        if classLabel == -1:
-             continue  # Skip tankers
+        # if classLabel == -1:
+        #      continue  # Skip tankers #AF
         outfile.write(
             str(classLabel)
             + " "
