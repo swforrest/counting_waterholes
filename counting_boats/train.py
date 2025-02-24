@@ -86,7 +86,7 @@ def segment(
     """
     
     cfg = parse_config(config)
-    print(cfg)
+    # print(cfg) testing AF
     # segment the images that have been prepared
     labels = [
         os.path.join(cfg["output_dir"], f)
@@ -162,16 +162,20 @@ def describe(
     cfg = parse_config(config)
     # get the number of original images
     imdirs = cfg["train"]
+    print("Config path:", imdirs)
     num_images = 0
     num_tiles = 0
     num_labels = 0
     class_counts = {}
     num_tiles_no_labels = 0
-
+    imdirs=os.path.normpath(imdirs) #AF: handeled the itteration problem on the path of the folder. 
+    
     for imdir in imdirs:
+        imdir=os.path.normpath(imdirs)
+        if not os.path.exists(imdir): #AF
+            raise FileNotFoundError(f"Directory not found: {imdir}") #AF
         if os.path.exists(os.path.join(imdir, "train")):
             imdir = os.path.join(imdir, "train")
-        print(imdir)
         all_images = [i for i in os.listdir(imdir) if i.endswith(".png")]
         unique_images = set([im[0 : im.find("_", 9)] for im in all_images])
         num_images += len(unique_images)
@@ -229,6 +233,12 @@ def cull(
 
     Returns:
         None
+
+    AF comment: 
+        Function was developped with absolute folder paths, which complicated the task. 
+        Need to modify them in here too, not only in the config file. 
+        Notes as comments are the function bellow to help navigate it. 
+
     """
     num_images, num_tiles, num_labels, class_counts, num_tiles_no_labels = describe(
         config
@@ -236,7 +246,7 @@ def cull(
     # remove images with no labels from the training set
     # need to cull enough images so that the percentage of images with no labels is 10%
     all_labels = [
-        l for l in os.listdir("active_learning/data/labels") if l.endswith(".txt")
+        l for l in os.listdir(r"D:\Waterholes_project\counting_waterholes\images\train_v1\labels\train") if l.endswith(".txt")
     ]
     while num_tiles_no_labels / num_tiles > 0.1:
         # find an empty label file
@@ -244,7 +254,7 @@ def cull(
         np.random.shuffle(all_labels)
         for lab in all_labels:
             remove = False
-            with open(os.path.join("active_learning/data/labels", lab), "r") as f:
+            with open(os.path.join(r"D:\Waterholes_project\counting_waterholes\images\train_v1\labels\train", lab), "r") as f:
                 lines = f.readlines()
                 if len(lines) == 0:
                     # delete the corresponding image and label file
@@ -252,17 +262,17 @@ def cull(
             if remove:
                 if os.path.exists(
                     os.path.join(
-                        "active_learning/data/images",
+                        r"D:\Waterholes_project\counting_waterholes\images\train_v1\images\train",
                         lab.replace(".txt", ".png"),
                     )
                 ):
                     os.remove(
                         os.path.join(
-                            "active_learning/data/images",
+                            r"D:\Waterholes_project\counting_waterholes\images\train_v1\images\train",
                             lab.replace(".txt", ".png"),
                         )
                     )
-                os.remove(os.path.join("active_learning/data/labels", lab))
+                os.remove(os.path.join(r"D:\Waterholes_project\counting_waterholes\images\train_v1\labels\train", lab))
                 num_tiles_no_labels -= 1
                 num_tiles -= 1
                 # remove lab from all_labels

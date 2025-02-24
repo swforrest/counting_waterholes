@@ -235,7 +235,7 @@ def process_sub_image_with_labels(args):
                                 else -1
         )
         # if classLabel == -1:
-        #      continue  # Skip tankers #AF
+        #      continue  # Skip tankers #AF 
         outfile.write(
             str(classLabel)
             + " "
