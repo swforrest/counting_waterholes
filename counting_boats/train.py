@@ -203,7 +203,7 @@ def describe(
         # count number of lines in all the files
         for lab in all_labels:
             lab_path = os.path.join(labdir, lab)
-            
+
             # Check if file is empty first (file size = 0)
             if os.path.getsize(lab_path) == 0:
                 num_tiles_no_labels += 1
@@ -269,7 +269,7 @@ def cull(
     # remove images with no labels from the training set
     # need to cull enough images so that the percentage of images with no labels is 10%
     all_labels = [
-        l for l in os.listdir(r"D:\Waterholes_project\counting_waterholes\images\train_v1\labels\train") if l.endswith(".txt")
+        l for l in os.listdir("training/labels/train") if l.endswith(".txt")
     ]
     while num_tiles_no_labels / num_tiles > 0.1:
         # find an empty label file
@@ -277,7 +277,7 @@ def cull(
         np.random.shuffle(all_labels)
         for lab in all_labels:
             remove = False
-            with open(os.path.join(r"D:\Waterholes_project\counting_waterholes\images\train_v1\labels\train", lab), "r") as f:
+            with open(os.path.join("training/labels/train", lab), "r") as f:
                 lines = f.readlines()
                 if len(lines) == 0:
                     # delete the corresponding image and label file
@@ -285,17 +285,17 @@ def cull(
             if remove:
                 if os.path.exists(
                     os.path.join(
-                        r"D:\Waterholes_project\counting_waterholes\images\train_v1\images\train",
+                        "training/images/train",
                         lab.replace(".txt", ".png"),
                     )
                 ):
                     os.remove(
                         os.path.join(
-                            r"D:\Waterholes_project\counting_waterholes\images\train_v1\images\train",
+                            "training/images/train",
                             lab.replace(".txt", ".png"),
                         )
                     )
-                os.remove(os.path.join(r"D:\Waterholes_project\counting_waterholes\images\train_v1\labels\train", lab))
+                os.remove(os.path.join("training/labels/train", lab))
                 num_tiles_no_labels -= 1
                 num_tiles -= 1
                 # remove lab from all_labels
