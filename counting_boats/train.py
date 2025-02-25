@@ -177,21 +177,43 @@ def describe(
         if os.path.exists(os.path.join(imdir, "train")):
             imdir = os.path.join(imdir, "train")
         all_images = [i for i in os.listdir(imdir) if i.endswith(".png")]
-        unique_images = set([im[0 : im.find("_", 9)] for im in all_images])
-        num_images += len(unique_images)
-        num_tiles += len(all_images)
+        # unique_images = set([im[0 : im.find("_", 9)] for im in all_images]) #AF
+        unique_images = set([im[:im.replace('_', 'X', 1).find('_')] for im in all_images if im.count('_') >= 2])        #modified the unique image detection to match all possible naming of AOIs. Extract everzthing before the third _
+        num_images = len(unique_images)
+        num_tiles = len(all_images)
         # get the number of labels
         a = os.path.join(imdir, "..", "..", "labels", "train")
         b = os.path.join(imdir, "..", "labels")
         labdir = a if os.path.exists(a) else b
         all_labels = [l for l in os.listdir(labdir) if l.endswith(".txt")]
         # count number of lines in all the files
+        # for lab in all_labels:
+        #     with open(os.path.join(labdir, lab), "r") as f:
+        #         lines = f.readlines()
+        #         num_labels += len(lines)
+        #         if len(lines) == 0:
+        #             num_tiles_no_labels += 1
+        #         for line in lines:
+        #             class_id = line.split(" ")[0]
+        #             if class_id not in class_counts:
+        #                 class_counts[class_id] = 1
+        #             else:
+        #                 class_counts[class_id] += 1
+        #New version of it, AF:
+        # count number of lines in all the files
         for lab in all_labels:
-            with open(os.path.join(labdir, lab), "r") as f:
+            lab_path = os.path.join(labdir, lab)
+            
+            # Check if file is empty first (file size = 0)
+            if os.path.getsize(lab_path) == 0:
+                num_tiles_no_labels += 1
+                continue
+                
+            with open(lab_path, "r") as f:
                 lines = f.readlines()
                 num_labels += len(lines)
-                if len(lines) == 0:
-                    num_tiles_no_labels += 1
+                
+                # Only check content if file isn't empty                             
                 for line in lines:
                     class_id = line.split(" ")[0]
                     if class_id not in class_counts:
@@ -202,17 +224,18 @@ def describe(
     print("-" * 43)
     print("| Training dataset statistics             |")
     print("-" * 43)
-    print(f"| Number of original images: {num_images:<13}|")
-    print(f"| Number of tiles: {num_tiles:<23}|")
-    print(f"| Number of labels                        |")
-    print(f"|   - Total: {num_labels:<29}|")
-    print(f"|   - Per class:                          |")
+    print(f"| Number of original images: {num_images}            |") #{num_images:<13}
+    print(f"| Number of tiles: {num_tiles}                  |")
+    print(f"| Number of labels: {len(all_labels)}                  |")
+    print(f"| Number of individual labels                |")
+    print(f"|   - Total: {num_labels}                     |")
+    print(f"|   - Per class:             |")
     for class_id, count in class_counts.items():
         print(
-            f"|       - Class {class_id}: {count:<6} ({count/num_labels*100:.2f}%)        |"
+            f"|       - Class {class_id}: {count} ({count/num_labels*100:.2f}%)        |"
         )
     print(
-        f"| Background Images: {num_tiles_no_labels:<6} ({num_tiles_no_labels/num_tiles*100:.2f}%)      |"
+        f"| Background Images: {num_tiles_no_labels} ({num_tiles_no_labels/num_tiles*100:.2f}%)      |"
     )
     print("-" * 43)
     return num_images, num_tiles, num_labels, class_counts, num_tiles_no_labels
