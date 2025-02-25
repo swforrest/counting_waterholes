@@ -224,12 +224,12 @@ def describe(
     print("-" * 43)
     print("| Training dataset statistics             |")
     print("-" * 43)
-    print(f"| Number of original images: {num_images}            |") #{num_images:<13}
-    print(f"| Number of tiles: {num_tiles}                  |")
+    print(f"| Number of original images: {num_images}            |")
+    print(f"| Number of tiles: {num_tiles}                   |")
     print(f"| Number of labels: {len(all_labels)}                  |")
-    print(f"| Number of individual labels                |")
-    print(f"|   - Total: {num_labels}                     |")
-    print(f"|   - Per class:             |")
+    print(f"| Number of individual labels             |")
+    print(f"|   - Total: {num_labels}                         |")
+    print(f"|   - Per class:                      |")
     for class_id, count in class_counts.items():
         print(
             f"|       - Class {class_id}: {count} ({count/num_labels*100:.2f}%)        |"
