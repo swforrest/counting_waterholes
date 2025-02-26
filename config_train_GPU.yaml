@@ -16,6 +16,11 @@ proj_root: .
 #AF:
 output_dir: .\results
 #base dir: weights: C:\yolov5\runs\train\63ImageTraim_19Mar_(S300)\weights\best.pt
+
+#AF: creating new paths to manipulate the output of the segmentation. 
+segmented_images : .\results\images\train
+segmented_labels : .\results\labels\train
+
 #AF:
 weights: ./data/NN_weights.pt #AF: file existing but from the general config for now. to be checked later. 
 cache: False

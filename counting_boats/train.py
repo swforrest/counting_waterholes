@@ -307,6 +307,152 @@ def cull(
 
 
 @app.command()
+def cull_AF(
+    config_path: str = typer.Option("", help="Path to the config file"),
+):
+    """
+    YOLO recommends having 10% of images in the training set with no instances. 
+    We can't know how many tiles will have no instances before we segment the images,
+    so have to cull down after. This function will remove images with no labels until
+    10% of the training set has no labels. 
+    AF: I am modifying Charlie's code to run the culling in a different way which should make it faster. 
+    
+    Identify empty label files and move them (along with corresponding images)
+    to ensure empty labels make up only 10% of the total dataset.
+    
+    Args:
+        config_path: Path to the YAML config file containing paths
+
+
+    Returns:
+        None
+
+ 
+
+    """
+    import sys
+    import os
+    import yaml
+    import random
+    import shutil
+    from pathlib import Path 
+
+    # Load paths from config file
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    # Get paths from config
+    labels_dir = Path(config['segmented_images'])
+    images_dir = Path(config['segmented_labels']) #modify the rest accordingly
+    
+    # Create directories for moved files if they don't exist
+    moved_labels_dir = labels_dir.parent / 'moved_empty_labels'
+    moved_images_dir = images_dir.parent / 'moved_empty_images'
+    os.makedirs(moved_labels_dir, exist_ok=True)
+    os.makedirs(moved_images_dir, exist_ok=True)
+    
+    print(f"Analyzing label files in: {labels_dir}")
+    print(f"Looking for corresponding images in: {images_dir}")
+    
+    # Get all text files in the labels directory
+    label_files = [f for f in os.listdir(labels_dir) if f.endswith('.txt')]
+    total_labels = len(label_files)
+    
+    if total_labels == 0:
+        print("No label files found. Exiting.")
+        return
+    
+    # Identify empty label files
+    empty_label_files = []
+    non_empty_count = 0
+    
+    for label_file in label_files:
+        label_path = os.path.join(labels_dir, label_file)
+        
+        # Check if the file is empty
+        if os.path.getsize(label_path) == 0:
+            empty_label_files.append(label_file)
+        else:
+            non_empty_count += 1
+    
+    print(f"Total label files found: {total_labels}")
+    print(f"Empty label files found: {len(empty_label_files)}")
+    print(f"Non-empty label files: {non_empty_count}")
+    
+    # Calculate how many empty files to keep
+    # We want empty files to be 10% of total, so 11.11...% of non-empty files
+    max_empty_to_keep = int(non_empty_count * 0.1111)
+    empty_to_move = len(empty_label_files) - max_empty_to_keep
+    
+    if empty_to_move <= 0:
+        print("Number of empty labels is already below 10% threshold. No action needed.")
+        return
+    
+    # Shuffle empty label files
+    random.shuffle(empty_label_files)
+    
+    # Select files to move
+    files_to_move = empty_label_files[:empty_to_move]
+    
+    print(f"Moving {len(files_to_move)} empty label files to maintain 10% ratio")
+    
+    # Track moved files
+    moved_labels = []
+    moved_images = []
+    
+    # Move the selected label files and their corresponding images
+    for label_file in files_to_move:
+        # Get corresponding image file
+        base_name = os.path.splitext(label_file)[0]
+        image_file = f"{base_name}.png"
+        
+        # Check if corresponding image exists
+        image_path = os.path.join(images_dir, image_file)
+        if not os.path.exists(image_path):
+            print(f"Warning: Image file not found for label: {label_file}")
+            continue
+        
+        # Move label file
+        label_src = os.path.join(labels_dir, label_file)
+        label_dst = os.path.join(moved_labels_dir, label_file)
+        shutil.move(label_src, label_dst)
+        moved_labels.append(label_file)
+        
+        # Move image file
+        image_src = os.path.join(images_dir, image_file)
+        image_dst = os.path.join(moved_images_dir, image_file)
+        shutil.move(image_src, image_dst)
+        moved_images.append(image_file)
+    
+    # Verify result
+    remaining_labels = [f for f in os.listdir(labels_dir) if f.endswith('.txt')]
+    remaining_empty = 0
+    
+    for label_file in remaining_labels:
+        label_path = os.path.join(labels_dir, label_file)
+        if os.path.getsize(label_path) == 0:
+            remaining_empty += 1
+    
+    remaining_total = len(remaining_labels)
+    empty_percentage = (remaining_empty / remaining_total) * 100 if remaining_total > 0 else 0
+    
+    print("\n--- SUMMARY ---")
+    print(f"Total label files moved: {len(moved_labels)}")
+    print(f"Total image files moved: {len(moved_images)}")
+    print(f"Remaining total label files: {remaining_total}")
+    print(f"Remaining empty label files: {remaining_empty}")
+    print(f"Empty labels now make up {empty_percentage:.2f}% of the dataset")
+    print(f"Empty labels moved to: {moved_labels_dir}")
+    print(f"Corresponding images moved to: {moved_images_dir}")
+    
+    if empty_percentage <= 10:
+        print("\nSUCCESS: Empty labels now make up 10% or less of the dataset.")
+    else:
+        print("\nWARNING: Something went wrong. Empty labels still exceed 10% of the dataset.")
+
+
+
+@app.command()
 def train(
     config: str = typer.Option("", help="Path to the config file"),
 ):
