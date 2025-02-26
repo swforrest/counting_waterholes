@@ -235,7 +235,7 @@ def process_sub_image_with_labels(args):
                                 else -1
         )
         if classLabel == -1:
-             continue  # Skip tankers
+              continue  # Skip tankers #AF: we have no tankers but I also want to skip some introduced -1
         outfile.write(
             str(classLabel)
             + " "
@@ -720,12 +720,12 @@ def get_required_padding(filepath, tilesize=416, stride=104) -> tuple[int, int, 
     # Calculate individual padding for each edge
     # we have to go at least (tilesize/stride) * stride pixels in each direction
     # in the case of 416/104, this is 4*104 = 416 padding. This means the first tile is all padding but the rest will be seen by the network properly
-    min_pad = (tilesize / stride) * stride
+    min_pad = (tilesize - stride)
 
     leftPad = min_pad
     topPad = min_pad
-    bottomPad = 0
-    rightPad = 0
+    bottomPad = min_pad
+    rightPad = min_pad
 
     min_h = height + 2 * min_pad
     min_w = width + 2 * min_pad
