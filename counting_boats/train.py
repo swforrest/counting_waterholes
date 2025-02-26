@@ -337,13 +337,10 @@ def cull_AF(
     import shutil
     from pathlib import Path 
 
-    # Load paths from config file
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
-    
-    # Get paths from config
-    labels_dir = Path(config['segmented_images'])
-    images_dir = Path(config['segmented_labels']) #modify the rest accordingly
+    cfg = parse_config(config_path)
+    # get the number of original images
+    labels_dir = Path(cfg["segmented_labels"])
+    images_dir = Path(cfg["segmented_images"])
     
     # Create directories for moved files if they don't exist
     moved_labels_dir = labels_dir.parent / 'moved_empty_labels'
