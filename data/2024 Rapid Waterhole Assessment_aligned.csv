@@ -1,0 +1,123 @@
+﻿OBJECTID,Timestamp,Latitude,Longitude,Class,Observer,ObserverSi,Water_Type_Chopper,Water_Type_Satellite,transectNu,permanence,ID,Wet_Dry_Chopper,Wet_Dry_Satellite
+1,2024-05-07,-13.65714094,134.3540807,2,Andrew Hoskins,Back Right,,River,m08,P,,,Wet
+2,2024-05-07,-13.65581642,134.3718297,2,Andrew Hoskins,Back Right,,River/Billabong,m08,P,,,Wet
+3,2024-05-07,-13.65504369,134.3934158,3,Andrew Hoskins,Back Right,,Billabong,m08,I or E,,,Dry
+4,2024-05-07,-13.65992773,134.4174947,2,Andrew Hoskins,Back Right,,Stream,m08,I or E,W269,,Dry
+5,2024-05-07,-13.65728627,134.5253459,2,Andrew Hoskins,Back Right,,Billabong,m08,I or E,,,Dry
+6,2024-05-07,-13.65896224,134.6121387,3,Andrew Hoskins,Back Right,,Waterhole,m08,E,,,Dry
+7,2024-05-07,-13.65827921,134.6138399,3,Andrew Hoskins,Back Right,,Spring/Wetland,m08,I or E,,,Dry
+8,2024-05-07,-13.66155424,134.6207765,2,Andrew Hoskins,Back Right,,Stream/Billabong,m08,I or NP,,,Dry
+9,2024-05-07,-13.65663543,134.6474726,2,Andrew Hoskins,Back Right,,Billabong,m08,I or E,,,Dry
+10,2024-05-07,-13.55444703,134.5333229,2,Andrew Hoskins,Back Right,,Stream,m10,I,,,
+11,2024-05-07,-13.53869052,134.4976003,3,Andrew Hoskins,Back Right,,waterhole,m10,I or E,,,Dry
+12,2024-05-07,-13.55359759,134.4826631,3,Andrew Hoskins,Back Right,,waterhole,m10,I or E,,,Dry
+13,2024-05-07,-13.55499,134.4528,2,Andrew Hoskins,Back Right,,stream,m10,I or E,,,
+14,2024-05-07,-13.55375624,134.4002243,3,Andrew Hoskins,Back Right,,Waterhole,m10,I or NP,,,Dry
+15,2024-05-07,-13.55503454,134.3428979,3,Andrew Hoskins,Back Right,,Spring,m10,I,,,Dry
+16,2024-05-07,-13.55544,134.3101,3,Andrew Hoskins,Back Right,,Spring,m10,I,,,Dry
+17,2024-05-07,-13.55539,134.2994,2,Andrew Hoskins,Back Right,,Stream,m10,,,,
+18,2024-05-07,-13.55547,134.2903,3,Andrew Hoskins,Back Right,,Spring/Wetland,m10,I,,,Dry
+19,2024-05-07,-13.54850682,134.2714027,2,Andrew Hoskins,Back Right,,Wetland,m10,I,W394,,Wet
+20,2024-05-07,-13.55772,134.2339,3,Andrew Hoskins,Back Right,,Waterhole,m10,I or E,W385,,Dry
+21,2024-05-10,-13.59116,134.0867,3,Andrew Hoskins,Back Right,,Billabong/Wetland/Spring,SW07,I,,,Dry
+22,2024-05-10,-13.57594,133.9983,2,Andrew Hoskins,Back Right,,Waterhole,SW07,I or E,,,Dry
+23,2024-05-10,-13.53167,133.8344,3,Andrew Hoskins,Back Right,,Spring/Stream,SW07,I or E,,,Dry
+24,2024-05-10,-13.51816,133.8113,3,Andrew Hoskins,Back Right,,Spring,SW06,I,,,Dry
+25,2024-05-10,-13.58918,133.6887,1,Andrew Hoskins,Back Right,,Waterhole,SW05,I,W317,,Dry
+26,2024-05-07,-13.65288,134.3135,2,Holly  Lourie,Front Left,,Spring,M08,NP or P,,,Wet
+27,2024-05-07,-13.65121,134.3233,2,Holly  Lourie,Front Left,,Spring,M08,NP or P,,,Wet
+28,2024-05-07,-13.65569,134.3492,2,Holly  Lourie,Front Left,,Spring,M08,I,,,Dry
+37,2024-05-07,-13.66015454,134.6195526,2,Holly  Lourie,Front Left,,Stream/Billabong,M08,I or NP,,,Dry
+45,2024-05-07,-13.55433,134.5287,2,Holly  Lourie,Front Left,Spring,Spring/Stream,M10,I or NP,,,Wet
+52,2024-05-07,-13.55781468,134.2763222,3,Holly  Lourie,Front Left,,Wetland,M10,I to E,W376,,Dry
+53,2024-05-07,-13.55694802,134.2721724,2,Holly  Lourie,Front Left,,Wetland,M10,I or E,W380,,Dry
+54,2024-05-07,-13.55579,134.268,2,Holly  Lourie,Front Left,, River,M10,P,,,Wet
+59,2024-05-07,-13.55154483,133.9745517,3,Holly  Lourie,Front Left,Spring,Spring,M10,I,,,Dry
+66,2024-05-07,-13.45822296,134.1349474,2,Holly  Lourie,Front Left,Spring,Spring,M12,I or NP,,,
+76,2024-05-07,-13.64914,134.3301,2,Holly  Lourie,Front Left,Spring,Spring,M12,I or NP,W273,,Wet
+82,2024-05-07,-13.70097996,134.4085071,2,Holly  Lourie,Front Left,Spring,Spring/Wetland,M12,E,,,Dry
+105,2024-05-07,-13.7817811,134.4925737,3,Holly  Lourie,Front Left,Spring,Spring,M12,I,W196,,Wet
+111,2024-05-07,-13.65549882,134.6294395,3,Holly  Lourie,Front Left,,Billabong/Stream,M08,I or E,,,Dry
+124,2024-05-07,-13.55683201,135.1380438,2,Holly  Lourie,Front Left,Spring,Spring,M08,NP,RA361,,
+140,2024-05-08,-13.75405,133.9173,2,Holly  Lourie,Front Left,Spring,Spring,M06,I,,,Dry
+141,2024-05-08,-13.75386,133.9048,2,Holly  Lourie,Front Left,Spring,Spring,M06,I,,,Dry
+148,2024-05-08,-13.78560025,133.9460207,2,Holly  Lourie,Front Left,Spring,Spring,SW01,I,W191,,Dry
+149,2024-05-08,-13.77990711,133.9715241,2,Holly  Lourie,Front Left,Spring,Spring,SW01,I,,,Dry
+150,2024-05-08,-13.77855684,133.9869127,2,Holly  Lourie,Front Left,Spring,Spring,SW01,I,RA191,,Dry
+250,2024-05-09,-13.72202753,133.8870603,1,Holly  Lourie,Front Left,Melaleuca swamp,Melaleuca swamp,SW02,I,W245,,
+261,2024-05-09,-13.52172844,134.5093726,2,Holly  Lourie,Front Left,,Waterhole,SW03,NP or P,W422,,Wet
+263,2024-05-09,-13.39932797,134.5555628,3,Holly  Lourie,Front Left,,Melaleuca swamp,SW03,I,,,Dry
+264,2024-05-09,-13.38668195,134.5679524,2,Holly  Lourie,Front Left,,Melaleuca swamp,SW03,I,W534,,Dry
+265,2024-05-09,-13.37316869,134.5672155,2,Holly  Lourie,Front Left,Melaleuca swamp,Melaleuca swamp,SW03,I,,,Dry
+266,2024-05-09,-13.3156777,134.5870618,2,Holly  Lourie,Front Left,Melaleuca swamp,Melaleuca swamp,SW03,I,,,Dry
+267,2024-05-09,-13.12681682,134.6660332,2,Holly  Lourie,Front Left,Melaleuca swamp,Swamp,SW03,I or NP,W898,,Dry
+271,2024-05-09,-13.33278817,134.4872959,2,Holly  Lourie,Front Left,,Waterhole,SW03,I or E,W582,,Dry
+283,2024-05-09,-13.62269146,133.7967551,2,Holly  Lourie,Front Left,Spring,Spring,SW04,NP,RA288,,Wet
+284,2024-05-09,-13.62020162,133.7983647,3,Holly  Lourie,Front Left,,Waterhole,SW04,I or E,W288,,Dry
+285,2024-05-09,-13.62391484,133.8092195,2,Holly  Lourie,Front Left,,Swamp,SW04,I,W285,,Dry
+288,2024-05-09,-13.62171,134.0258,3,Holly  Lourie,Front Left,Spring,Spring,SW04,I,,,Dry
+292,2024-05-10,-13.58778256,134.0560778,3,Holly  Lourie,Front Left,Spring,Spring,SW07,I,W327,,Wet
+298,2024-05-10,-13.52238,133.7788,3,Holly  Lourie,Front Left,Spring,Spring/Stream,SW07,NP or P,,,Wet
+299,2024-05-10,-13.52111285,133.7707517,2,Holly  Lourie,Front Left,,Spring/Stream,SW07,NP or P,,,Wet
+300,2024-05-10,-13.52015,133.7692,2,Holly  Lourie,Front Left,Spring,Spring,SW07,NP or P,,,Wet
+301,2024-05-10,-13.51916,133.7659,2,Holly  Lourie,Front Left,Swamp/Spring,Swamp/Spring,SW07,NP or P,,,Wet
+308,2024-05-10,-13.4872981,133.6436871,2,Holly  Lourie,Front Left,Melaleuca Swamp,Melaleuca Swamp,SW07,NP or P,,,Wet
+309,2024-05-10,-13.4857,133.6919,2,Holly  Lourie,Front Left,Swamp/Spring,Swamp/Spring,SW07,NP or P,W462,,Wet
+312,2024-05-10,-13.48748108,133.8177622,2,Holly  Lourie,Front Left,Spring,Spring,SW07,I,,,Dry
+319,2024-05-10,-13.50164095,133.8943469,3,Holly  Lourie,Front Left,Spring,Spring,SW06,I,,,Wet
+352,2024-05-10,-13.40436638,134.5459288,2,Holly  Lourie,Front Left,Melaleuca Swamp,Melaleuca Swamp,M14,I or NP,W517,,Dry
+353,2024-05-10,-13.36480202,134.5711778,1,Holly  Lourie,Front Left,,Melaleuca Swamp,M14,I,,,Dry
+355,2024-05-10,-13.35782186,134.3170339,3,Holly  Lourie,Front Left,,Spring/Stream,M14,I or NP,,,Wet
+356,2024-05-10,-13.35752373,134.2716508,3,Holly  Lourie,Front Left,,Billabong,M14,I or NP,,,Wet
+357,2024-05-10,-13.35650675,134.2698559,2,Holly  Lourie,Front Left,,Billabong,M14,P,RA555,,Wet
+360,2024-05-10,-13.34944878,134.1699303,3,Holly  Lourie,Front Left,,Billabong,M14,I or E,,,Dry
+361,2024-05-10,-13.35144885,134.1651998,3,Holly  Lourie,Front Left,,Billabong,M14,I or E,,,Dry
+362,2024-05-10,-13.35594913,134.1536556,3,Holly  Lourie,Front Left,,River/Billabong/Spring,M14,I,,,Dry
+372,2024-05-10,-13.61291061,134.2533878,2,Holly  Lourie,Front Left,Spring,Spring,M14,I or NP,,,Wet
+403,2024-05-11,-13.45302184,135.1498938,1,Holly  Lourie,Front Left,,Billabong/River,M12,I or NP,,,Wet
+404,2024-05-11,-13.45342118,135.1530056,1,Holly  Lourie,Front Left,,Billabong,M12,I or NP,,,Wet
+406,2024-05-11,-13.42352934,135.183287,1,Holly  Lourie,Front Left,,River,M12,NP or P,,,Wet
+410,2024-05-11,-13.3522682,135.0397303,2,Holly  Lourie,Front Left,,Waterhole,M14,I or E,,,Dry
+411,2024-05-11,-13.35227781,135.0229915,2,Holly  Lourie,Front Left,,River,M14,NP,,,Wet
+412,2024-05-11,-13.35206034,135.0185561,2,Holly  Lourie,Front Left,,River/Billabong,M14,P,,,Wet
+413,2024-05-11,-13.35608355,134.9955945,2,Holly  Lourie,Front Left,,Waterhole,M14,I or NP,W556,,Wet
+414,2024-05-11,-13.35394007,134.989301,3,Holly  Lourie,Front Left,,Spring,M14,I or NP,,,Wet
+415,2024-05-11,-13.34990428,134.9453974,1,Holly  Lourie,Front Left,,Spring,M14,I or NP,,,Wet
+417,2024-05-11,-13.35247315,134.8901906,2,Holly  Lourie,Front Left,,Stream,M14,I,,,Dry
+418,2024-05-11,-13.35155895,134.878512,2,Holly  Lourie,Front Left,,Waterhole,M14,I,W558,,Dry
+419,2024-05-11,-13.35215148,134.8705563,2,Holly  Lourie,Front Left,,River,M14,NP,,,Wet
+420,2024-05-11,-13.35273711,134.8018137,2,Holly  Lourie,Front Left,,Stream,M14,I,,,Dry
+421,2024-05-11,-13.35204258,134.7946162,2,Holly  Lourie,Front Left,,Billabong,M14,I,,,Dry
+422,2024-05-11,-13.35420188,134.7499863,2,Holly  Lourie,Front Left,,Spring,M14,I,,,Dry
+437,2024-05-11,-13.32666374,134.4746354,2,Holly  Lourie,Front Left,,Waterhole/melaleuca swamp,M16,NP or P,W590,,Wet
+442,2024-05-11,-13.25063,134.0652,3,Holly  Lourie,Front Left,Spring,Spring,M16,I,,Dry,Dry
+459,2024-05-11,-13.33277375,134.0707803,3,Holly  Lourie,Front Left,,River,M16,I,,,Wet
+460,2024-05-11,-13.34380375,134.0864953,2,Holly  Lourie,Front Left,,River,M16,NP,,,Wet
+461,2024-05-11,-13.34820181,134.1091273,3,Holly  Lourie,Front Left,,River,M16,NP or P,,,Wet
+462,2024-05-11,-13.34660714,134.1129872,3,Holly  Lourie,Front Left,,River,M16,NP or P,,,Wet
+463,2024-05-11,-13.34189127,134.119324,3,Holly  Lourie,Front Left,,Waterhole,M16,I or E,,,Dry
+464,2024-05-11,-13.33905339,134.1373655,3,Holly  Lourie,Front Left,,Waterhole,M16,I or E,,,Dry
+465,2024-05-11,-13.34155905,134.1397264,2,Holly  Lourie,Front Left,,River,M16,P,,,Wet
+469,2024-05-11,-13.23368,134.1241,2,Holly  Lourie,Front Left,Spring,Spring,M18,I,,,Dry
+500,2024-05-11,-13.15195739,134.9656672,2,Holly  Lourie,Front Left,,Billabong,M18,NP or P,,,Wet
+502,2024-05-11,-13.15402178,134.9753505,2,Holly  Lourie,Front Left,,Billabong,M18,NP or P,,,Wet
+503,2024-05-11,-13.15261283,134.9755294,2,Holly  Lourie,Front Left,,Billabong,M18,NP or P,,,Wet
+532,2024-05-12,-13.22269,134.796,2,Holly  Lourie,Front Left,,River,M16,I,,,Dry
+554,2024-05-12,-13.25427491,135.1417823,2,Holly  Lourie,Front Left,Spring,Spring,M16,I,,Dry,Dry
+578,2024-05-12,-13.37895891,135.3327571,2,Holly  Lourie,Front Left,Spring,Spring,M14,P,W538,,Wet
+596,2024-05-12,-13.20011808,134.9249281,2,Holly  Lourie,Front Left,,Waterhole,M14,I or NP,W749,,Wet
+597,2024-05-12,-13.19468949,134.9188611,2,Holly  Lourie,Front Left,,Swamp,M14,I or E,,,Dry
+598,2024-05-12,-13.19328919,134.909847,3,Holly  Lourie,Front Left,,Billabong,M14,NP or P,,,Wet
+655,2024-05-13,-13.48028639,134.5056327,2,Holly  Lourie,Front Left,Spring,Spring,M26,I or NP,,,Wet
+656,2024-05-13,-13.42480328,134.5662482,2,Holly  Lourie,Front Left,Melaleuca swamp,Melaleuca swamp,M26,I,W507,,Dry
+657,2024-05-13,-13.40788,134.5821,2,Holly  Lourie,Front Left,,Melaleuca swamp,M26,I,,,Dry
+658,2024-05-13,-13.39618,134.5926,2,Holly  Lourie,Front Left,Melaleuca swamp,Melaleuca swamp,M26,I,RA534,,Dry
+660,2024-05-13,-13.32611097,134.650248,2,Holly  Lourie,Front Left,Melaleuca swamp,Melaleuca swamp,M26,NP or P,W593,,Wet
+663,2024-05-13,-13.19052931,134.8149774,2,Holly  Lourie,Front Left,Spring,Spring,M26,P,,,Wet
+664,2024-05-13,-13.16522268,134.8389114,2,Holly  Lourie,Front Left,Spring,Spring,M26,I,,,Dry
+669,2024-05-13,-13.08144819,134.6082641,2,Holly  Lourie,Front Left,Melaleuca Swamp,Melaleuca Swamp,M22,I,W999,,Dry
+676,2024-05-13,-13.05033323,134.3761066,2,Holly  Lourie,Front Left,Spring,Spring,M22,P,,,Wet
+680,2024-05-13,-13.04862589,133.9593781,2,Holly  Lourie,Front Left,Spring,River/Spring,M22,P,W1060,,Wet
+685,2024-05-13,-12.989,134.0996,2,Holly  Lourie,Front Left,Spring,Spring,M22,I or NP,,,Dry
+706,2024-05-13,-12.94643368,134.7252724,2,Holly  Lourie,Front Left,Melaleuca Swamp/Spring,Melaleuca Swamp/Spring,M22,P,,,Wet
+722,2024-05-11,-13.35206137,134.899311,2,Andrew Hoskins,Back Right,,River,M14,I or NP,,,Dry
