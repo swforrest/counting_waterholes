@@ -48,6 +48,8 @@ labels: .\training\labels # Labels for the images as creation or manipulation
   # D:/Waterholes_project/counting_waterholes/images/train_v1/labels
 classifications: .\images\classifications # Classifications for the images
 
+training_path: .\training
+
 train: .\training\images #attempt v1 to train the model from my hard drive
   # - C:\yoloDatasets\trainFinal\images 
   # - \\hpc-fs.qut.edu.au\turner30\Projects\Boats\Training\trainOrig\trainFinal\images
