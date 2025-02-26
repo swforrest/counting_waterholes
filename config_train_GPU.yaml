@@ -16,6 +16,11 @@ proj_root: .
 #AF:
 output_dir: .\results
 #base dir: weights: C:\yolov5\runs\train\63ImageTraim_19Mar_(S300)\weights\best.pt
+
+#AF: creating new paths to manipulate the output of the segmentation. 
+segmented_images : results\images\train
+segmented_labels : results\labels\train
+
 #AF:
 weights: ./data/NN_weights.pt #AF: file existing but from the general config for now. to be checked later. 
 cache: False
@@ -38,7 +43,7 @@ STRIDE: 104
 path: .
 #added the pngs path on the script as it was missing and it was called by my personal script. 
 pngs: .\images\pngs
-segmented_images: .\images\SegmentedImages # Segmented images
+# segmented_images: .\images\SegmentedImages # Segmented images but not used so removed
 labels: .\training\labels # Labels for the images as creation or manipulation 
   # D:/Waterholes_project/counting_waterholes/images/train_v1/labels
 classifications: .\images\classifications # Classifications for the images
