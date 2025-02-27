@@ -449,6 +449,103 @@ def cull_AF(
 
 
 
+
+def reorganize_folders(config_file: str = typer.Option("", help="Path to the config file")):
+    """
+    Reorganizes folders from {output_dir}/images and {output_dir}/labels 
+    to {training_path}/train and {training_path}/val.
+    
+    Structure transformation:
+    - {output_dir}/images/val -> {training_path}/val/images
+    - {output_dir}/images/train -> {training_path}/train/images
+    - {output_dir}/labels/val -> {training_path}/val/labels
+    - {output_dir}/labels/train -> {training_path}/train/labels
+    
+    Args:
+        config_file (str): Path to the YAML config file containing paths
+    """
+    import os
+    import shutil
+    import yaml
+    from pathlib import Path 
+
+    
+    cfg = parse_config(config_file)
+    # get the number of original images
+    output_dir = Path(cfg["output_dir"])
+    training_path = Path(cfg["training_path"])
+      
+    
+    # Define source and destination paths
+    source_images = output_dir / "images"
+    source_labels = output_dir / "labels"
+    
+    dest_train = training_path / "train"
+    dest_val = training_path / "val"
+    
+    # Create destination directories if they don't exist
+    dest_train.mkdir(parents=True, exist_ok=True)
+    dest_val.mkdir(parents=True, exist_ok=True)
+    
+    # Dictionary mapping source directories to destination directories
+    operations = {
+        source_images / "val": dest_val / "images",
+        source_images / "train": dest_train / "images",
+        source_labels / "val": dest_val / "labels",
+        source_labels / "train": dest_train / "labels"
+    }
+    
+    successful_operations = 0
+    failed_operations = 0
+    
+    # Perform the copy operations
+    for source, destination in operations.items():
+        try:
+            # Check if source exists
+            if not source.exists():
+                print(f"Source directory not found: {source}")
+                failed_operations += 1
+                continue
+                
+            # Remove destination if it exists
+            if destination.exists():
+                print(f"Removing existing destination: {destination}")
+                shutil.rmtree(destination)
+                
+            # Copy directory
+            print(f"Copying from {source} to {destination}")
+            shutil.copytree(source, destination)
+            print(f"Successfully copied to {destination}")
+            successful_operations += 1
+            
+        except Exception as e:
+            print(f"Error while copying {source} to {destination}: {e}")
+            failed_operations += 1
+    
+    # Print summary
+    print("\n----- REORGANIZATION SUMMARY -----")
+    print(f"Successful operations: {successful_operations}")
+    print(f"Failed operations: {failed_operations}")
+    
+    if successful_operations == 4:
+        print("\nAll folders were successfully reorganized!")
+        print("\nNew structure:")
+        print(f"- {training_path}/val/images (copied from {output_dir}/images/val)")
+        print(f"- {training_path}/val/labels (copied from {output_dir}/labels/val)")
+        print(f"- {training_path}/train/images (copied from {output_dir}/images/train)")
+        print(f"- {training_path}/train/labels (copied from {output_dir}/labels/train)")
+    else:
+        print("\nSome operations failed. Please check the error messages above.")
+
+if __name__ == "__main__":
+    print("Starting folder reorganization...")
+    reorganize_folders()
+    print("Process completed.")
+
+
+
+
+
 @app.command()
 def train(
     config: str = typer.Option("", help="Path to the config file"),
