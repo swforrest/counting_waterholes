@@ -5,6 +5,14 @@ the other steps required - preparing the images, segmenting them, and describing
 
 Author: Charlie Turner
 Date: 16/09/2024
+
+Addition from AF:
+Adapted and modified some section of Charlie's original repository to match our requirements. 
+I mainly made sure it ran smoothly and correctly to have the whole pipeline to train a model. 
+Added two functions 
+1. reorganize_folders() {moves segmented and selected images+labels to training folder} and 
+2. cull_AF() {faster than the original cull()} 
+Date: 28/02/2025
 """
 
 import typer
@@ -311,6 +319,7 @@ def cull_AF(
     config_path: str = typer.Option("", help="Path to the config file"),
 ):
     """
+    Addition from AF.
     YOLO recommends having 10% of images in the training set with no instances. 
     We can't know how many tiles will have no instances before we segment the images,
     so have to cull down after. This function will remove images with no labels until
@@ -452,6 +461,7 @@ def cull_AF(
 
 def reorganize_folders(config_file: str = typer.Option("", help="Path to the config file")):
     """
+    Addition from AF.
     Reorganizes folders from {output_dir}/images and {output_dir}/labels 
     to {training_path}/train and {training_path}/val.
     
