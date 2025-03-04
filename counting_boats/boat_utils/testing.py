@@ -722,7 +722,7 @@ def process_image_AF(
     WH_SWAMP_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
     WH_WET_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
     WH_SINK_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
-    U_DISTANCE_CUTOFF_PIX = MOVING_DISTANCE_CUTOFF_PIX  # Using existing moving distance
+    U_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  
     
     # cluster each class separately
     ML_clusters_dry_wh = cluster(ML_classifications_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
@@ -839,6 +839,9 @@ def compare(ml: np.ndarray, manual: np.ndarray, cutoff):
     Returns:
 
         list of clusters in form [x, y, ml_class, manual_class]
+
+    Comment: 
+    AF: Should be able to work without modification and handle more label classes. 
     """
     all_clusters, all_points = combine_detections_and_labels(ml, manual)
     if len(all_points) < 2:
