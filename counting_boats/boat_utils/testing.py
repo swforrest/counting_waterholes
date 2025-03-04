@@ -319,6 +319,168 @@ def backwards_annotation(run_folder, config):
             with open(json_path, "w+") as f:
                 json.dump(json_data, f)
 
+def backwards_annotation_AF(run_folder, config):
+    """
+    Generate labelme style annotations (json) from the classifications.
+    1. Read classifications
+    2. Generate json file {image}_labelme_auto.json with:
+
+    Args:
+
+        run_folder (str): The folder to run detection on.
+        config (dict): The configuration dictionary.
+
+    Returns:
+
+        None
+    
+    Comment:
+    AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
+    Should run smoothly and did not modify the dependent functions. 
+    """
+    detection_dir = os.path.join(config["path"], config["classifications"])
+    for root, _, files in os.walk(detection_dir):
+        # skip if json file exists
+        if os.path.exists(
+            os.path.join(
+                config["path"],
+                config["pngs"],
+                f"{os.path.basename(root)}_labelme_auto.json",
+            )
+        ):
+            continue
+        if len(files) > 0 and files[0].endswith(".txt"):
+            this_image = os.path.basename(root)
+            ML_classifications, _ = read_classifications(
+                class_folder=root, confidence_threshold=0.5
+            )  # read all
+            
+            # Separate classifications by class
+            ML_classifications_dry_wh = ML_classifications[ML_classifications[:, 3] == 0.0]
+            ML_classifications_wh_swamp = ML_classifications[ML_classifications[:, 3] == 1.0]
+            ML_classifications_wh_wet = ML_classifications[ML_classifications[:, 3] == 2.0]
+            ML_classifications_wh_sink = ML_classifications[ML_classifications[:, 3] == 3.0]
+            ML_classifications_u = ML_classifications[ML_classifications[:, 3] == 4.0]
+            
+            # Define distance cutoffs for each class (adjust these as needed)
+            DRY_WH_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Using existing static distance
+            WH_SWAMP_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
+            WH_WET_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
+            WH_SINK_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
+            U_DISTANCE_CUTOFF_PIX = MOVING_DISTANCE_CUTOFF_PIX  # Using existing moving distance
+            
+            # cluster each class separately
+            ML_clusters_dry_wh = cluster(ML_classifications_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
+            ML_clusters_wh_swamp = cluster(ML_classifications_wh_swamp, WH_SWAMP_DISTANCE_CUTOFF_PIX)
+            ML_clusters_wh_wet = cluster(ML_classifications_wh_wet, WH_WET_DISTANCE_CUTOFF_PIX)
+            ML_clusters_wh_sink = cluster(ML_classifications_wh_sink, WH_SINK_DISTANCE_CUTOFF_PIX)
+            ML_clusters_u = cluster(ML_classifications_u, U_DISTANCE_CUTOFF_PIX)
+            
+            # condense clusters
+            ML_clusters_dry_wh = process_clusters(ML_clusters_dry_wh)
+            ML_clusters_wh_swamp = process_clusters(ML_clusters_wh_swamp)
+            ML_clusters_wh_wet = process_clusters(ML_clusters_wh_wet)
+            ML_clusters_wh_sink = process_clusters(ML_clusters_wh_sink)
+            ML_clusters_u = process_clusters(ML_clusters_u)
+            
+            # get image metadata (width and height)
+            img = Image.open(
+                os.path.join(config["path"], config["pngs"], this_image + ".png")
+            )
+            width, height = img.size
+
+            json_data = {}
+            json_data["version"] = "5.2.1"
+            json_data["flags"] = {}
+            json_data["imagePath"] = this_image
+            json_data["imageHeight"] = height
+            json_data["imageWidth"] = width
+            # put in the shapes
+            json_data["shapes"] = []
+            
+            # Add shapes for each class
+            for c in ML_clusters_dry_wh:
+                x, y, _, _, w, h = c
+                w = int(w / 2)
+                h = int(h / 2)
+                json_data["shapes"].append(
+                    {
+                        "label": "Dry_WH",
+                        "points": [[x - w, y - h], [x + w, y + h]],
+                        "group_id": None,
+                        "shape_type": "rectangle",
+                        "flags": {},
+                    }
+                )
+                
+            for c in ML_clusters_wh_swamp:
+                x, y, _, _, w, h = c
+                w = int(w / 2)
+                h = int(h / 2)
+                json_data["shapes"].append(
+                    {
+                        "label": "WH_swamp",
+                        "points": [[x - w, y - h], [x + w, y + h]],
+                        "group_id": None,
+                        "shape_type": "rectangle",
+                        "flags": {},
+                    }
+                )
+                
+            for c in ML_clusters_wh_wet:
+                x, y, _, _, w, h = c
+                w = int(w / 2)
+                h = int(h / 2)
+                json_data["shapes"].append(
+                    {
+                        "label": "WH_wet",
+                        "points": [[x - w, y - h], [x + w, y + h]],
+                        "group_id": None,
+                        "shape_type": "rectangle",
+                        "flags": {},
+                    }
+                )
+                
+            for c in ML_clusters_wh_sink:
+                x, y, _, _, w, h = c
+                w = int(w / 2)
+                h = int(h / 2)
+                json_data["shapes"].append(
+                    {
+                        "label": "WH_sink",
+                        "points": [[x - w, y - h], [x + w, y + h]],
+                        "group_id": None,
+                        "shape_type": "rectangle",
+                        "flags": {},
+                    }
+                )
+                
+            for c in ML_clusters_u:
+                x, y, _, _, w, h = c
+                w = int(w / 2)
+                h = int(h / 2)
+                json_data["shapes"].append(
+                    {
+                        "label": "U",
+                        "points": [[x - w, y - h], [x + w, y + h]],
+                        "group_id": None,
+                        "shape_type": "rectangle",
+                        "flags": {},
+                    }
+                )
+                
+            # also need to get the "image_data" key. There will also be a {this_image}.json we can grab this from
+            with open(
+                os.path.join(config["path"], config["pngs"], f"{this_image}.json"), "r"
+            ) as f:
+                image_data = json.load(f)["imageData"]
+            json_data["imageData"] = image_data
+            # save the json
+            json_path = os.path.join(
+                config["path"], config["pngs"], f"{this_image}_labelme_auto.json"
+            )
+            with open(json_path, "w+") as f:
+                json.dump(json_data, f)
 
 def compare_detections_to_ground_truth(run_folder, config):
     """
@@ -390,11 +552,59 @@ def confusion_matrix(run_folder, config):
     plt.savefig(os.path.join(run_folder, "plots", "confusion_matrix.png"))
 
 
+def confusion_matrix_AF(run_folder, config):
+    """
+    Summarize the results of the comparison. Reads all csvs and creates a confusion matrix
+
+    Args:
+
+        run_folder (str): The folder to run detection on.
+        config (dict): The configuration dictionary.
+
+    Returns:
+
+        None
+    Comment:
+    AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
+    Should run smoothly and did not modify the dependent functions. 
+    """
+    if os.path.exists(os.path.join(run_folder, "all_boats.csv")):
+        all_data = pd.read_csv(os.path.join(run_folder, "all_boats.csv"))
+    else:
+        # read all the csvs in the run folder that start with a date (8 numbers)
+        all_data = pd.concat(
+            [
+                pd.read_csv(os.path.join(run_folder, file))
+                for file in os.listdir(run_folder)
+                if file.endswith(".csv") and file[:8].isdigit()
+            ]
+        )
+    # create confusion matrix
+    true = all_data["manual_class"]
+    pred = all_data["ml_class"]
+    # save image of confusion matrix
+    acc = np.sum(true == pred) / len(true)
+    ConfusionMatrixDisplay.from_predictions(
+        y_pred=pred,
+        y_true=true,
+        labels=[-1, 0, 1, 2, 3, 4],
+        display_labels=["Not Classified", "Dry_WH", "WH_swamp", "WH_wet", "WH_sink", "U"],
+    )
+    fig = plt.gcf()
+    fig.suptitle(
+        f"{len(true[true != -1])} Labelled Objects (Detection Accuracy: {round(acc, 3)})"
+    )
+    fig.tight_layout()
+    # save the confusion matrix image
+    plt.savefig(os.path.join(run_folder, "plots", "confusion_matrix.png"))
+
+
 ### Clustering Helpers
 STAT_DISTANCE_CUTOFF_PIX = 6
 MOVING_DISTANCE_CUTOFF_PIX = 10
 COMPARE_DISTANCE_CUTOFF_PIX = 8
 CONF_THRESHOLD = 0.5
+#AF: review if those are taken or the ones in the config file. 
 
 
 def process_image(
@@ -406,7 +616,7 @@ def process_image(
 
     Args:
 
-        detections (str): The directory of detections for the iamge
+        detections (str): The directory of detections for the image
         labels_root (str): The root directory of labels
 
     Returns:
@@ -467,6 +677,154 @@ def process_image(
     return comparison
 
 
+def process_image_AF(
+    detections,
+    labels_root,
+):
+    """
+    Compare the detections and labels for a single image
+
+    Args:
+
+        detections (str): The directory of detections for the image
+        labels_root (str): The root directory of labels
+
+    Returns:
+
+        list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]
+    
+    Comment:
+    AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
+    Should run smoothly and did not modify the dependent functions. 
+    """
+    # labels will be in a parallel directory to detections
+    # e.g detections = "Detections/b/../d", labels = "Labels/b/../d"
+    label_dir = os.path.join(
+        labels_root, os.path.sep.join(detections.split(os.path.sep)[-2:])
+    )
+    # check if it exists
+    if not os.path.exists(label_dir):
+        print(f"Label directory {label_dir} does not exist, skipping image...")
+        return []
+    
+    # ML classifications
+    ML_classifications, _ = read_classifications(class_folder=detections)
+    
+    # Separate classifications by class
+    ML_classifications_dry_wh = ML_classifications[ML_classifications[:, 3] == 0.0]
+    ML_classifications_wh_swamp = ML_classifications[ML_classifications[:, 3] == 1.0]
+    ML_classifications_wh_wet = ML_classifications[ML_classifications[:, 3] == 2.0]
+    ML_classifications_wh_sink = ML_classifications[ML_classifications[:, 3] == 3.0]
+    ML_classifications_u = ML_classifications[ML_classifications[:, 3] == 4.0]
+    
+    # Define distance cutoffs for each class (adjust these as needed)
+    DRY_WH_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Using existing static distance
+    WH_SWAMP_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
+    WH_WET_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
+    WH_SINK_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
+    U_DISTANCE_CUTOFF_PIX = MOVING_DISTANCE_CUTOFF_PIX  # Using existing moving distance
+    
+    # cluster each class separately
+    ML_clusters_dry_wh = cluster(ML_classifications_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
+    ML_clusters_wh_swamp = cluster(ML_classifications_wh_swamp, WH_SWAMP_DISTANCE_CUTOFF_PIX)
+    ML_clusters_wh_wet = cluster(ML_classifications_wh_wet, WH_WET_DISTANCE_CUTOFF_PIX)
+    ML_clusters_wh_sink = cluster(ML_classifications_wh_sink, WH_SINK_DISTANCE_CUTOFF_PIX)
+    ML_clusters_u = cluster(ML_classifications_u, U_DISTANCE_CUTOFF_PIX)
+    
+    # save clusters as csv for later analysis
+    if not os.path.exists(os.path.join(detections, "clusters")):
+        os.makedirs(os.path.join(detections, "clusters"))
+    
+    # Save each class clusters separately
+    dry_wh_outfile = os.path.join(detections, "clusters", "dry_wh_clusters.csv")
+    wh_swamp_outfile = os.path.join(detections, "clusters", "wh_swamp_clusters.csv")
+    wh_wet_outfile = os.path.join(detections, "clusters", "wh_wet_clusters.csv")
+    wh_sink_outfile = os.path.join(detections, "clusters", "wh_sink_clusters.csv")
+    u_outfile = os.path.join(detections, "clusters", "u_clusters.csv")
+    
+    with open(dry_wh_outfile, "w") as f:
+        for c in ML_clusters_dry_wh:
+            f.write(",".join([str(i) for i in c]) + "\n")
+    with open(wh_swamp_outfile, "w") as f:
+        for c in ML_clusters_wh_swamp:
+            f.write(",".join([str(i) for i in c]) + "\n")
+    with open(wh_wet_outfile, "w") as f:
+        for c in ML_clusters_wh_wet:
+            f.write(",".join([str(i) for i in c]) + "\n")
+    with open(wh_sink_outfile, "w") as f:
+        for c in ML_clusters_wh_sink:
+            f.write(",".join([str(i) for i in c]) + "\n")
+    with open(u_outfile, "w") as f:
+        for c in ML_clusters_u:
+            f.write(",".join([str(i) for i in c]) + "\n")
+
+    # manual annotations
+    manual_annotations, _ = read_classifications(class_folder=label_dir)
+    
+    # Handle empty manual annotations
+    if len(manual_annotations) == 0:
+        manual_annotations_dry_wh = np.empty((0, 7))
+        manual_annotations_wh_swamp = np.empty((0, 7))
+        manual_annotations_wh_wet = np.empty((0, 7))
+        manual_annotations_wh_sink = np.empty((0, 7))
+        manual_annotations_u = np.empty((0, 7))
+    else:
+        # Separate manual annotations by class
+        manual_annotations_dry_wh = manual_annotations[manual_annotations[:, 3] == 0.0]
+        manual_annotations_wh_swamp = manual_annotations[manual_annotations[:, 3] == 1.0]
+        manual_annotations_wh_wet = manual_annotations[manual_annotations[:, 3] == 2.0]
+        manual_annotations_wh_sink = manual_annotations[manual_annotations[:, 3] == 3.0]
+        manual_annotations_u = manual_annotations[manual_annotations[:, 3] == 4.0]
+    
+    # cluster manual annotations
+    manual_clusters_dry_wh = cluster(manual_annotations_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
+    manual_clusters_wh_swamp = cluster(manual_annotations_wh_swamp, WH_SWAMP_DISTANCE_CUTOFF_PIX)
+    manual_clusters_wh_wet = cluster(manual_annotations_wh_wet, WH_WET_DISTANCE_CUTOFF_PIX)
+    manual_clusters_wh_sink = cluster(manual_annotations_wh_sink, WH_SINK_DISTANCE_CUTOFF_PIX)
+    manual_clusters_u = cluster(manual_annotations_u, U_DISTANCE_CUTOFF_PIX)
+
+    # process all clusters
+    ML_clusters_dry_wh = process_clusters(ML_clusters_dry_wh)
+    ML_clusters_wh_swamp = process_clusters(ML_clusters_wh_swamp)
+    ML_clusters_wh_wet = process_clusters(ML_clusters_wh_wet)
+    ML_clusters_wh_sink = process_clusters(ML_clusters_wh_sink)
+    ML_clusters_u = process_clusters(ML_clusters_u)
+    
+    manual_clusters_dry_wh = process_clusters(manual_clusters_dry_wh)
+    manual_clusters_wh_swamp = process_clusters(manual_clusters_wh_swamp)
+    manual_clusters_wh_wet = process_clusters(manual_clusters_wh_wet)
+    manual_clusters_wh_sink = process_clusters(manual_clusters_wh_sink)
+    manual_clusters_u = process_clusters(manual_clusters_u)
+
+    # Combine all ML clusters and manual clusters
+    ML_clusters = np.concatenate(
+        (
+            ML_clusters_dry_wh, 
+            ML_clusters_wh_swamp, 
+            ML_clusters_wh_wet, 
+            ML_clusters_wh_sink, 
+            ML_clusters_u
+        ), 
+        axis=0
+    ) if any(len(arr) > 0 for arr in [ML_clusters_dry_wh, ML_clusters_wh_swamp, ML_clusters_wh_wet, ML_clusters_wh_sink, ML_clusters_u]) else np.empty((0, 6))
+    
+    manual_clusters = np.concatenate(
+        (
+            manual_clusters_dry_wh, 
+            manual_clusters_wh_swamp, 
+            manual_clusters_wh_wet, 
+            manual_clusters_wh_sink, 
+            manual_clusters_u
+        ), 
+        axis=0
+    ) if any(len(arr) > 0 for arr in [manual_clusters_dry_wh, manual_clusters_wh_swamp, manual_clusters_wh_wet, manual_clusters_wh_sink, manual_clusters_u]) else np.empty((0, 6))
+    
+    # Compare ML and manual clusters
+    comparison = compare(ML_clusters, manual_clusters, COMPARE_DISTANCE_CUTOFF_PIX)
+    return comparison
+
+
+
 def compare(ml: np.ndarray, manual: np.ndarray, cutoff):
     """
     given two lists of clusters, compare them (cluster them and note the results)
@@ -506,7 +864,9 @@ def compare(ml: np.ndarray, manual: np.ndarray, cutoff):
     # for each cluster, note if it is in ml, manual, or both
     results = []
     for cluster in np.unique(clusters):
-        res = [0.0, 0.0, -1, -1]  # x, y, ml class, manual class
+        res = [0.0, 0.0, -1, -1]  # x, y, ml class, manual class 
+        #AF: The -1 value is used as a default to indicate "no class assigned". This should work but could modify to use a different default value. 
+        #However, since -1 is already separate from WH class values (0-4), it should work correctly as is.
         points = points_with_cluster[points_with_cluster[:, -1] == str(cluster)]
         if len(points) == 0:
             print("No points in cluster")
