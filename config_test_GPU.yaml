@@ -3,7 +3,7 @@
 yolo_dir: C:/Users/fossatia/Documents/Waterholes_project/yolov5
 python: python
 # Configuration for Validation/Analysis Runs
-path:  ./testing
+path:  .\testing
 weights: ./data/NN_weights.pt
 # weights: /Users/charlieturner/Desktop/Yolov5l.pt
 device: cuda:0
@@ -13,7 +13,8 @@ proj_root: ./counting_waterholes # root of project (where this file is) % base d
 
 # Auxiliary Paths (relative to run folder, or absolute if using existing)
 # These paths either exist (and are used) or are created (and used) by the run
-pngs: ./images/pngs # Pngs for the tif files
+pngs: pngs # Pngs for the tif files
+raw_images: .\testing\raw_images
 segmented_images: . # Segmented images 
 #AF: haven't got any folder that keeps all the segmented images. The segment function splits already the images into training and validation.
 #AF: might need to pull them back? Or use the training folder only?
@@ -26,9 +27,6 @@ download_dir: ./images/downloads #AF: created the subfolder in accordance and ad
 
 archive_dir: ./archive_counting_waterholes #AF: Archive folder in the same OneDrive but other folder
 use_comet: False # If true, make sure comet is setup (needs env vars or a .comet.config file)
-
-img_size: 416
-img_stride: 104
 
 #AF: all int to be rechecked later and see what we want to put in there. 
 workers: 6

@@ -34,6 +34,20 @@ import json
 
 
 
+def parse_config(config: str) -> dict:
+    """
+    Parse the config file
+
+    Args:
+        config (str): path to the config file
+
+    Returns:
+        dict: the parsed config file
+    """
+    with open(config, "r") as f:
+        return yaml.load(f, Loader=yaml.FullLoader)
+    
+
 
 def prepare(run_folder, config):
     """
@@ -49,10 +63,13 @@ def prepare(run_folder, config):
 
         None
     """
+    config = parse_config(config)
     img_folder = config["raw_images"]  # folder with the tif files
     save_folder = os.path.join(config["path"], config["pngs"])
     os.makedirs(save_folder, exist_ok=True)
-    
+    print('read the file path correctly')
+    print(save_folder)
+    print(img_folder)
     for root, _, files in os.walk(img_folder):
         for file in files:
             if file == "composite.tif":
