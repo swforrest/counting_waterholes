@@ -15,10 +15,10 @@ proj_root: ./counting_waterholes # root of project (where this file is) % base d
 # These paths either exist (and are used) or are created (and used) by the run
 pngs: pngs # Pngs for the tif files
 raw_images: .\testing\raw_images
-segmented_images: . # Segmented images 
+segmented_images: .\segmented_images # Segmented images 
 #AF: haven't got any folder that keeps all the segmented images. The segment function splits already the images into training and validation.
 #AF: might need to pull them back? Or use the training folder only?
-labels: ./images/Labels # Labels for the images
+labels: .\labels # Labels for the images
 classifications: . # Classifications for the images #AF: classification? Meaning the json file?
 
 output_dir: ./results #AF: created the folder in accordance
