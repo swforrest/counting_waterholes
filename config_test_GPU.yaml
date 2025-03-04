@@ -1,9 +1,9 @@
 # Validation run with Best weights from TrainFinalandOld
 
-yolo_dir: C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\yolov5
+yolo_dir: C:/Users/fossatia/Documents/Waterholes_project/yolov5
 python: python
 # Configuration for Validation/Analysis Runs
-path:  C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\counting_waterholes
+path:  ./testing
 weights: ./data/NN_weights.pt
 # weights: /Users/charlieturner/Desktop/Yolov5l.pt
 device: cuda:0
@@ -12,10 +12,12 @@ device: cuda:0
 
 # Auxiliary Paths (relative to run folder, or absolute if using existing)
 # These paths either exist (and are used) or are created (and used) by the run
-pngs: . # Pngs for the tif files
-segmented_images: . # Segmented images
-labels: . # Labels for the images
-classifications: . # Classifications for the images
+pngs: ./images/pngs # Pngs for the tif files
+segmented_images: . # Segmented images 
+#AF: haven't got any folder that keeps all the segmented images. The segment function splits already the images into training and validation.
+#AF: might need to pull them back? Or use the training folder only?
+labels: ./images/Labels # Labels for the images
+classifications: . # Classifications for the images #AF: classification? Meaning the json file?
 
 img_size: 416
 img_stride: 104
