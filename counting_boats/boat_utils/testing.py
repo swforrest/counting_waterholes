@@ -23,7 +23,9 @@ import pandas as pd
 import scipy
 import random
 
-from .classifier import cluster, process_clusters, read_classifications, pixel2latlong
+# from .classifier import cluster, process_clusters, read_classifications, pixel2latlong 
+#AF: model run is on the GPU and not my Laptop and the testing.py import doesn't work without. 
+#Took it out but need it back in for the GPU
 from .config import cfg
 from . import image_cutting_support as ics
 from . import heatmap as hm
