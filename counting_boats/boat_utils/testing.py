@@ -132,6 +132,7 @@ def segment(run_folder, config):
 
         None
     """
+    config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
     tile_size = config.get("img_size", 416)
     stride = config.get("img_stride", 104)
     pngs = os.path.join(config["path"], config["pngs"])
