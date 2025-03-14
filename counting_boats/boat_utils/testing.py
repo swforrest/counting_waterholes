@@ -172,7 +172,7 @@ def segment(run_folder, config):
     segregate(label_save_folder)
 
 
-def run_detection(run_folder, run_config):
+def run_detection(run_folder, config):
     """
     Run the YoloV5 detection on the segmented images, and move
     the detections to a sibling directory for analysis.
@@ -189,11 +189,15 @@ def run_detection(run_folder, run_config):
 
         None
     """
-    weights = run_config["weights"]
+    cfg = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
+    weights = cfg["weights"]
+    print(weights)
     yolo = cfg["yolo_dir"]
+    print(yolo)
     python = cfg["python"]
-    classification_dir = os.path.join(run_folder, run_config["classifications"])
-    img_dir = os.path.join(run_folder, run_config["segmented_images"])
+    print(python)
+    classification_dir = os.path.join(run_folder, cfg["classifications"])
+    img_dir = os.path.join(run_folder, cfg["segmented_images"])
     for root, _, files in os.walk(img_dir):
         if len(files) > 0 and files[0].endswith(".png"):
             this_classification_dir = os.path.join(
@@ -203,11 +207,12 @@ def run_detection(run_folder, run_config):
                 print(f"Already classified {this_classification_dir}")
                 continue
             os.makedirs(this_classification_dir, exist_ok=True)
-            device = run_config.get("device", "cuda:0")
-            tile_size = run_config.get("img_size", 416)
+            device = cfg.get("device", "cuda:0")
+            tile_size = cfg.get("img_size", 416)
             res = os.system(
                 f"{python} {yolo}/detect.py --imgsz {tile_size} --save-txt --save-conf --weights {weights} --source {root} --device {device} --nosave --conf-thres 0.15"
             )
+            print(os.system(res))
             if res != 0:
                 raise Exception(f"Error running detection on {root}")
             latest_exp = (

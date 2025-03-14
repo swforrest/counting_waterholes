@@ -3,23 +3,23 @@
 yolo_dir: C:/Users/fossatia/Documents/Waterholes_project/yolov5
 python: python
 # Configuration for Validation/Analysis Runs
-path:  C:\Users\fossatia\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes\testing
-weights: ./data/NN_weights.pt
+path:  D:/Waterholes_project/counting_waterholes/testing
+weights: C:/Users/fossatia/Documents/Waterholes_project/counting_waterholes/data/NN_weights.pt
 # weights: /Users/charlieturner/Desktop/Yolov5l.pt
 device: cuda:0
-proj_root: ./counting_waterholes # root of project (where this file is) % base directory
+proj_root: C:/Users/fossatia/Documents/Waterholes_project/counting_waterholes/counting_waterholes # root of project (where this file is) % base directory
 
 # raw_images: C:\ML_Software\active_learning\data\downloads # Folders as downloaded from Planet (extracted zips)
 
 # Auxiliary Paths (relative to run folder, or absolute if using existing)
 # These paths either exist (and are used) or are created (and used) by the run
-pngs: .\pngs # Pngs for the tif files
-raw_images: .\raw_images
-segmented_images: .\segmented_images # Segmented images 
+pngs: ./pngs # Pngs for the tif files
+raw_images: ./raw_images
+segmented_images: segmented_images # Segmented images 
 #AF: haven't got any folder that keeps all the segmented images. The segment function splits already the images into training and validation.
 #AF: might need to pull them back? Or use the training folder only?
-labels: .\labels # Labels for the images
-classifications: . # Classifications for the images #AF: classification? Meaning the json file?
+labels: ./labels # Labels for the images
+classifications: ./classifications # Classifications for the images #AF: classification? Meaning the json file?
 
 output_dir: ./results #AF: created the folder in accordance
 tif_dir: ./images/RawImages #AF: created the subfolder in accordance and adapted the path
