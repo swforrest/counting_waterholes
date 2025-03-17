@@ -169,6 +169,7 @@ def segment(run_folder, config):
             else:
                 print(f"Could not find image file for {filename}")
     # Separate the folders into individual images for fun
+    #AF: necessary?? just adds runing time...
     segregate(im_save_folder)
     segregate(label_save_folder)
 
@@ -224,14 +225,14 @@ def run_detection(run_folder, config):
             # res = os.system(
                 # f"{python} {yolo}/detect.py --imgsz {tile_size} --save-txt --save-conf --weights {weights} --source {root} --device {device} --nosave --conf-thres 0.15"
             res = subprocess.run(
-            f"{python} {yolo}/detect.py --imgsz {tile_size} --save-txt --save-conf --weights {weights} --source {root} --device {device} --nosave --conf-thres 0.15")
-            # shell=True,
-            # capture_output=True,
-            # text=True)
+            f"{python} {yolo}/detect.py --imgsz {tile_size} --save-txt --save-conf --weights {weights} --source {root} --device {device} --nosave --conf-thres 0.15",
+            shell=True,
+            capture_output=True,
+            text=True)
             # print(f"Command output: {res.stdout}")
             # print(f"Command error: {res.stderr}")
             # print(f"Command exit code: {res.returncode}")
-            # print(f"Command returned exit code: {res}")
+            print(f"Command returned exit code: {res}")
             if res.returncode != 0:
                 raise Exception(f"Error running detection on {root}")
             latest_exp = (

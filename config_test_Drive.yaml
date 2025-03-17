@@ -3,7 +3,7 @@
 yolo_dir: C:/Users/fossatia/Documents/Waterholes_project/yolov5
 python: python
 # Configuration for Validation/Analysis Runs
-path:  U:/Research/Projects/sef/waterholehealthcheck/Waterholes_project/counting_waterholes/testing
+path:  D:/Waterholes_project/counting_waterholes/testing
 weights: C:/Users/fossatia/Documents/Waterholes_project/counting_waterholes/data/NN_weights.pt
 # weights: /Users/charlieturner/Desktop/Yolov5l.pt
 device: cuda:0
