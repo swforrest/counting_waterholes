@@ -33,6 +33,7 @@ from PIL import Image, ImageDraw
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 import json
+import subprocess
 
 
 
@@ -190,18 +191,29 @@ def run_detection(run_folder, config):
         None
     """
     cfg = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
+    run_folder = os.path.normpath(run_folder) #AF
     weights = cfg["weights"]
-    print(weights)
+    print(f"Weights path: {weights}")
     yolo = cfg["yolo_dir"]
-    print(yolo)
+    print(f"Yolo path: {yolo}")
     python = cfg["python"]
-    print(python)
-    classification_dir = os.path.join(run_folder, cfg["classifications"])
-    img_dir = os.path.join(run_folder, cfg["segmented_images"])
+    print(f"Language used: {python}")
+    # classification_dir = os.path.join(run_folder, cfg["classifications"])
+    classification_dir = os.path.normpath(os.path.join(run_folder, cfg["classifications"]))
+    # img_dir = os.path.join(run_folder, cfg["segmented_images"]) AF
+    img_dir = os.path.normpath(os.path.join(run_folder, cfg["segmented_images"]))
     for root, _, files in os.walk(img_dir):
+        # AF: ading these debug prints to see what paths are being constructed
+        print(f"img_dir: {img_dir}")
+        print(f"root: {root}")
+        print(f"Path components: {root.split(os.path.sep)[-2:]}")
         if len(files) > 0 and files[0].endswith(".png"):
-            this_classification_dir = os.path.join(
-                classification_dir, os.path.sep.join(root.split(os.path.sep)[-2:])
+            # this_classification_dir = os.path.join(
+            #     classification_dir, os.path.sep.join(root.split(os.path.sep)[-2:]) AF: debut solving:
+            # Try a more reliable approach:
+            rel_path = os.path.relpath(root, img_dir)
+            this_classification_dir = os.path.join(classification_dir, rel_path)
+            print(f"Fixed classification dir: {this_classification_dir}"   
             )
             if os.path.exists(this_classification_dir):  # don't double classify
                 print(f"Already classified {this_classification_dir}")
@@ -209,11 +221,18 @@ def run_detection(run_folder, config):
             os.makedirs(this_classification_dir, exist_ok=True)
             device = cfg.get("device", "cuda:0")
             tile_size = cfg.get("img_size", 416)
-            res = os.system(
-                f"{python} {yolo}/detect.py --imgsz {tile_size} --save-txt --save-conf --weights {weights} --source {root} --device {device} --nosave --conf-thres 0.15"
-            )
-            print(os.system(res))
-            if res != 0:
+            # res = os.system(
+                # f"{python} {yolo}/detect.py --imgsz {tile_size} --save-txt --save-conf --weights {weights} --source {root} --device {device} --nosave --conf-thres 0.15"
+            res = subprocess.run(
+            f"{python} {yolo}/detect.py --imgsz {tile_size} --save-txt --save-conf --weights {weights} --source {root} --device {device} --nosave --conf-thres 0.15")
+            # shell=True,
+            # capture_output=True,
+            # text=True)
+            # print(f"Command output: {res.stdout}")
+            # print(f"Command error: {res.stderr}")
+            # print(f"Command exit code: {res.returncode}")
+            # print(f"Command returned exit code: {res}")
+            if res.returncode != 0:
                 raise Exception(f"Error running detection on {root}")
             latest_exp = (
                 max(
