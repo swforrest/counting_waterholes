@@ -231,7 +231,7 @@ def run_detection(run_folder, config):
             text=True)
             # print(f"Command output: {res.stdout}")
             # print(f"Command error: {res.stderr}")
-            # print(f"Command exit code: {res.returncode}")
+            print(f"Command exit code: {res.returncode}")
             print(f"Command returned exit code: {res}")
             if res.returncode != 0:
                 raise Exception(f"Error running detection on {root}")
