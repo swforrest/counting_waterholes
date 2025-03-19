@@ -364,7 +364,7 @@ def backwards_annotation(run_folder, config):
             with open(json_path, "w+") as f:
                 json.dump(json_data, f)
 
-def backwards_annotation_AF(run_folder, config):
+def backwards_annotation_AF_old(run_folder, config):
     """
     Generate labelme style annotations (json) from the classifications.
     1. Read classifications
@@ -414,7 +414,7 @@ def backwards_annotation_AF(run_folder, config):
             WH_SWAMP_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
             WH_WET_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
             WH_SINK_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
-            U_DISTANCE_CUTOFF_PIX = MOVING_DISTANCE_CUTOFF_PIX  # Using existing moving distance
+            U_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Not using existing moving distance as we all have static objects
             
             # cluster each class separately
             ML_clusters_dry_wh = cluster(ML_classifications_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
@@ -523,6 +523,167 @@ def backwards_annotation_AF(run_folder, config):
                 image_data = json.load(f)["imageData"]
             json_data["imageData"] = image_data
             # save the json
+            json_path = os.path.join(
+                config["path"], config["pngs"], f"{this_image}_labelme_auto.json"
+            )
+            with open(json_path, "w+") as f:
+                json.dump(json_data, f)
+
+def backwards_annotation_AF(run_folder, config):
+    """
+    Generate labelme style annotations (json) from the classifications.
+    1. Read classifications
+    2. Generate json file {image}_labelme_auto.json with:
+
+    Args:
+        run_folder (str): The folder to run detection on.
+        config (dict): The configuration dictionary.
+
+    Returns:
+        None
+    
+    Comment:
+    AF: Modified to handle 5 classes of waterhole labels (0=Dry_WH, 1=WH_swamp, 2=WH_wet, 3=WH_sink, 4=U)
+    """
+    config = parse_config(config)  # To solve the error: 'str' object has no attribute 'get'
+    run_folder = os.path.normpath(run_folder)
+    detection_dir = os.path.join(config["path"], config["classifications"])
+    
+    for root, _, files in os.walk(detection_dir):
+        # Skip if json file exists
+        if os.path.exists(
+            os.path.join(
+                config["path"],
+                config["pngs"],
+                f"{os.path.basename(root)}_labelme_auto.json",
+            )
+        ):
+            continue
+            
+        if len(files) > 0 and files[0].endswith(".txt"):
+            this_image = os.path.basename(root)
+            ML_classifications, _ = read_classifications_AF(
+                class_folder=root, confidence_threshold=0.5
+            )  # Read all
+            
+            # Separate classifications by class
+            ML_classifications_dry_wh = ML_classifications[ML_classifications[:, 3] == 0.0]
+            ML_classifications_wh_swamp = ML_classifications[ML_classifications[:, 3] == 1.0]
+            ML_classifications_wh_wet = ML_classifications[ML_classifications[:, 3] == 2.0]
+            ML_classifications_wh_sink = ML_classifications[ML_classifications[:, 3] == 3.0]
+            ML_classifications_u = ML_classifications[ML_classifications[:, 3] == 4.0]
+            
+            # Define distance cutoffs for each class
+            DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Using existing static distance for all classes
+            
+            # Cluster each class separately
+            ML_clusters_dry_wh = cluster_AF(ML_classifications_dry_wh, DISTANCE_CUTOFF_PIX)
+            ML_clusters_wh_swamp = cluster_AF(ML_classifications_wh_swamp, DISTANCE_CUTOFF_PIX)
+            ML_clusters_wh_wet = cluster_AF(ML_classifications_wh_wet, DISTANCE_CUTOFF_PIX)
+            ML_clusters_wh_sink = cluster_AF(ML_classifications_wh_sink, DISTANCE_CUTOFF_PIX)
+            ML_clusters_u = cluster_AF(ML_classifications_u, DISTANCE_CUTOFF_PIX)
+            
+            # Condense clusters
+            ML_clusters_dry_wh = process_clusters_AF(ML_clusters_dry_wh)
+            ML_clusters_wh_swamp = process_clusters_AF(ML_clusters_wh_swamp)
+            ML_clusters_wh_wet = process_clusters_AF(ML_clusters_wh_wet)
+            ML_clusters_wh_sink = process_clusters_AF(ML_clusters_wh_sink)
+            ML_clusters_u = process_clusters_AF(ML_clusters_u)
+            
+            # Get image metadata (width and height)
+            img = Image.open(
+                os.path.join(config["path"], config["pngs"], this_image + ".png")
+            )
+            width, height = img.size
+
+            # Initialize JSON data
+            json_data = {}
+            json_data["version"] = "5.2.1"
+            json_data["flags"] = {}
+            json_data["imagePath"] = this_image
+            json_data["imageHeight"] = height
+            json_data["imageWidth"] = width
+            json_data["shapes"] = []
+            
+            # Add shapes for each class
+            for c in ML_clusters_dry_wh:
+                x, y, _, _, w, h = c
+                w = int(w / 2)
+                h = int(h / 2)
+                json_data["shapes"].append(
+                    {
+                        "label": "Dry_WH",
+                        "points": [[x - w, y - h], [x + w, y + h]],
+                        "group_id": None,
+                        "shape_type": "rectangle",
+                        "flags": {},
+                    }
+                )
+                
+            for c in ML_clusters_wh_swamp:
+                x, y, _, _, w, h = c
+                w = int(w / 2)
+                h = int(h / 2)
+                json_data["shapes"].append(
+                    {
+                        "label": "WH_swamp",
+                        "points": [[x - w, y - h], [x + w, y + h]],
+                        "group_id": None,
+                        "shape_type": "rectangle",
+                        "flags": {},
+                    }
+                )
+                
+            for c in ML_clusters_wh_wet:
+                x, y, _, _, w, h = c
+                w = int(w / 2)
+                h = int(h / 2)
+                json_data["shapes"].append(
+                    {
+                        "label": "WH_wet",
+                        "points": [[x - w, y - h], [x + w, y + h]],
+                        "group_id": None,
+                        "shape_type": "rectangle",
+                        "flags": {},
+                    }
+                )
+                
+            for c in ML_clusters_wh_sink:
+                x, y, _, _, w, h = c
+                w = int(w / 2)
+                h = int(h / 2)
+                json_data["shapes"].append(
+                    {
+                        "label": "WH_sink",
+                        "points": [[x - w, y - h], [x + w, y + h]],
+                        "group_id": None,
+                        "shape_type": "rectangle",
+                        "flags": {},
+                    }
+                )
+                
+            for c in ML_clusters_u:
+                x, y, _, _, w, h = c
+                w = int(w / 2)
+                h = int(h / 2)
+                json_data["shapes"].append(
+                    {
+                        "label": "U",
+                        "points": [[x - w, y - h], [x + w, y + h]],
+                        "group_id": None,
+                        "shape_type": "rectangle",
+                        "flags": {},
+                    }
+                )
+                
+            # Get the "image_data" key from existing JSON
+            with open(
+                os.path.join(config["path"], config["pngs"], f"{this_image}.json"), "r"
+            ) as f:
+                image_data = json.load(f)["imageData"]
+            json_data["imageData"] = image_data
+            
+            # Save the JSON
             json_path = os.path.join(
                 config["path"], config["pngs"], f"{this_image}_labelme_auto.json"
             )
@@ -759,7 +920,7 @@ def process_image_AF(
         return []
     
     # ML classifications
-    ML_classifications, _ = read_classifications(class_folder=detections)
+    ML_classifications, _ = read_classifications_AF(class_folder=detections)
     
     # Separate classifications by class
     ML_classifications_dry_wh = ML_classifications[ML_classifications[:, 3] == 0.0]
@@ -776,11 +937,11 @@ def process_image_AF(
     U_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  
     
     # cluster each class separately
-    ML_clusters_dry_wh = cluster(ML_classifications_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
-    ML_clusters_wh_swamp = cluster(ML_classifications_wh_swamp, WH_SWAMP_DISTANCE_CUTOFF_PIX)
-    ML_clusters_wh_wet = cluster(ML_classifications_wh_wet, WH_WET_DISTANCE_CUTOFF_PIX)
-    ML_clusters_wh_sink = cluster(ML_classifications_wh_sink, WH_SINK_DISTANCE_CUTOFF_PIX)
-    ML_clusters_u = cluster(ML_classifications_u, U_DISTANCE_CUTOFF_PIX)
+    ML_clusters_dry_wh = cluster_AF(ML_classifications_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
+    ML_clusters_wh_swamp = cluster_AF(ML_classifications_wh_swamp, WH_SWAMP_DISTANCE_CUTOFF_PIX)
+    ML_clusters_wh_wet = cluster_AF(ML_classifications_wh_wet, WH_WET_DISTANCE_CUTOFF_PIX)
+    ML_clusters_wh_sink = cluster_AF(ML_classifications_wh_sink, WH_SINK_DISTANCE_CUTOFF_PIX)
+    ML_clusters_u = cluster_AF(ML_classifications_u, U_DISTANCE_CUTOFF_PIX)
     
     # save clusters as csv for later analysis
     if not os.path.exists(os.path.join(detections, "clusters")):
@@ -810,7 +971,7 @@ def process_image_AF(
             f.write(",".join([str(i) for i in c]) + "\n")
 
     # manual annotations
-    manual_annotations, _ = read_classifications(class_folder=label_dir)
+    manual_annotations, _ = read_classifications_AF(class_folder=label_dir)
     
     # Handle empty manual annotations
     if len(manual_annotations) == 0:
@@ -828,24 +989,24 @@ def process_image_AF(
         manual_annotations_u = manual_annotations[manual_annotations[:, 3] == 4.0]
     
     # cluster manual annotations
-    manual_clusters_dry_wh = cluster(manual_annotations_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
-    manual_clusters_wh_swamp = cluster(manual_annotations_wh_swamp, WH_SWAMP_DISTANCE_CUTOFF_PIX)
-    manual_clusters_wh_wet = cluster(manual_annotations_wh_wet, WH_WET_DISTANCE_CUTOFF_PIX)
-    manual_clusters_wh_sink = cluster(manual_annotations_wh_sink, WH_SINK_DISTANCE_CUTOFF_PIX)
-    manual_clusters_u = cluster(manual_annotations_u, U_DISTANCE_CUTOFF_PIX)
+    manual_clusters_dry_wh = cluster_AF(manual_annotations_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
+    manual_clusters_wh_swamp = cluster_AF(manual_annotations_wh_swamp, WH_SWAMP_DISTANCE_CUTOFF_PIX)
+    manual_clusters_wh_wet = cluster_AF(manual_annotations_wh_wet, WH_WET_DISTANCE_CUTOFF_PIX)
+    manual_clusters_wh_sink = cluster_AF(manual_annotations_wh_sink, WH_SINK_DISTANCE_CUTOFF_PIX)
+    manual_clusters_u = cluster_AF(manual_annotations_u, U_DISTANCE_CUTOFF_PIX)
 
     # process all clusters
-    ML_clusters_dry_wh = process_clusters(ML_clusters_dry_wh)
-    ML_clusters_wh_swamp = process_clusters(ML_clusters_wh_swamp)
-    ML_clusters_wh_wet = process_clusters(ML_clusters_wh_wet)
-    ML_clusters_wh_sink = process_clusters(ML_clusters_wh_sink)
-    ML_clusters_u = process_clusters(ML_clusters_u)
+    ML_clusters_dry_wh = process_clusters_AF(ML_clusters_dry_wh)
+    ML_clusters_wh_swamp = process_clusters_AF(ML_clusters_wh_swamp)
+    ML_clusters_wh_wet = process_clusters_AF(ML_clusters_wh_wet)
+    ML_clusters_wh_sink = process_clusters_AF(ML_clusters_wh_sink)
+    ML_clusters_u = process_clusters_AF(ML_clusters_u)
     
-    manual_clusters_dry_wh = process_clusters(manual_clusters_dry_wh)
-    manual_clusters_wh_swamp = process_clusters(manual_clusters_wh_swamp)
-    manual_clusters_wh_wet = process_clusters(manual_clusters_wh_wet)
-    manual_clusters_wh_sink = process_clusters(manual_clusters_wh_sink)
-    manual_clusters_u = process_clusters(manual_clusters_u)
+    manual_clusters_dry_wh = process_clusters_AF(manual_clusters_dry_wh)
+    manual_clusters_wh_swamp = process_clusters_AF(manual_clusters_wh_swamp)
+    manual_clusters_wh_wet = process_clusters_AF(manual_clusters_wh_wet)
+    manual_clusters_wh_sink = process_clusters_AF(manual_clusters_wh_sink)
+    manual_clusters_u = process_clusters_AF(manual_clusters_u)
 
     # Combine all ML clusters and manual clusters
     ML_clusters = np.concatenate(

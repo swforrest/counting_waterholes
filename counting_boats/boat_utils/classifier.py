@@ -448,6 +448,27 @@ def classification_file_info(file: str) -> tuple[int, int, list[str]]:
         lines = [line.rstrip() for line in f]
     return across, down, lines
 
+def classification_file_info_AF(file: str) -> tuple[int, int, list[str]]:
+    """
+    Get information and data from a small png file
+    The file-name is in the format: <.*>_<row>_<col>.txt
+
+    Args:
+        file: The file path to get information from
+
+    Returns:
+        The across, down, and data from the file
+    """
+    fname = os.path.basename(file)
+    fname = fname.split(".txt")[0].split("_")
+    row = int(fname[-2])
+    col = int(fname[-1])
+    across = col * STRIDE
+    down = row * STRIDE
+    with open(file) as f:
+        lines = [line.rstrip() for line in f]
+    return across, down, lines
+
 
 def parse_classifications(file: str) -> np.ndarray:
     """
@@ -492,6 +513,50 @@ def parse_classifications(file: str) -> np.ndarray:
     return classifications
 
 
+def parse_classifications_AF(file: str) -> np.ndarray:
+    """
+    parse a single text file of classifications into the desired format
+
+    Args:
+        file: path to text file with classifications in form:
+        class, x, y, w, h, conf
+
+    Returns:
+        array of classifications from the file in the form:
+        x, y, confidence, class, width, height
+    """
+    across, down, lines = classification_file_info_AF(file)
+    if len(lines) == 0:
+        return np.array([])
+
+    # split lines into classifications
+    classifications = np.array([line.split(" ") for line in lines])
+    # if no confidence, add column of 1s (for manual label files)
+    if classifications.shape[1] == 5:
+        classifications = np.c_[classifications, np.ones(classifications.shape[0])]
+    # move columns around
+    # from: class, x, y, w, h, conf
+    # to:   x, y, conf, class, w, h
+    classifications = np.c_[
+        classifications[:, 1],  # xMid
+        classifications[:, 2],  # yMid
+        classifications[:, 5],  # Confidence
+        classifications[:, 0],  # Class
+        classifications[:, 3],  # xWid
+        classifications[:, 4],
+    ]  # yWid
+    # convert to float
+    classifications = classifications.astype(np.float64)
+    # adjust x and y for the full image
+    classifications[:, 0] = classifications[:, 0] * TILE_SIZE + across
+    classifications[:, 1] = classifications[:, 1] * TILE_SIZE + down
+    # adjust width and height for the full image
+    classifications[:, 4] = classifications[:, 4] * TILE_SIZE
+    classifications[:, 5] = classifications[:, 5] * TILE_SIZE
+    return classifications
+
+
+
 def remove_low_confidence(
     classifications: np.ndarray, confidence_threshold: float
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -508,6 +573,25 @@ def remove_low_confidence(
     low_confidence = classifications[classifications[:, 2] < confidence_threshold]
     classifications = classifications[classifications[:, 2] >= confidence_threshold]
     return classifications, low_confidence
+
+
+def remove_low_confidence_AF(
+    classifications: np.ndarray, confidence_threshold: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Remove all classifications with confidence < confidence_threshold
+
+    Args:
+        classifications: The classifications to remove low confidence from. Confidence is the third column.
+        confidence_threshold: The threshold to remove below
+
+    Returns:
+        The same classifications as a tuple, with the first element being the high confidence classifications
+    """
+    low_confidence = classifications[classifications[:, 2] < confidence_threshold]
+    classifications = classifications[classifications[:, 2] >= confidence_threshold]
+    return classifications, low_confidence
+
 
 
 def read_classifications(
@@ -568,6 +652,64 @@ def read_classifications(
     return classifications, low_confidence
 
 
+def read_classifications_AF(
+    yolo_dir=None,
+    class_folder=None,
+    confidence_threshold: float = 0.5,
+    delete_folder=False,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Read classifications from either the given directory, or the latest detection from yolo.
+    Classifications are per-image, this function reads all files and returns a single list.
+
+    Args:
+        yolo_dir: The directory where yolo is installed, used to find the latest detection.
+        class_folder: The folder to read classifications from. If None, reads from the latest detection in yolo.
+        confidence_threshold = 0.5: The confidence threshold to use when separating low confidence classifications.
+        delete_folder: Whether to delete the classification folder after reading.
+
+    Returns:
+        tuple[classifications, low_conf]: where each is in the form (x, y, conf, class, w, h)
+    """
+    latest_exp = None
+    if class_folder is None:
+        assert (
+            yolo_dir is not None
+        ), "Must provide yolo_dir if class_folder is not provided"
+        # Classifications are stored in the CLASS_PATH directory in the latest exp folder
+        exps = [
+            int(f.split("exp")[1]) if f != "exp" else 0
+            for f in os.listdir(os.path.join(yolo_dir, "runs", "detect"))
+            if "exp" in f
+        ]
+        latest_exp = max(exps) if max(exps) != 0 else ""
+        classification_path = os.path.join(
+            os.path.join(yolo_dir, "runs", "detect"), f"exp{latest_exp}", "labels"
+        )
+    else:
+        classification_path = os.path.join(class_folder)
+    all_cs = [
+        parse_classifications_AF(os.path.join(classification_path, file))
+        for file in os.listdir(classification_path)
+        if not "DS" in file and os.path.isfile(os.path.join(classification_path, file))
+    ]
+    # remove empty arrays
+    all_cs = [cs for cs in all_cs if cs.shape[0] != 0]
+    if len(all_cs) == 0:
+        return np.array([]), np.array([])
+    # flatten list of lists
+    all_cs = np.concatenate(all_cs)
+    # remove low confidence
+    classifications, low_confidence = remove_low_confidence_AF(
+        all_cs, confidence_threshold
+    )
+    # remove the classification path
+    if delete_folder and latest_exp is not None and yolo_dir is not None:
+        folder = os.path.join(yolo_dir, "runs", "detect", f"exp{latest_exp}")
+        remove(folder)
+    return classifications, low_confidence
+
+
 def cluster(classifications: np.ndarray, cutoff: float) -> np.ndarray:
     """
     Cluster the given classifications using the given cutoff.
@@ -596,6 +738,34 @@ def cluster(classifications: np.ndarray, cutoff: float) -> np.ndarray:
     return points_with_cluster
 
 
+def cluster_AF(classifications: np.ndarray, cutoff: float) -> np.ndarray:
+    """
+    Cluster the given classifications using the given cutoff.
+
+    Args:
+        classifications: The classifications to cluster, in the form x, y, confidence, class, width, height
+        cutoff: The cutoff to use for clustering
+
+    Returns:
+        The classifications with an additional column for the cluster number
+        Columns: x, y, confidence, class, width, height, cluster
+    """
+    if classifications.shape[0] < 2:
+        # add cluster = 1 to point
+        if classifications.shape[0] == 1:
+            classifications = np.array([np.append(classifications[0], 1)])
+        return classifications
+    points = classifications[:, [0, 1]].astype(np.float64)
+    distances = scipy.spatial.distance.pdist(points, metric="euclidean")
+    clustering = scipy.cluster.hierarchy.linkage(distances, "average")
+    clusters = scipy.cluster.hierarchy.fcluster(
+        clustering, cutoff, criterion="distance"
+    )
+    points_with_cluster = np.c_[classifications, clusters]
+    return points_with_cluster
+
+
+
 def process_clusters(classifications_with_clusters: np.ndarray) -> np.ndarray:
     """
     Process the given classifications with clusters. Condenses each cluster into a single point.
@@ -616,6 +786,29 @@ def process_clusters(classifications_with_clusters: np.ndarray) -> np.ndarray:
         for i in np.unique(classifications_with_clusters[:, -1])
     ]
     return np.asarray(boats)
+
+
+def process_clusters_AF(classifications_with_clusters: np.ndarray) -> np.ndarray:
+    """
+    Process the given classifications with clusters. Condenses each cluster into a single point.
+
+    Args:
+        classifications_with_clusters: The classifications as x, y, confidence, class, width, height, cluster
+
+    Return:
+        An array of the condensed classifications in the form: x, y, confidence, class, width, height
+    """
+    waterholes = np.array([], dtype=np.float64).reshape(0, 6)
+    if len(classifications_with_clusters) == 0:
+        return waterholes
+    waterholes = [
+        condense_AF(
+            classifications_with_clusters[classifications_with_clusters[:, -1] == i]
+        )
+        for i in np.unique(classifications_with_clusters[:, -1])
+    ]
+    return np.asarray(waterholes)
+
 
 
 def condense(cluster: np.ndarray) -> np.ndarray:
@@ -641,6 +834,30 @@ def condense(cluster: np.ndarray) -> np.ndarray:
         files = np.unique(np.asarray(cluster)[:, 6])
         return np.append(thisBoatMean.astype(str), " ".join(files))
     return thisBoatMean
+
+def condense_AF(cluster: np.ndarray) -> np.ndarray:
+    """
+    Given a cluster, condense it into a single point.
+    Uses the mean of x, y, w, and h - the most common class, and the maximum confidence.
+
+    Args:
+        cluster: The cluster to condense
+
+    Returns:
+        The condensed cluster in the form x, y, confidence, class, width, height
+    """
+    # remove cluster number
+    thisWaterhole = np.asarray(cluster)[:, [0, 1, 2, 3, 4, 5]].astype(np.float64)
+    thisWaterholeMean = np.mean(thisWaterhole, axis=0)
+    # using maximum confidence as the cluster confidence
+    maxVals = np.max(thisWaterhole, axis=0)
+    thisWaterholeMean[2] = maxVals[2]
+    # use the most common class
+    thisWaterholeMean[3] = scipy.stats.mode(thisWaterhole[:, 3])[0]
+    if cluster.shape[1] == 8:
+        files = np.unique(np.asarray(cluster)[:, 6])
+        return np.append(thisWaterholeMean.astype(str), " ".join(files))
+    return thisWaterholeMean
 
 
 def write_to_csv(classifications, day, filepath) -> None:
