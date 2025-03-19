@@ -23,7 +23,8 @@ import pandas as pd
 import scipy
 import random
 
-from .classifier import cluster, process_clusters, read_classifications, pixel2latlong 
+from .classifier import cluster, process_clusters, read_classifications, pixel2latlong
+from .classifier import cluster_AF, read_classifications_AF, process_clusters_AF 
 #AF: model run is on the GPU and not my Laptop and the testing.py import doesn't work without. 
 #Took it out but need it back in for the GPU
 from .config import cfg
@@ -1227,6 +1228,90 @@ def classifications_to_lat_long(run_folder, run_config):
     if all_boats.size == 0:
         return
     all_boats.to_csv(os.path.join(run_folder, "all_boats.csv"), index=False)
+
+
+def classifications_to_lat_long_AF(run_folder, run_config):
+    """
+    Convert x and y of image classifications to lat/long and saves csv for waterhole classifications
+
+    Args:
+
+        run_folder (str): The folder to run detection on.
+        run_config (dict): The configuration dictionary.
+
+    Returns:
+
+        None
+    """
+    # Initialise dataframe
+    all_waterholes = pd.DataFrame(
+        columns=[
+            "date",
+            "latitude",
+            "longitude",
+            "ml_class",
+            "manual_class",
+            "agree",
+            "filename",
+            "class_name"  # Added to store the class names
+        ]
+    )
+    
+    # Class dictionary for mapping numeric classes to names
+    class_dict = {
+        0: "Dry_WH",
+        1: "WH_swamp",
+        2: "WH_wet", 
+        3: "WH_sink",
+        4: "U"
+    }
+    
+    # Get all the images that are relevant
+    # Involves reading all of the output files from the detections function
+    raw_images = run_config["raw_images"]
+    for file in os.listdir(run_folder):
+        if not file.endswith(".csv"):
+            continue
+        # try to parse the date, if not, skip
+        date = file.split("_")[0]
+        if len(date) != 8:
+            print(f"Could not parse date from {file}")
+            continue
+        date = f"{date[:4]}-{date[4:6]}-{date[6:]}"
+        image_name = file.split(".")[0]
+        waterholes = pd.read_csv(os.path.join(run_folder, file)).values.tolist()
+        # remove index
+        if len(waterholes) == 0:
+            continue
+        im_name = image_name.split(".")[0] + ".tif"
+        image = [
+            os.path.join(root, i)
+            for root, dirs, files in os.walk(raw_images)
+            for i in files
+            if i == im_name
+        ]
+        if len(image) == 0:
+            print(f"Could not find image {im_name} for {file}")
+            continue
+        image = image[0]
+        waterholes = pixel2latlong(waterholes, image)
+        # append the waterholes to the 'all_waterholes' dataframe
+        waterholes = pd.DataFrame(
+            waterholes, columns=["longitude", "latitude", "ml_class", "manual_class"]
+        )
+        # Add class name based on numeric class
+        waterholes["class_name"] = waterholes["ml_class"].apply(lambda x: class_dict.get(int(x), "Unknown"))
+        waterholes["date"] = date
+        waterholes["filename"] = image_name
+        # Agree: True if ml_class matches manual_class, False otherwise
+        waterholes["agree"] = waterholes["ml_class"] == waterholes["manual_class"]
+        
+        all_waterholes = pd.concat([all_waterholes, waterholes]) if all_waterholes.size != 0 else waterholes
+    
+    if all_waterholes.size == 0:
+        return
+    
+    all_waterholes.to_csv(os.path.join(run_folder, "all_waterholes.csv"), index=False)
 
 
 def boat_count_compare(run_folder, config):

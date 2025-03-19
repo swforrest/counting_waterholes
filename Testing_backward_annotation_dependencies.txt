@@ -227,3 +227,123 @@ def condense(cluster: np.ndarray) -> np.ndarray:
         files = np.unique(np.asarray(cluster)[:, 6])
         return np.append(thisBoatMean.astype(str), " ".join(files))
     return thisBoatMean
+
+
+def get_required_padding(filepath, tilesize=416, stride=104) -> tuple[int, int, int, int]:
+    """
+    Determines how much padding is required on each edge of an image so that the image lengths and widths will be
+    divisible by 416 and that each part of the images will be seen by the neural networm 16 times in either training
+    or classification.
+
+    Args:
+
+        filepath: The path of the file to evaluate.
+        tilesize: The size of the sub-images that will be created from this image.
+        stride: The amount of overlap that the sub-images will have.
+
+    Returns:
+
+        (L, R, T, B) - A tuple containing the padding required on the left (L), right (R), top (T), and bottom (b)
+            of the images to make it suitable for use in the neural network.
+    """
+    ds = gdal.Open(filepath)
+
+    metadata = gdal.Info(ds)
+    ds = None
+    metadata_components = metadata.split("\n")
+
+    # Get new width and height in preparation of paddingthe image
+    size = filter(lambda x: "Size is" in x, metadata_components)
+    if not size:
+        print(metadata)
+        raise Exception("Size is not in the metadata")
+    size = list(size)[0]
+    height = int(size.split(",")[1])
+    width = int(size.split(",")[0].split(" ")[-1])
+
+    # Calculate individual padding for each edge
+    # we have to go at least (tilesize/stride) * stride pixels in each direction
+    # in the case of 416/104, this is 4*104 = 416 padding. This means the first tile is all padding but the rest will be seen by the network properly
+    min_pad = (tilesize - stride)
+
+    leftPad = min_pad
+    topPad = min_pad
+    bottomPad = min_pad
+    rightPad = min_pad
+
+    min_h = height + 2 * min_pad
+    min_w = width + 2 * min_pad
+    # ensure the image will be divisible by the tile size and stride
+    if min_h % tilesize != 0:
+        topPad += tilesize - (min_h % tilesize)
+    if min_w % tilesize != 0:
+        leftPad += tilesize - (min_w % tilesize)
+    
+    # ensure integer padding
+    leftPad = int(leftPad)
+    rightPad = int(rightPad)
+    topPad = int(topPad)
+    bottomPad = int(bottomPad)
+
+
+    return leftPad, rightPad, topPad, bottomPad
+
+def pixel2coord(x: int, y: int, original_image_path: str) -> tuple[float, float]:
+    """
+        Returns global coordinates to pixel center using base-0 raster index
+
+        Args:
+
+            x: The x coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
+            y: The y coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
+            original_image_path: The path of the file to evaluate - a .tif files should be located here. This file will
+                also need geospatial metadata. Images obtained from Planet have the required metadata.
+    e
+        Returns:
+
+            (xp, yp) - A tuple containing the global coordinates of the provided pixel coordinates.
+    """
+    ds = gdal.Open(original_image_path)
+    c, a, b, f, d, e = ds.GetGeoTransform()
+    xp = a * x + b * y + a * 0.5 + b * 0.5 + c
+    yp = d * x + e * y + d * 0.5 + e * 0.5 + f
+    return (xp, yp)
+
+def coord2latlong(x: float, y: float, crs: int = 32756) -> tuple[float, float]:
+    """
+    Converts global coordinates to latitude/longitude coordinates
+
+    Args:
+
+        x: The x coordinate in a pair of global coordinates.
+        y: The y coordinate in a pair of global coordinates.
+        crs: The coordinate reference system of the global coordinates.
+
+    Returns:
+
+        (long, lat) - A tuple containing the longitude and latitude at the provided global coordinates.
+    """
+    proj = pyproj.Transformer.from_crs(crs, 4326, always_xy=True)
+    long, lat = proj.transform(x, y)
+    return long, lat
+
+def pixel2latlong(classifications, tif) -> np.ndarray:
+    """
+    Convert the given classifications from pixel coordinates to lat/long.
+
+    Args:
+        classifications: The classifications to convert, must have x, y as first two columns.
+        tif: The tif file these classifications came from.
+
+    Returns:
+        The same classifications with x, y converted to lat/long
+    """
+    leftPad, _, topPad, _ = ics.get_required_padding(tif, TILE_SIZE, STRIDE)
+    crs = ics.get_crs(tif)
+    # get the crs from the tif, e.g EPSG:4326
+    for c in classifications:
+        x = int(c[0]) - leftPad
+        y = int(c[1]) - topPad
+        xp, yp = ics.pixel2coord(x, y, tif)
+        c[0], c[1] = ics.coord2latlong(xp, yp, crs)
+    return classifications

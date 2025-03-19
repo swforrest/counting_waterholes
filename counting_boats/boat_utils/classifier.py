@@ -776,16 +776,16 @@ def process_clusters(classifications_with_clusters: np.ndarray) -> np.ndarray:
     Return:
         An array of the condensed classifications in the form: x, y, confidence, class, width, height, filenames
     """
-    boats = np.array([], dtype=np.float64).reshape(0, 6)
+    waterholes = np.array([], dtype=np.float64).reshape(0, 6)
     if len(classifications_with_clusters) == 0:
-        return boats
-    boats = [
+        return waterholes
+    waterholes = [
         condense(
             classifications_with_clusters[classifications_with_clusters[:, -1] == i]
         )
         for i in np.unique(classifications_with_clusters[:, -1])
     ]
-    return np.asarray(boats)
+    return np.asarray(waterholes)
 
 
 def process_clusters_AF(classifications_with_clusters: np.ndarray) -> np.ndarray:
