@@ -23,7 +23,7 @@ import pandas as pd
 import scipy
 import random
 
-# from .classifier import cluster, process_clusters, read_classifications, pixel2latlong 
+from .classifier import cluster, process_clusters, read_classifications, pixel2latlong 
 #AF: model run is on the GPU and not my Laptop and the testing.py import doesn't work without. 
 #Took it out but need it back in for the GPU
 from .config import cfg
@@ -383,6 +383,8 @@ def backwards_annotation_AF(run_folder, config):
     AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
     Should run smoothly and did not modify the dependent functions. 
     """
+    config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
+    run_folder = os.path.normpath(run_folder) #AF
     detection_dir = os.path.join(config["path"], config["classifications"])
     for root, _, files in os.walk(detection_dir):
         # skip if json file exists
@@ -541,12 +543,14 @@ def compare_detections_to_ground_truth(run_folder, config):
         None
 
     """
+    config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
+    run_folder = os.path.normpath(run_folder) #AF
     label_dir = os.path.join(config["path"], config["labels"])
     detection_dir = os.path.join(config["path"], config["classifications"])
     for root, _, files in os.walk(detection_dir):
         if len(files) > 0 and files[0].endswith(".txt"):
             this_img = os.path.basename(root)
-            data = process_image(root, label_dir)
+            data = process_image_AF(root, label_dir)
             comparisons_to_csv(data, os.path.join(run_folder, this_img + ".csv"))
     # create an overall file, with all boats in lat long
     if config.get("raw_images", False):
@@ -566,6 +570,8 @@ def confusion_matrix(run_folder, config):
 
         None
     """
+    config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
+    run_folder = os.path.normpath(run_folder) #AF
     if os.path.exists(os.path.join(run_folder, "all_boats.csv")):
         all_data = pd.read_csv(os.path.join(run_folder, "all_boats.csv"))
     else:
