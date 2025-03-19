@@ -36,6 +36,11 @@ from sklearn.metrics import ConfusionMatrixDisplay
 import json
 import subprocess
 
+#Manualy change them in accordance to the desired value. Are not called in some functions so to be easier they are here...
+STAT_DISTANCE_CUTOFF_PIX = 50
+CONFIDENCE_THRESHOLD = 0.5
+STAT_DISTANCE_CUTOFF_LATLONG = 0.00025
+COMPARE_DISTANCE_CUTOFF_PIX = 8
 
 
 def parse_config(config: str) -> dict:
@@ -575,6 +580,7 @@ def backwards_annotation_AF(run_folder, config):
             ML_classifications_u = ML_classifications[ML_classifications[:, 3] == 4.0]
             
             # Define distance cutoffs for each class
+            STAT_DISTANCE_CUTOFF_PIX = config["STAT_DISTANCE_CUTOFF_PIX"]
             DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Using existing static distance for all classes
             
             # Cluster each class separately
@@ -716,7 +722,7 @@ def compare_detections_to_ground_truth(run_folder, config):
             comparisons_to_csv(data, os.path.join(run_folder, this_img + ".csv"))
     # create an overall file, with all boats in lat long
     if config.get("raw_images", False):
-        classifications_to_lat_long(run_folder, config)
+        classifications_to_lat_long_AF(run_folder, config)
 
 
 def confusion_matrix(run_folder, config):
@@ -781,8 +787,8 @@ def confusion_matrix_AF(run_folder, config):
     AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
     Should run smoothly and did not modify the dependent functions. 
     """
-    if os.path.exists(os.path.join(run_folder, "all_boats.csv")):
-        all_data = pd.read_csv(os.path.join(run_folder, "all_boats.csv"))
+    if os.path.exists(os.path.join(run_folder, "all_waterholes.csv")):
+        all_data = pd.read_csv(os.path.join(run_folder, "all_waterholes.csv"))
     else:
         # read all the csvs in the run folder that start with a date (8 numbers)
         all_data = pd.concat(
@@ -811,13 +817,6 @@ def confusion_matrix_AF(run_folder, config):
     # save the confusion matrix image
     plt.savefig(os.path.join(run_folder, "plots", "confusion_matrix.png"))
 
-
-### Clustering Helpers
-STAT_DISTANCE_CUTOFF_PIX = 6
-MOVING_DISTANCE_CUTOFF_PIX = 10
-COMPARE_DISTANCE_CUTOFF_PIX = 8
-CONF_THRESHOLD = 0.5
-#AF: review if those are taken or the ones in the config file. 
 
 
 def process_image(
@@ -1268,7 +1267,9 @@ def classifications_to_lat_long_AF(run_folder, run_config):
     
     # Get all the images that are relevant
     # Involves reading all of the output files from the detections function
-    raw_images = run_config["raw_images"]
+    # raw_images = run_config["raw_images"] AF
+    raw_images = os.path.join(run_config["path"], run_config["raw_images"]) #AF
+    print(f"raw_images folder {raw_images}")
     for file in os.listdir(run_folder):
         if not file.endswith(".csv"):
             continue

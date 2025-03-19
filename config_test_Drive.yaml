@@ -21,6 +21,7 @@ segmented_images: ./segmented_images # Segmented images
 labels: ./labels # Labels for the images
 classifications: ./classifications # Classifications for the images #AF: classification? Meaning the json file?
 
+plots: ./plots
 output_dir: ./results #AF: created the folder in accordance
 tif_dir: ./images/RawImages #AF: created the subfolder in accordance and adapted the path
 download_dir: ./images/downloads #AF: created the subfolder in accordance and adapted the path
@@ -42,7 +43,7 @@ STRIDE: 104
 
 #Testing configs: 
 CONFIDENCE_THRESHOLD: 0.5
-STAT_DISTANCE_CUTOFF_PIX: 3
+STAT_DISTANCE_CUTOFF_PIX: 50 #manually changed in the file. 
 # MOVING_DISTANCE_CUTOFF_PIX: 6 #AF: from the boat detection. For WH, removed it. Shouldn't be used.
 
 # The lat/long cutoff should be roughly related to the resolution of the images
