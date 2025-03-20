@@ -243,9 +243,11 @@ def process_sub_image_with_labels(args):
             + " "
             + str(((c.get_top() + c.get_bottom()) / 2 - i * stride) / sizey)
             + " "
-            + str((c.get_right() - c.get_left()) / 2 / sizex)
+            + str((c.get_right() - c.get_left()) / sizex) 
+            #AF: removed the divison by two which could cause my boxes to be smaller than how I drew them 
             + " "
-            + str((c.get_bottom() - c.get_top()) / 2 / sizey)
+            + str((c.get_bottom() - c.get_top()) / sizey)
+            #AF: removed the divison by two which could cause my boxes to be smaller than how I drew them
             + "\n"
         )
     outfile.close()

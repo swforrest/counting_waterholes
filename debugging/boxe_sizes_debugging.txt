@@ -1,0 +1,629 @@
+import os
+import random
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import numpy as np
+from PIL import Image
+
+def load_image(image_path):
+    """Load an image using PIL."""
+    return np.array(Image.open(image_path))
+
+def load_labels(label_path):
+    """Load bounding box labels from a text file."""
+    boxes = []
+    try:
+        with open(label_path, 'r') as file:
+            for line in file:
+                values = line.strip().split()
+                if len(values) == 5:  # Ensure we have all 5 values
+                    class_id, center_x, center_y, width, height = map(float, values)
+                    boxes.append((class_id, center_x, center_y, width, height))
+    except FileNotFoundError:
+        print(f"Warning: Label file not found: {label_path}")
+    except Exception as e:
+        print(f"Error reading label file {label_path}: {e}")
+    
+    return boxes
+
+def get_color_for_class(class_id):
+    """Return a color based on the class_id."""
+    # Define colors for classes 0-4
+    colors = {
+        0: 'red',
+        1: 'blue',
+        2: 'green',
+        3: 'purple',
+        4: 'orange'
+    }
+    
+    # Default color for any classes beyond our defined range
+    return colors.get(int(class_id), 'gray')
+
+def plot_bounding_boxes(ax, boxes, img_width, img_height):
+    """Plot bounding boxes on the given axis with colors based on class_id."""
+    for box in boxes:
+        class_id, center_x, center_y, width, height = box
+        
+        # Get color for this class
+        color = get_color_for_class(class_id)
+        
+        # Convert normalized coordinates to pixel coordinates
+        x = (center_x - width/2) * img_width
+        y = (center_y - height/2) * img_height
+        box_width = width * img_width
+        box_height = height * img_height
+        
+        # Create a rectangle patch with the class color
+        rect = patches.Rectangle(
+            (x, y), box_width, box_height, 
+            linewidth=2, edgecolor=color, facecolor='none'
+        )
+        
+        # Add the patch to the Axes
+        ax.add_patch(rect)
+        
+        # Add class label at the top-right corner of the box
+        # This ensures the label doesn't cover the content of the box
+        ax.text(
+            x + box_width, y, f'Class {int(class_id)}',
+            color='white', fontsize=8, 
+            bbox=dict(facecolor=color, alpha=0.7),
+            horizontalalignment='left',
+            verticalalignment='top'
+        )
+
+def visualize_random_images_with_boxes(
+    images_dir,
+    labels_dir,
+    num_images,
+    output_path 
+):
+    """
+    Visualize a mosaic of random images with their bounding boxes.
+    
+    Args:
+        images_dir: Directory containing the image files
+        labels_dir: Directory containing the label files
+        num_images: Number of images to display (should be a perfect square)
+        output_path: Path to save the visualization as PNG
+    """
+    # Get all PNG files in the images directory
+    image_files = [f for f in os.listdir(images_dir) if f.endswith('.png')]
+    
+    if len(image_files) < num_images:
+        print(f"Warning: Only {len(image_files)} images available, requested {num_images}")
+        num_images = min(len(image_files), num_images)
+    
+    # Randomly select images
+    selected_images = random.sample(image_files, num_images)
+    
+    # Calculate grid dimensions
+    grid_size = int(np.sqrt(num_images))
+    
+    # Create figure and subplots
+    fig, axes = plt.subplots(grid_size, grid_size, figsize=(15, 15))
+    
+    # Flatten axes array for easier iteration
+    axes = axes.flatten()
+    
+    for i, image_file in enumerate(selected_images):
+        # Construct paths
+        image_path = os.path.join(images_dir, image_file)
+        label_path = os.path.join(labels_dir, os.path.splitext(image_file)[0] + '.txt')
+        
+        # Load image and labels
+        image = load_image(image_path)
+        boxes = load_labels(label_path)
+        
+        # Display image
+        axes[i].imshow(image)
+        
+        # Plot bounding boxes
+        plot_bounding_boxes(axes[i], boxes, image.shape[1], image.shape[0])
+        
+        # Set title (filename)
+        axes[i].set_title(image_file, fontsize=8)
+        
+        # Remove axis ticks
+        axes[i].set_xticks([])
+        axes[i].set_yticks([])
+    
+    # Add a legend to show class colors
+    legend_elements = [
+        patches.Patch(facecolor=get_color_for_class(i), edgecolor=get_color_for_class(i), 
+                     label=f'Class {i}') for i in range(5)
+    ]
+    fig.legend(handles=legend_elements, loc='lower center', ncol=5, frameon=True)
+    
+    plt.tight_layout()
+    plt.subplots_adjust(bottom=0.1)  # Make room for the legend
+    
+    # Save the figure as PNG
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    print(f"Visualization saved to {output_path}")
+    
+    # Display the figure
+    plt.show()
+
+
+import os
+import json
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from PIL import Image
+import random
+
+def plot_labelme_bboxes(image_dir, label_dir, output_dir=None, classes_colors=None, show_plots=True):
+    """
+    Plot bounding boxes from LabelMe annotation files onto their corresponding images.
+    
+    Parameters:
+    -----------
+    image_dir : str
+        Directory containing the image files (.png).
+    label_dir : str
+        Directory containing the LabelMe annotation files (.json).
+    output_dir : str, optional
+        Directory to save the annotated images. If None, images won't be saved.
+    classes_colors : dict, optional
+        Dictionary mapping class names to colors. If None, random colors will be assigned.
+    show_plots : bool, optional
+        Whether to display the plots. Default is True.
+        
+    Returns:
+    --------
+    None
+    """
+
+    # Create output directory if specified
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    # Get all JSON files in the label directory
+    json_files = [f for f in os.listdir(label_dir) if f.endswith('.json')]
+    
+    # Dictionary to store class colors
+    if classes_colors is None:
+        classes_colors = {}
+    
+    for json_file in json_files:
+        # Load JSON file
+        with open(os.path.join(label_dir, json_file), 'r') as f:
+            data = json.load(f)
+        
+        # Get image filename
+        image_filename = data['imagePath']
+        
+        # Handle relative paths or just filenames
+        if os.path.isabs(image_filename):
+            image_path = image_filename
+        else:
+            image_path = os.path.join(image_dir, os.path.basename(image_filename))
+        
+        # Check if image exists
+        if not os.path.exists(image_path):
+            print(f"Image {image_path} not found. Skipping...")
+            continue
+        
+        # Open image
+        img = np.array(Image.open(image_path))
+        
+        # Create figure and axis
+        fig, ax = plt.subplots(1, figsize=(16, 10))
+        ax.imshow(img)
+        
+        # Process each shape in the annotation
+        for shape in data['shapes']:
+            label = shape['label']
+            points = shape['points']
+            
+            # Only process rectangle shapes (bounding boxes)
+            if shape['shape_type'] == 'rectangle':
+                # Get box coordinates
+                x1, y1 = points[0]
+                x2, y2 = points[1]
+                
+                # Calculate width and height
+                width = x2 - x1
+                height = y2 - y1
+                
+                # Assign color to class if not already assigned
+                if label not in classes_colors:
+                    # Generate random color
+                    color = (random.random(), random.random(), random.random())
+                    classes_colors[label] = color
+                
+                # Create rectangle patch
+                rect = patches.Rectangle(
+                    (x1, y1), width, height, 
+                    linewidth=0.5, 
+                    edgecolor=classes_colors[label],
+                    facecolor='none'
+                )
+                
+                # Add rectangle to plot
+                ax.add_patch(rect)
+                
+                # Add label text
+                # ax.text(
+                #     x1, y1-5, 
+                #     label,
+                #     color=classes_colors[label],
+                #     fontsize=12,
+                #     weight='bold'
+                # ) #AF: no need of the labels, just visual inspection of the boxes for the moment. 
+        
+        # Set title
+        ax.set_title(f"Image: {os.path.basename(image_path)}")
+        
+        # Remove axis
+        ax.axis('off')
+        
+        # Save image if output directory is specified
+        if output_dir:
+            output_path = os.path.join(output_dir, f"annotated_{os.path.basename(image_path)}")
+            plt.savefig(output_path, bbox_inches='tight', dpi=300)
+            print(f"Saved annotated image to {output_path}")
+        
+        # Show plot if specified
+        if show_plots:
+            plt.show()
+        else:
+            plt.close()
+    
+    return classes_colors  # Return the color mapping for future use
+
+
+
+def segment(
+    config: str = typer.Option("", help="Path to the config file"),
+    train_val_split: float = typer.Option(
+        0.8, help="Proportion of images to use for training"
+    ),
+):
+    """
+    Segment the images and labels into tiles for training.
+    Also split the images into training and validation sets.
+
+    Args:
+        config (str): path to the config file
+        train_val_split (float): proportion of images to use for training
+
+    Returns:
+        None
+    """
+    
+    cfg = parse_config(config)
+    # print(cfg) testing AF
+    # segment the images that have been prepared
+    labels = [
+        os.path.join(cfg["output_dir"], f)
+        for f in os.listdir(cfg["output_dir"])
+        if f.endswith(".json")
+    ]
+    
+    images = [l.replace(".json", ".png") for l in labels]
+    label_out = os.path.join(cfg["output_dir"], "labels")
+    image_out = os.path.join(cfg["output_dir"], "images")
+    os.makedirs(label_out, exist_ok=True)
+    os.makedirs(image_out, exist_ok=True)
+    
+
+    for i, (image, label) in enumerate(zip(images, labels)):
+        ics.segment_image(
+            image,
+            label,
+            cfg["TILE_SIZE"],
+            cfg["STRIDE"],
+            im_outdir=image_out,
+            labels_outdir=label_out,
+        )
+    # split the images into training and validation
+    if train_val_split == 1:
+        return
+    os.makedirs(os.path.join(image_out, "train"), exist_ok=True)
+    os.makedirs(os.path.join(image_out, "val"), exist_ok=True)
+    os.makedirs(os.path.join(label_out, "train"), exist_ok=True)
+    os.makedirs(os.path.join(label_out, "val"), exist_ok=True)
+    for file in os.listdir(image_out):
+        if not file.endswith(".png"):
+            continue
+        im = os.path.join(image_out, file)
+        lab = os.path.join(label_out, file.replace(".png", ".txt"))
+        rand = np.random.rand()
+        if rand < train_val_split:
+            os.rename(im, os.path.join(image_out, "train", os.path.basename(im)))
+            os.rename(lab, os.path.join(label_out, "train", os.path.basename(lab)))
+        else:
+            os.rename(im, os.path.join(image_out, "val", os.path.basename(im)))
+            os.rename(lab, os.path.join(label_out, "val", os.path.basename(lab)))
+
+
+def parse_config(config: str) -> dict:
+    """
+    Parse the config file
+
+    Args:
+        config (str): path to the config file
+
+    Returns:
+        dict: the parsed config file
+    """
+    with open(config, "r") as f:
+        return yaml.load(f, Loader=yaml.FullLoader)
+
+def segment_image(
+    image,
+    json_file,
+    tile_size,
+    stride,
+    metadata_components=None,
+    remove_empty=0.9,
+    im_outdir=None,
+    labels_outdir=None,
+):
+    """
+    Segments a large .tif file into smaller .png files for use in a neural network. Also created
+    files in the IMGtxts directory which contain the annotations present in that sub image.
+
+    Args:
+
+        image: The large .tif that is to be segmented
+        json_file: The json file that contains all the classifications for the image that were made in labelme.
+        size: The desired size (both length and width) of the segmented images.
+        overlap_size: The desired amount of overlap that the segmented images should have
+        metadata_components: The metadata of the image - useful if the metadata is stripped out in a previous
+            operation on the image/file.
+
+    Returns:
+
+        None
+    """
+    random.seed()
+    # Open the image with tifffile - this reads the image in as a 2d array
+    openImage = Image.open(image)
+
+    # Get width and height by indexing the image array
+    width, height = openImage.size
+    width = int(width)
+    height = int(height)
+
+    # Open the json classifications file so create a Classification class object for each classification
+    if os.path.isfile(json_file):
+        with open(json_file, "r") as f:
+            data = json.load(f)
+
+    # Extract the classifications and nothing else
+    classifications = data["shapes"]
+
+    # Create an empty array which the Classification objects will be added to.
+    allImageClassifications = []
+
+    # Iterate through each classification and transform them into Classification class objects.
+    for classification in classifications:
+        try:
+            x1, y1 = classification["points"][0]
+            x2, y2 = classification["points"][1]
+            top = round(min(y1, y2))
+            left = round(min(x1, x2))
+            bottom = round(max(y1, y2))
+            right = round(max(x1, x2))
+            label = classification["label"]
+            allImageClassifications.append(
+                Classification(left, right, top, bottom, label)
+            )
+        except:
+            raise Exception(
+                "Error in sorting classifications from JSON file, likely that one of the classifications is not a square"
+            )
+
+    # Ensure that the image is divisible by the desired size with no remainder.
+    #if width % (stride + tile_size) != 0 or height % (stride + tile_size) != 0:
+    if width % (tile_size) != 0 or height % (tile_size) != 0: # AF
+        raise Exception(
+            "The image is not exactly divisible by the desired size of subset images",
+            "Width: ",
+            width,
+            "Height: ",
+            height,
+            "Stride: ",
+            stride,
+            "Tile Size: ",
+            tile_size,
+        )
+
+    print("Cropping Image: " + image)
+
+    image_array = np.array(openImage)
+    image_shape = np.array(image_array.shape)
+    print(image_shape)
+    window_shape = np.array((tile_size, tile_size, 3)).reshape(-1)
+    step = np.array((stride, stride, 1)).reshape(-1)
+    image_stride = np.array(image_array.strides)
+    shape = tuple((image_shape - window_shape) // step + 1) + tuple(window_shape)
+    strides = tuple(image_stride * step) + tuple(image_stride)
+    as_strided = np.lib.stride_tricks.as_strided
+    sub_images = as_strided(image_array, shape=shape, strides=strides)
+    print(
+        "We will have: ", sub_images.shape[0] * sub_images.shape[1], " images maximum"
+    )
+    print(f"{remove_empty * 100}% of images without labels will be removed")
+
+    # Flatten the 2d grid of sub-images into a list with indices (for parallel processing)
+    sub_images_list = [
+        (
+            i,
+            j,
+            stride,
+            sub_images[i, j],
+            image,
+            allImageClassifications,
+            remove_empty,
+            im_outdir,
+            labels_outdir,
+        )
+        for i in range(sub_images.shape[0])
+        for j in range(sub_images.shape[1])
+    ]
+
+    with Manager() as manager:
+        skipped_counter = manager.Value("i", 0)
+        empty_counter = manager.Value("i", 0)
+        progress = manager.Value("i", 0)
+        lock = manager.Lock()
+        total = len(sub_images_list)
+        with Pool(cpu_count()) as pool:
+            for _ in tqdm.tqdm(
+                pool.imap_unordered(
+                    process_sub_image_with_labels,
+                    [
+                        (args, empty_counter, skipped_counter, progress, lock)
+                        for args in sub_images_list
+                    ],
+                ),
+                total=total,
+                desc="Saving Segments",
+            ):
+                pass
+
+        print(f"Skipped {skipped_counter.value} images")
+        print(f"Empty {empty_counter.value} images")
+
+
+def process_sub_image_with_labels(args):
+    """
+    segments an image and its labels into tiles for use in a neural network.
+    This function is intended to be used with multiprocessing.Pool
+
+    Args:
+
+        args (tuple): A tuple containing the following elements:
+            - i (int): The row index of the sub-image.
+            - j (int): The column index of the sub-image.
+            - stride (int): The stride value used for sub-image extraction.
+            - sub_image (np.ndarray): The sub-image array.
+            - image (np.ndarray): The original image array.
+            - allImageClassifications (list): List of all image classifications.
+            - remove_empty (bool): Flag indicating whether to remove empty images.
+            - im_outdir (str): Directory path to save processed images.
+            - labels_outdir (str): Directory path to save labels.
+            - empty_counter (multiprocessing.Value): Counter for empty images.
+            - skipped_counter (multiprocessing.Value): Counter for skipped images.
+            - progress (multiprocessing.Value): Progress counter.
+            - lock (multiprocessing.Lock): Lock for synchronizing access to shared resources.
+
+    Returns:
+
+        None
+    """
+    (
+        (
+            i,
+            j,
+            stride,
+            sub_image,
+            image,
+            allImageClassifications,
+            remove_empty,
+            im_outdir,
+            labels_outdir,
+        ),
+        empty_counter,
+        skipped_counter,
+        progress,
+        lock,
+    ) = args
+    sub_image = np.moveaxis(
+        sub_image, 0, -1
+    ).squeeze()  # need to move the channel axis to the end
+    # Still remove the mostly empty images
+    threshold = 0.75
+    if np.sum(sub_image == 0) / sub_image.size > threshold:
+        with lock:
+            skipped_counter.value += 1
+            progress.value += 1
+        return
+
+    # Create the image
+    save_path = os.path.join(
+        im_outdir, f"{os.path.basename(image).split('.')[0]}_{i}_{j}.png"
+    )
+    # get the bounding box of this image
+    sizex = sub_image.shape[1]
+    sizey = sub_image.shape[0]
+    x1 = stride * j
+    y1 = stride * i
+    x2 = x1 + sizex
+    y2 = y1 + sizey
+    # Get the classifications in the image
+    subsetClassifications = [
+        classification
+        for classification in allImageClassifications
+        if classification.in_bounds(x1, x2, y1, y2)
+    ]
+
+    skipped = False
+    if remove_empty > 0 and (
+        subsetClassifications is None
+        or subsetClassifications == []
+        or all([c.get_label() == "tanker" for c in subsetClassifications])
+    ):
+        subsetClassifications = []
+        if random.uniform(0, 1) < remove_empty:
+            skipped = True
+            with lock:
+                empty_counter.value += 1
+                progress.value += 1
+                skipped_counter.value += 1
+            return  # don't keep this image
+        with lock:
+            empty_counter.value += 1
+    if skipped:
+        raise Exception("This should not happen")
+    # Definitely keeping this image, so make the image and save it
+    out_image = Image.fromarray(sub_image)
+    out_image.save(save_path, quality=100, compress_level=0)
+    # write out the classifications for this sub-image
+    label_path = os.path.join(
+        labels_outdir, f"{os.path.basename(image).split('.')[0]}_{i}_{j}.txt"
+    )
+    outfile = open(label_path, "a+")
+    for c in subsetClassifications:
+        # if the classification is less than 3x3 pixels, expand it
+        if c.get_right() - c.get_left() < 3:
+            c._left -= 1
+            c._right += 1
+        if c.get_bottom() - c.get_top() < 3:
+            c._top -= 1
+            c._bottom += 1
+
+        classLabel = (
+            0 if c.get_label() == "Dry_WH" \
+                else 1 if c.get_label() == "WH_swamp" \
+                    else 2 if c.get_label() == "WH_wet" \
+                        else 3 if c.get_label() == "WH_sink" \
+                            else 4 if c.get_label() == "U" \
+                                else -1
+        )
+        if classLabel == -1:
+              continue  # Skip tankers #AF: we have no tankers but I also want to skip some introduced -1
+        outfile.write(
+            str(classLabel)
+            + " "
+            + str(((c.get_left() + c.get_right()) / 2 - j * stride) / sizex)
+            + " "
+            + str(((c.get_top() + c.get_bottom()) / 2 - i * stride) / sizey)
+            + " "
+            + str((c.get_right() - c.get_left()) / 2 / sizex)
+            + " "
+            + str((c.get_bottom() - c.get_top()) / 2 / sizey)
+            + "\n"
+        )
+    outfile.close()
+    with lock:
+        progress.value += 1
+
+
+
