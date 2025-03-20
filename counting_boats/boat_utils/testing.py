@@ -580,15 +580,19 @@ def backwards_annotation_AF(run_folder, config):
             ML_classifications_u = ML_classifications[ML_classifications[:, 3] == 4.0]
             
             # Define distance cutoffs for each class
-            STAT_DISTANCE_CUTOFF_PIX = config["STAT_DISTANCE_CUTOFF_PIX"]
-            DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Using existing static distance for all classes
+            STAT_DISTANCE_CUTOFF_PIX_DRY = config["STAT_DISTANCE_CUTOFF_PIX_DRY"]
+            STAT_DISTANCE_CUTOFF_PIX_WET = config["STAT_DISTANCE_CUTOFF_PIX_WET"]
+            STAT_DISTANCE_CUTOFF_PIX_SWAMP = config["STAT_DISTANCE_CUTOFF_PIX_SWAMP"]
+            STAT_DISTANCE_CUTOFF_PIX_SINK = config["STAT_DISTANCE_CUTOFF_PIX_SINK"]
+            STAT_DISTANCE_CUTOFF_PIX_U = config["STAT_DISTANCE_CUTOFF_PIX_U"]
+            
             
             # Cluster each class separately
-            ML_clusters_dry_wh = cluster_AF(ML_classifications_dry_wh, DISTANCE_CUTOFF_PIX)
-            ML_clusters_wh_swamp = cluster_AF(ML_classifications_wh_swamp, DISTANCE_CUTOFF_PIX)
-            ML_clusters_wh_wet = cluster_AF(ML_classifications_wh_wet, DISTANCE_CUTOFF_PIX)
-            ML_clusters_wh_sink = cluster_AF(ML_classifications_wh_sink, DISTANCE_CUTOFF_PIX)
-            ML_clusters_u = cluster_AF(ML_classifications_u, DISTANCE_CUTOFF_PIX)
+            ML_clusters_dry_wh = cluster_AF(ML_classifications_dry_wh, STAT_DISTANCE_CUTOFF_PIX_DRY)
+            ML_clusters_wh_swamp = cluster_AF(ML_classifications_wh_swamp, STAT_DISTANCE_CUTOFF_PIX_SWAMP)
+            ML_clusters_wh_wet = cluster_AF(ML_classifications_wh_wet, STAT_DISTANCE_CUTOFF_PIX_WET)
+            ML_clusters_wh_sink = cluster_AF(ML_classifications_wh_sink, STAT_DISTANCE_CUTOFF_PIX_SINK)
+            ML_clusters_u = cluster_AF(ML_classifications_u, STAT_DISTANCE_CUTOFF_PIX_U)
             
             # Condense clusters
             ML_clusters_dry_wh = process_clusters_AF(ML_clusters_dry_wh)

@@ -3,7 +3,7 @@
 yolo_dir: C:/Users/fossatia/Documents/Waterholes_project/yolov5
 python: python
 # Configuration for Validation/Analysis Runs
-path:  D:/Waterholes_project/counting_waterholes/testing
+path:  D:/Waterholes_project/counting_waterholes/testing_v3
 weights: C:/Users/fossatia/Documents/Waterholes_project/yolov5/runs/train/exp3/weights/best.pt
 # weights: /Users/charlieturner/Desktop/Yolov5l.pt
 device: cuda:0
@@ -41,9 +41,14 @@ img_stride: 104
 TILE_SIZE: 416
 STRIDE: 104
 
-#Testing configs: 
+#Testing configs. Added precision on the cutoff pixel stats:
 CONFIDENCE_THRESHOLD: 0.5
-STAT_DISTANCE_CUTOFF_PIX: 50 #manually changed in the file. 
+STAT_DISTANCE_CUTOFF_PIX_DRY: 80 #manually changed in the file. 
+STAT_DISTANCE_CUTOFF_PIX_WET: 80
+STAT_DISTANCE_CUTOFF_PIX_SWAMP: 100
+STAT_DISTANCE_CUTOFF_PIX_SINK: 50
+STAT_DISTANCE_CUTOFF_PIX_U: 50
+
 # MOVING_DISTANCE_CUTOFF_PIX: 6 #AF: from the boat detection. For WH, removed it. Shouldn't be used.
 
 # The lat/long cutoff should be roughly related to the resolution of the images
