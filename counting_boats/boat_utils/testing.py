@@ -37,11 +37,12 @@ import json
 import subprocess
 
 #Manualy change them in accordance to the desired value. Are not called in some functions so to be easier they are here...
-STAT_DISTANCE_CUTOFF_PIX = 50
-CONFIDENCE_THRESHOLD = 0.5
-STAT_DISTANCE_CUTOFF_LATLONG = 0.00025
-COMPARE_DISTANCE_CUTOFF_PIX = 8
-
+# STAT_DISTANCE_CUTOFF_PIX = 50
+# CONFIDENCE_THRESHOLD = 0.5
+# STAT_DISTANCE_CUTOFF_LATLONG = 0.00025
+# COMPARE_DISTANCE_CUTOFF_PIX = 8
+#AF: 20.30.25: modified the codes to be able to use the pixel calls based on the config file and not from here. 
+# Commented out to test. 
 
 def parse_config(config: str) -> dict:
     """
@@ -722,7 +723,7 @@ def compare_detections_to_ground_truth(run_folder, config):
     for root, _, files in os.walk(detection_dir):
         if len(files) > 0 and files[0].endswith(".txt"):
             this_img = os.path.basename(root)
-            data = process_image_AF(root, label_dir)
+            data = process_image_AF(root, label_dir, config)
             comparisons_to_csv(data, os.path.join(run_folder, this_img + ".csv"))
     # create an overall file, with all boats in lat long
     if config.get("raw_images", False):
@@ -896,6 +897,7 @@ def process_image(
 def process_image_AF(
     detections,
     labels_root,
+    config
 ):
     """
     Compare the detections and labels for a single image
@@ -913,6 +915,7 @@ def process_image_AF(
     AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
     Should run smoothly and did not modify the dependent functions. 
     """
+    config=parse_config(config)
     # labels will be in a parallel directory to detections
     # e.g detections = "Detections/b/../d", labels = "Labels/b/../d"
     label_dir = os.path.join(
@@ -934,18 +937,18 @@ def process_image_AF(
     ML_classifications_u = ML_classifications[ML_classifications[:, 3] == 4.0]
     
     # Define distance cutoffs for each class (adjust these as needed)
-    DRY_WH_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Using existing static distance
-    WH_SWAMP_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
-    WH_WET_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
-    WH_SINK_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
-    U_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  
+    STAT_DISTANCE_CUTOFF_PIX_DRY = config["STAT_DISTANCE_CUTOFF_PIX_DRY"]
+    STAT_DISTANCE_CUTOFF_PIX_WET = config["STAT_DISTANCE_CUTOFF_PIX_WET"]
+    STAT_DISTANCE_CUTOFF_PIX_SWAMP = config["STAT_DISTANCE_CUTOFF_PIX_SWAMP"]
+    STAT_DISTANCE_CUTOFF_PIX_SINK = config["STAT_DISTANCE_CUTOFF_PIX_SINK"]
+    STAT_DISTANCE_CUTOFF_PIX_U = config["STAT_DISTANCE_CUTOFF_PIX_U"]
     
     # cluster each class separately
-    ML_clusters_dry_wh = cluster_AF(ML_classifications_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
-    ML_clusters_wh_swamp = cluster_AF(ML_classifications_wh_swamp, WH_SWAMP_DISTANCE_CUTOFF_PIX)
-    ML_clusters_wh_wet = cluster_AF(ML_classifications_wh_wet, WH_WET_DISTANCE_CUTOFF_PIX)
-    ML_clusters_wh_sink = cluster_AF(ML_classifications_wh_sink, WH_SINK_DISTANCE_CUTOFF_PIX)
-    ML_clusters_u = cluster_AF(ML_classifications_u, U_DISTANCE_CUTOFF_PIX)
+    ML_clusters_dry_wh = cluster_AF(ML_classifications_dry_wh, STAT_DISTANCE_CUTOFF_PIX_DRY)
+    ML_clusters_wh_swamp = cluster_AF(ML_classifications_wh_swamp, STAT_DISTANCE_CUTOFF_PIX_SWAMP)
+    ML_clusters_wh_wet = cluster_AF(ML_classifications_wh_wet, STAT_DISTANCE_CUTOFF_PIX_WET)
+    ML_clusters_wh_sink = cluster_AF(ML_classifications_wh_sink, STAT_DISTANCE_CUTOFF_PIX_SINK)
+    ML_clusters_u = cluster_AF(ML_classifications_u, STAT_DISTANCE_CUTOFF_PIX_U)
     
     # save clusters as csv for later analysis
     if not os.path.exists(os.path.join(detections, "clusters")):
@@ -993,11 +996,11 @@ def process_image_AF(
         manual_annotations_u = manual_annotations[manual_annotations[:, 3] == 4.0]
     
     # cluster manual annotations
-    manual_clusters_dry_wh = cluster_AF(manual_annotations_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
-    manual_clusters_wh_swamp = cluster_AF(manual_annotations_wh_swamp, WH_SWAMP_DISTANCE_CUTOFF_PIX)
-    manual_clusters_wh_wet = cluster_AF(manual_annotations_wh_wet, WH_WET_DISTANCE_CUTOFF_PIX)
-    manual_clusters_wh_sink = cluster_AF(manual_annotations_wh_sink, WH_SINK_DISTANCE_CUTOFF_PIX)
-    manual_clusters_u = cluster_AF(manual_annotations_u, U_DISTANCE_CUTOFF_PIX)
+    manual_clusters_dry_wh = cluster_AF(manual_annotations_dry_wh, STAT_DISTANCE_CUTOFF_PIX_DRY)
+    manual_clusters_wh_swamp = cluster_AF(manual_annotations_wh_swamp, STAT_DISTANCE_CUTOFF_PIX_SWAMP)
+    manual_clusters_wh_wet = cluster_AF(manual_annotations_wh_wet, STAT_DISTANCE_CUTOFF_PIX_WET)
+    manual_clusters_wh_sink = cluster_AF(manual_annotations_wh_sink, STAT_DISTANCE_CUTOFF_PIX_SINK)
+    manual_clusters_u = cluster_AF(manual_annotations_u, STAT_DISTANCE_CUTOFF_PIX_U)
 
     # process all clusters
     ML_clusters_dry_wh = process_clusters_AF(ML_clusters_dry_wh)
@@ -1036,6 +1039,7 @@ def process_image_AF(
     ) if any(len(arr) > 0 for arr in [manual_clusters_dry_wh, manual_clusters_wh_swamp, manual_clusters_wh_wet, manual_clusters_wh_sink, manual_clusters_u]) else np.empty((0, 6))
     
     # Compare ML and manual clusters
+    COMPARE_DISTANCE_CUTOFF_PIX = config["COMPARE_DISTANCE_CUTOFF_PIX"]
     comparison = compare(ML_clusters, manual_clusters, COMPARE_DISTANCE_CUTOFF_PIX)
     return comparison
 

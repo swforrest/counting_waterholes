@@ -56,7 +56,7 @@ STAT_DISTANCE_CUTOFF_PIX_U: 50
 STAT_DISTANCE_CUTOFF_LATLONG: 0.00025 
 # MOVING_DISTANCE_CUTOFF_LATLONG: 0.0003 #same, removed as shouldn't be needed
 
-COMPARE_DISTANCE_CUTOFF_PIX: 8
+COMPARE_DISTANCE_CUTOFF_PIX: 20
 
 #Tasks to be performed but for now, I'm just putting all false and run manually. 
 tasks:
