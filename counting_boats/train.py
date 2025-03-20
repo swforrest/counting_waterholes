@@ -94,14 +94,14 @@ def segment(
     """
     
     cfg = parse_config(config)
-    # print(cfg) testing AF
+    print(cfg) #AF
     # segment the images that have been prepared
     labels = [
         os.path.join(cfg["output_dir"], f)
         for f in os.listdir(cfg["output_dir"])
         if f.endswith(".json")
     ]
-    
+    print(labels)
     images = [l.replace(".json", ".png") for l in labels]
     label_out = os.path.join(cfg["output_dir"], "labels")
     image_out = os.path.join(cfg["output_dir"], "images")
