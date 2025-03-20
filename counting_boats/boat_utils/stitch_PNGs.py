@@ -26,7 +26,7 @@ def main():
         stitch(dir)
 
 
-def stitch(dir):
+def stitch(dir, output_dir=None):
     """
     for each png in the directory, pull out the x, y coords
     images have names like imagessdfasdf_x_y.png
@@ -35,34 +35,57 @@ def stitch(dir):
 
     Args:
         dir (str): directory containing images to stitch
+        output_dir (str, optional): directory to save the stitched image. 
+                                   If None, saves to input_dir
 
     Returns:
         None
+
+    Comment: 
+    AF: modified to give an output directory of my choice. 
     """
-    # get list of files in directory
-    if "stitched.png" in os.listdir(dir):
-        print("Already stitched {}".format(dir))
+    # If output_dir is not provided, use input_dir
+    if output_dir is None:
+        output_dir = dir
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    # Check if stitched image already exists in output directory
+    if "stitched.png" in os.listdir(output_dir):
+        print(f"Already stitched, output exists at {os.path.join(output_dir, 'stitched.png')}")
         return
+        
+    # get list of files in directory
     imgs = os.listdir(dir)
     imgs = filter(lambda x: x.endswith(".png"), imgs)
+    
     # for each file, get the x and y coords
     coords = [
         (img, int(img.split("_")[-1].split(".")[0]), int(img.split("_")[-2]))
         for img in imgs
         if img != "stitched.png"
     ]
+    
     # get the maximum x and y values
     max_x = max([x[1] for x in coords])
     max_y = max([x[2] for x in coords])
     print("Max x: {}, Max y: {}".format(max_x, max_y))
+    
     # we want to use every 4th of each from 0-max_x and 0-max_y
     image = Image.new("RGB", (104 * (max_x + 1), 104 * (max_y + 1)))
+    
     # for each image, paste it into the new image
     [
         image.paste(Image.open(os.path.join(dir, img)), (x * 104, y * 104))
         for img, x, y in coords
     ]
-    image.save(os.path.join(dir, "stitched.png"))
+    
+    # Save the stitched image to the output directory
+    output_path = os.path.join(output_dir, "stitched.png")
+    image.save(output_path)
+    print(f"Saved stitched image to {output_path}")
 
 
 if __name__ == "__main__":

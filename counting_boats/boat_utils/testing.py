@@ -264,277 +264,277 @@ def run_detection(run_folder, config):
             print(f"Classified {root}, saved to {this_classification_dir}")
 
 
-def backwards_annotation(run_folder, config):
-    """
-    Generate labelme style annotations (json) from the classifications.
-    1. Read classifications
-    2. Generate json file {image}_labelme_auto.json with:
+# def backwards_annotation(run_folder, config):
+#     """
+#     Generate labelme style annotations (json) from the classifications.
+#     1. Read classifications
+#     2. Generate json file {image}_labelme_auto.json with:
 
-    Args:
+#     Args:
 
-        run_folder (str): The folder to run detection on.
-        config (dict): The configuration dictionary.
+#         run_folder (str): The folder to run detection on.
+#         config (dict): The configuration dictionary.
 
-    Returns:
+#     Returns:
 
-        None
-    """
-    detection_dir = os.path.join(config["path"], config["classifications"])
-    for root, _, files in os.walk(detection_dir):
-        # skip if json file exists
-        if os.path.exists(
-            os.path.join(
-                config["path"],
-                config["pngs"],
-                f"{os.path.basename(root)}_labelme_auto.json",
-            )
-        ):
-            continue
-        if len(files) > 0 and files[0].endswith(".txt"):
-            this_image = os.path.basename(root)
-            ML_classifications, _ = read_classifications(
-                class_folder=root, confidence_threshold=0.5
-            )  # read all
-            ML_classifications_stat = ML_classifications[
-                ML_classifications[:, 3] == 0.0
-            ]
-            ML_classifications_moving = ML_classifications[
-                ML_classifications[:, 3] == 1.0
-            ]
-            # cluster
-            ML_clusters_stat = cluster(
-                ML_classifications_stat, STAT_DISTANCE_CUTOFF_PIX
-            )
-            ML_clusters_moving = cluster(
-                ML_classifications_moving, MOVING_DISTANCE_CUTOFF_PIX
-            )
-            # condense
-            ML_clusters_stat = process_clusters(ML_clusters_stat)
-            ML_clusters_moving = process_clusters(ML_clusters_moving)
-            # get image metadata (width and height)
-            img = Image.open(
-                os.path.join(config["path"], config["pngs"], this_image + ".png")
-            )
-            width, height = img.size
+#         None
+#     """
+#     detection_dir = os.path.join(config["path"], config["classifications"])
+#     for root, _, files in os.walk(detection_dir):
+#         # skip if json file exists
+#         if os.path.exists(
+#             os.path.join(
+#                 config["path"],
+#                 config["pngs"],
+#                 f"{os.path.basename(root)}_labelme_auto.json",
+#             )
+#         ):
+#             continue
+#         if len(files) > 0 and files[0].endswith(".txt"):
+#             this_image = os.path.basename(root)
+#             ML_classifications, _ = read_classifications(
+#                 class_folder=root, confidence_threshold=0.5
+#             )  # read all
+#             ML_classifications_stat = ML_classifications[
+#                 ML_classifications[:, 3] == 0.0
+#             ]
+#             ML_classifications_moving = ML_classifications[
+#                 ML_classifications[:, 3] == 1.0
+#             ]
+#             # cluster
+#             ML_clusters_stat = cluster(
+#                 ML_classifications_stat, STAT_DISTANCE_CUTOFF_PIX
+#             )
+#             ML_clusters_moving = cluster(
+#                 ML_classifications_moving, MOVING_DISTANCE_CUTOFF_PIX
+#             )
+#             # condense
+#             ML_clusters_stat = process_clusters(ML_clusters_stat)
+#             ML_clusters_moving = process_clusters(ML_clusters_moving)
+#             # get image metadata (width and height)
+#             img = Image.open(
+#                 os.path.join(config["path"], config["pngs"], this_image + ".png")
+#             )
+#             width, height = img.size
 
-            json_data = {}
-            json_data["version"] = "5.2.1"
-            json_data["flags"] = {}
-            json_data["imagePath"] = this_image
-            json_data["imageHeight"] = height
-            json_data["imageWidth"] = width
-            # put in the shapes
-            json_data["shapes"] = []
-            for c in ML_clusters_stat:
-                x, y, _, _, w, h = c
-                w = int(w / 2)
-                h = int(h / 2)
-                json_data["shapes"].append(
-                    {
-                        "label": "boat",
-                        "points": [[x - w, y - h], [x + w, y + h]],
-                        "group_id": None,
-                        "shape_type": "rectangle",
-                        "flags": {},
-                    }
-                )
-            for c in ML_clusters_moving:
-                (
-                    x,
-                    y,
-                    _,
-                    _,
-                    w,
-                    h,
-                ) = c
-                w = int(w / 2)
-                h = int(h / 2)
-                json_data["shapes"].append(
-                    {
-                        "label": "movingBoat",
-                        "points": [[x - w, y - h], [x + w, y + h]],
-                        "group_id": None,
-                        "shape_type": "rectangle",
-                        "flags": {},
-                    }
-                )
-            # also need to get the "image_data" key. There will also be a {this_image}.json we can grab this from
-            with open(
-                os.path.join(config["path"], config["pngs"], f"{this_image}.json"), "r"
-            ) as f:
-                image_data = json.load(f)["imageData"]
-            json_data["imageData"] = image_data
-            # save the json
-            json_path = os.path.join(
-                config["path"], config["pngs"], f"{this_image}_labelme_auto.json"
-            )
-            with open(json_path, "w+") as f:
-                json.dump(json_data, f)
+#             json_data = {}
+#             json_data["version"] = "5.2.1"
+#             json_data["flags"] = {}
+#             json_data["imagePath"] = this_image
+#             json_data["imageHeight"] = height
+#             json_data["imageWidth"] = width
+#             # put in the shapes
+#             json_data["shapes"] = []
+#             for c in ML_clusters_stat:
+#                 x, y, _, _, w, h = c
+#                 w = int(w / 2)
+#                 h = int(h / 2)
+#                 json_data["shapes"].append(
+#                     {
+#                         "label": "boat",
+#                         "points": [[x - w, y - h], [x + w, y + h]],
+#                         "group_id": None,
+#                         "shape_type": "rectangle",
+#                         "flags": {},
+#                     }
+#                 )
+#             for c in ML_clusters_moving:
+#                 (
+#                     x,
+#                     y,
+#                     _,
+#                     _,
+#                     w,
+#                     h,
+#                 ) = c
+#                 w = int(w / 2)
+#                 h = int(h / 2)
+#                 json_data["shapes"].append(
+#                     {
+#                         "label": "movingBoat",
+#                         "points": [[x - w, y - h], [x + w, y + h]],
+#                         "group_id": None,
+#                         "shape_type": "rectangle",
+#                         "flags": {},
+#                     }
+#                 )
+#             # also need to get the "image_data" key. There will also be a {this_image}.json we can grab this from
+#             with open(
+#                 os.path.join(config["path"], config["pngs"], f"{this_image}.json"), "r"
+#             ) as f:
+#                 image_data = json.load(f)["imageData"]
+#             json_data["imageData"] = image_data
+#             # save the json
+#             json_path = os.path.join(
+#                 config["path"], config["pngs"], f"{this_image}_labelme_auto.json"
+#             )
+#             with open(json_path, "w+") as f:
+#                 json.dump(json_data, f)
 
-def backwards_annotation_AF_old(run_folder, config):
-    """
-    Generate labelme style annotations (json) from the classifications.
-    1. Read classifications
-    2. Generate json file {image}_labelme_auto.json with:
+# def backwards_annotation_AF_old(run_folder, config):
+#     """
+#     Generate labelme style annotations (json) from the classifications.
+#     1. Read classifications
+#     2. Generate json file {image}_labelme_auto.json with:
 
-    Args:
+#     Args:
 
-        run_folder (str): The folder to run detection on.
-        config (dict): The configuration dictionary.
+#         run_folder (str): The folder to run detection on.
+#         config (dict): The configuration dictionary.
 
-    Returns:
+#     Returns:
 
-        None
+#         None
     
-    Comment:
-    AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
-    Should run smoothly and did not modify the dependent functions. 
-    """
-    config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
-    run_folder = os.path.normpath(run_folder) #AF
-    detection_dir = os.path.join(config["path"], config["classifications"])
-    for root, _, files in os.walk(detection_dir):
-        # skip if json file exists
-        if os.path.exists(
-            os.path.join(
-                config["path"],
-                config["pngs"],
-                f"{os.path.basename(root)}_labelme_auto.json",
-            )
-        ):
-            continue
-        if len(files) > 0 and files[0].endswith(".txt"):
-            this_image = os.path.basename(root)
-            ML_classifications, _ = read_classifications(
-                class_folder=root, confidence_threshold=0.5
-            )  # read all
+#     Comment:
+#     AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
+#     Should run smoothly and did not modify the dependent functions. 
+#     """
+#     config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
+#     run_folder = os.path.normpath(run_folder) #AF
+#     detection_dir = os.path.join(config["path"], config["classifications"])
+#     for root, _, files in os.walk(detection_dir):
+#         # skip if json file exists
+#         if os.path.exists(
+#             os.path.join(
+#                 config["path"],
+#                 config["pngs"],
+#                 f"{os.path.basename(root)}_labelme_auto.json",
+#             )
+#         ):
+#             continue
+#         if len(files) > 0 and files[0].endswith(".txt"):
+#             this_image = os.path.basename(root)
+#             ML_classifications, _ = read_classifications(
+#                 class_folder=root, confidence_threshold=0.5
+#             )  # read all
             
-            # Separate classifications by class
-            ML_classifications_dry_wh = ML_classifications[ML_classifications[:, 3] == 0.0]
-            ML_classifications_wh_swamp = ML_classifications[ML_classifications[:, 3] == 1.0]
-            ML_classifications_wh_wet = ML_classifications[ML_classifications[:, 3] == 2.0]
-            ML_classifications_wh_sink = ML_classifications[ML_classifications[:, 3] == 3.0]
-            ML_classifications_u = ML_classifications[ML_classifications[:, 3] == 4.0]
+#             # Separate classifications by class
+#             ML_classifications_dry_wh = ML_classifications[ML_classifications[:, 3] == 0.0]
+#             ML_classifications_wh_swamp = ML_classifications[ML_classifications[:, 3] == 1.0]
+#             ML_classifications_wh_wet = ML_classifications[ML_classifications[:, 3] == 2.0]
+#             ML_classifications_wh_sink = ML_classifications[ML_classifications[:, 3] == 3.0]
+#             ML_classifications_u = ML_classifications[ML_classifications[:, 3] == 4.0]
             
-            # Define distance cutoffs for each class (adjust these as needed)
-            DRY_WH_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Using existing static distance
-            WH_SWAMP_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
-            WH_WET_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
-            WH_SINK_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
-            U_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Not using existing moving distance as we all have static objects
+#             # Define distance cutoffs for each class (adjust these as needed)
+#             DRY_WH_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Using existing static distance
+#             WH_SWAMP_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
+#             WH_WET_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
+#             WH_SINK_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
+#             U_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Not using existing moving distance as we all have static objects
             
-            # cluster each class separately
-            ML_clusters_dry_wh = cluster(ML_classifications_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
-            ML_clusters_wh_swamp = cluster(ML_classifications_wh_swamp, WH_SWAMP_DISTANCE_CUTOFF_PIX)
-            ML_clusters_wh_wet = cluster(ML_classifications_wh_wet, WH_WET_DISTANCE_CUTOFF_PIX)
-            ML_clusters_wh_sink = cluster(ML_classifications_wh_sink, WH_SINK_DISTANCE_CUTOFF_PIX)
-            ML_clusters_u = cluster(ML_classifications_u, U_DISTANCE_CUTOFF_PIX)
+#             # cluster each class separately
+#             ML_clusters_dry_wh = cluster(ML_classifications_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
+#             ML_clusters_wh_swamp = cluster(ML_classifications_wh_swamp, WH_SWAMP_DISTANCE_CUTOFF_PIX)
+#             ML_clusters_wh_wet = cluster(ML_classifications_wh_wet, WH_WET_DISTANCE_CUTOFF_PIX)
+#             ML_clusters_wh_sink = cluster(ML_classifications_wh_sink, WH_SINK_DISTANCE_CUTOFF_PIX)
+#             ML_clusters_u = cluster(ML_classifications_u, U_DISTANCE_CUTOFF_PIX)
             
-            # condense clusters
-            ML_clusters_dry_wh = process_clusters(ML_clusters_dry_wh)
-            ML_clusters_wh_swamp = process_clusters(ML_clusters_wh_swamp)
-            ML_clusters_wh_wet = process_clusters(ML_clusters_wh_wet)
-            ML_clusters_wh_sink = process_clusters(ML_clusters_wh_sink)
-            ML_clusters_u = process_clusters(ML_clusters_u)
+#             # condense clusters
+#             ML_clusters_dry_wh = process_clusters(ML_clusters_dry_wh)
+#             ML_clusters_wh_swamp = process_clusters(ML_clusters_wh_swamp)
+#             ML_clusters_wh_wet = process_clusters(ML_clusters_wh_wet)
+#             ML_clusters_wh_sink = process_clusters(ML_clusters_wh_sink)
+#             ML_clusters_u = process_clusters(ML_clusters_u)
             
-            # get image metadata (width and height)
-            img = Image.open(
-                os.path.join(config["path"], config["pngs"], this_image + ".png")
-            )
-            width, height = img.size
+#             # get image metadata (width and height)
+#             img = Image.open(
+#                 os.path.join(config["path"], config["pngs"], this_image + ".png")
+#             )
+#             width, height = img.size
 
-            json_data = {}
-            json_data["version"] = "5.2.1"
-            json_data["flags"] = {}
-            json_data["imagePath"] = this_image
-            json_data["imageHeight"] = height
-            json_data["imageWidth"] = width
-            # put in the shapes
-            json_data["shapes"] = []
+#             json_data = {}
+#             json_data["version"] = "5.2.1"
+#             json_data["flags"] = {}
+#             json_data["imagePath"] = this_image
+#             json_data["imageHeight"] = height
+#             json_data["imageWidth"] = width
+#             # put in the shapes
+#             json_data["shapes"] = []
             
-            # Add shapes for each class
-            for c in ML_clusters_dry_wh:
-                x, y, _, _, w, h = c
-                w = int(w / 2)
-                h = int(h / 2)
-                json_data["shapes"].append(
-                    {
-                        "label": "Dry_WH",
-                        "points": [[x - w, y - h], [x + w, y + h]],
-                        "group_id": None,
-                        "shape_type": "rectangle",
-                        "flags": {},
-                    }
-                )
+#             # Add shapes for each class
+#             for c in ML_clusters_dry_wh:
+#                 x, y, _, _, w, h = c
+#                 w = int(w / 2)
+#                 h = int(h / 2)
+#                 json_data["shapes"].append(
+#                     {
+#                         "label": "Dry_WH",
+#                         "points": [[x - w, y - h], [x + w, y + h]],
+#                         "group_id": None,
+#                         "shape_type": "rectangle",
+#                         "flags": {},
+#                     }
+#                 )
                 
-            for c in ML_clusters_wh_swamp:
-                x, y, _, _, w, h = c
-                w = int(w / 2)
-                h = int(h / 2)
-                json_data["shapes"].append(
-                    {
-                        "label": "WH_swamp",
-                        "points": [[x - w, y - h], [x + w, y + h]],
-                        "group_id": None,
-                        "shape_type": "rectangle",
-                        "flags": {},
-                    }
-                )
+#             for c in ML_clusters_wh_swamp:
+#                 x, y, _, _, w, h = c
+#                 w = int(w / 2)
+#                 h = int(h / 2)
+#                 json_data["shapes"].append(
+#                     {
+#                         "label": "WH_swamp",
+#                         "points": [[x - w, y - h], [x + w, y + h]],
+#                         "group_id": None,
+#                         "shape_type": "rectangle",
+#                         "flags": {},
+#                     }
+#                 )
                 
-            for c in ML_clusters_wh_wet:
-                x, y, _, _, w, h = c
-                w = int(w / 2)
-                h = int(h / 2)
-                json_data["shapes"].append(
-                    {
-                        "label": "WH_wet",
-                        "points": [[x - w, y - h], [x + w, y + h]],
-                        "group_id": None,
-                        "shape_type": "rectangle",
-                        "flags": {},
-                    }
-                )
+#             for c in ML_clusters_wh_wet:
+#                 x, y, _, _, w, h = c
+#                 w = int(w / 2)
+#                 h = int(h / 2)
+#                 json_data["shapes"].append(
+#                     {
+#                         "label": "WH_wet",
+#                         "points": [[x - w, y - h], [x + w, y + h]],
+#                         "group_id": None,
+#                         "shape_type": "rectangle",
+#                         "flags": {},
+#                     }
+#                 )
                 
-            for c in ML_clusters_wh_sink:
-                x, y, _, _, w, h = c
-                w = int(w / 2)
-                h = int(h / 2)
-                json_data["shapes"].append(
-                    {
-                        "label": "WH_sink",
-                        "points": [[x - w, y - h], [x + w, y + h]],
-                        "group_id": None,
-                        "shape_type": "rectangle",
-                        "flags": {},
-                    }
-                )
+#             for c in ML_clusters_wh_sink:
+#                 x, y, _, _, w, h = c
+#                 w = int(w / 2)
+#                 h = int(h / 2)
+#                 json_data["shapes"].append(
+#                     {
+#                         "label": "WH_sink",
+#                         "points": [[x - w, y - h], [x + w, y + h]],
+#                         "group_id": None,
+#                         "shape_type": "rectangle",
+#                         "flags": {},
+#                     }
+#                 )
                 
-            for c in ML_clusters_u:
-                x, y, _, _, w, h = c
-                w = int(w / 2)
-                h = int(h / 2)
-                json_data["shapes"].append(
-                    {
-                        "label": "U",
-                        "points": [[x - w, y - h], [x + w, y + h]],
-                        "group_id": None,
-                        "shape_type": "rectangle",
-                        "flags": {},
-                    }
-                )
+#             for c in ML_clusters_u:
+#                 x, y, _, _, w, h = c
+#                 w = int(w / 2)
+#                 h = int(h / 2)
+#                 json_data["shapes"].append(
+#                     {
+#                         "label": "U",
+#                         "points": [[x - w, y - h], [x + w, y + h]],
+#                         "group_id": None,
+#                         "shape_type": "rectangle",
+#                         "flags": {},
+#                     }
+#                 )
                 
-            # also need to get the "image_data" key. There will also be a {this_image}.json we can grab this from
-            with open(
-                os.path.join(config["path"], config["pngs"], f"{this_image}.json"), "r"
-            ) as f:
-                image_data = json.load(f)["imageData"]
-            json_data["imageData"] = image_data
-            # save the json
-            json_path = os.path.join(
-                config["path"], config["pngs"], f"{this_image}_labelme_auto.json"
-            )
-            with open(json_path, "w+") as f:
-                json.dump(json_data, f)
+#             # also need to get the "image_data" key. There will also be a {this_image}.json we can grab this from
+#             with open(
+#                 os.path.join(config["path"], config["pngs"], f"{this_image}.json"), "r"
+#             ) as f:
+#                 image_data = json.load(f)["imageData"]
+#             json_data["imageData"] = image_data
+#             # save the json
+#             json_path = os.path.join(
+#                 config["path"], config["pngs"], f"{this_image}_labelme_auto.json"
+#             )
+#             with open(json_path, "w+") as f:
+#                 json.dump(json_data, f)
 
 def backwards_annotation_AF(run_folder, config):
     """
@@ -730,50 +730,50 @@ def compare_detections_to_ground_truth(run_folder, config):
         classifications_to_lat_long_AF(run_folder, config)
 
 
-def confusion_matrix(run_folder, config):
-    """
-    Summarize the results of the comparison. Reads all csvs and creates a confusion matrix
+# def confusion_matrix(run_folder, config):
+#     """
+#     Summarize the results of the comparison. Reads all csvs and creates a confusion matrix
 
-    Args:
+#     Args:
 
-        run_folder (str): The folder to run detection on.
-        config (dict): The configuration dictionary.
+#         run_folder (str): The folder to run detection on.
+#         config (dict): The configuration dictionary.
 
-    Returns:
+#     Returns:
 
-        None
-    """
-    config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
-    run_folder = os.path.normpath(run_folder) #AF
-    if os.path.exists(os.path.join(run_folder, "all_boats.csv")):
-        all_data = pd.read_csv(os.path.join(run_folder, "all_boats.csv"))
-    else:
-        # read all the csvs in the run folder that start with a date (8 numbers)
-        all_data = pd.concat(
-            [
-                pd.read_csv(os.path.join(run_folder, file))
-                for file in os.listdir(run_folder)
-                if file.endswith(".csv") and file[:8].isdigit()
-            ]
-        )
-    # create confusion matrix
-    true = all_data["manual_class"]
-    pred = all_data["ml_class"]
-    # save image of confusion matrix
-    acc = np.sum(true == pred) / len(true)
-    ConfusionMatrixDisplay.from_predictions(
-        y_pred=pred,
-        y_true=true,
-        labels=[-1, 0, 1],
-        display_labels=["Not a Boat", "Static Boat", "Moving Boat"],
-    )
-    fig = plt.gcf()
-    fig.suptitle(
-        f"{len(true[true != -1])} Labelled Boats (Detection Accuracy: {round(acc, 3)})"
-    )
-    fig.tight_layout()
-    # save the confusion matrix image
-    plt.savefig(os.path.join(run_folder, "plots", "confusion_matrix.png"))
+#         None
+#     """
+#     config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
+#     run_folder = os.path.normpath(run_folder) #AF
+#     if os.path.exists(os.path.join(run_folder, "all_boats.csv")):
+#         all_data = pd.read_csv(os.path.join(run_folder, "all_boats.csv"))
+#     else:
+#         # read all the csvs in the run folder that start with a date (8 numbers)
+#         all_data = pd.concat(
+#             [
+#                 pd.read_csv(os.path.join(run_folder, file))
+#                 for file in os.listdir(run_folder)
+#                 if file.endswith(".csv") and file[:8].isdigit()
+#             ]
+#         )
+#     # create confusion matrix
+#     true = all_data["manual_class"]
+#     pred = all_data["ml_class"]
+#     # save image of confusion matrix
+#     acc = np.sum(true == pred) / len(true)
+#     ConfusionMatrixDisplay.from_predictions(
+#         y_pred=pred,
+#         y_true=true,
+#         labels=[-1, 0, 1],
+#         display_labels=["Not a Boat", "Static Boat", "Moving Boat"],
+#     )
+#     fig = plt.gcf()
+#     fig.suptitle(
+#         f"{len(true[true != -1])} Labelled Boats (Detection Accuracy: {round(acc, 3)})"
+#     )
+#     fig.tight_layout()
+#     # save the confusion matrix image
+#     plt.savefig(os.path.join(run_folder, "plots", "confusion_matrix.png"))
 
 
 def confusion_matrix_AF(run_folder, config):
@@ -824,74 +824,74 @@ def confusion_matrix_AF(run_folder, config):
 
 
 
-def process_image(
-    detections,
-    labels_root,
-):
-    """
-    Compare the detections and labels for a single image
+# def process_image(
+#     detections,
+#     labels_root,
+# ):
+#     """
+#     Compare the detections and labels for a single image
 
-    Args:
+#     Args:
 
-        detections (str): The directory of detections for the image
-        labels_root (str): The root directory of labels
+#         detections (str): The directory of detections for the image
+#         labels_root (str): The root directory of labels
 
-    Returns:
+#     Returns:
 
-        list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]
-    """
-    # labels will be in a parallel directory to detections
-    # e.g detections = "Detections/b/../d", labels = "Labels/b/../d"
-    label_dir = os.path.join(
-        labels_root, os.path.sep.join(detections.split(os.path.sep)[-2:])
-    )
-    # check if it exists
-    if not os.path.exists(label_dir):
-        print(f"Label directory {label_dir} does not exist, skipping image...")
-        return []
-    # ML classifications
-    ML_classifications, _ = read_classifications(class_folder=detections)
-    ML_classifications_stat = ML_classifications[ML_classifications[:, 3] == 0.0]
-    ML_classifications_moving = ML_classifications[ML_classifications[:, 3] == 1.0]
-    # cluster
-    ML_clusters_stat = cluster(ML_classifications_stat, STAT_DISTANCE_CUTOFF_PIX)
-    ML_clusters_moving = cluster(ML_classifications_moving, MOVING_DISTANCE_CUTOFF_PIX)
-    # save clusters as csv for later analysis
-    if not os.path.exists(os.path.join(detections, "clusters")):
-        os.makedirs(os.path.join(detections, "clusters"))
-    statoutfile = os.path.join(detections, "clusters", "stat_clusters.csv")
-    movingoutfile = os.path.join(detections, "clusters", "moving_clusters.csv")
-    with open(statoutfile, "w") as f:
-        for c in ML_clusters_stat:
-            f.write(",".join([str(i) for i in c]) + "\n")
-    with open(movingoutfile, "w") as f:
-        for c in ML_clusters_moving:
-            f.write(",".join([str(i) for i in c]) + "\n")
+#         list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]
+#     """
+#     # labels will be in a parallel directory to detections
+#     # e.g detections = "Detections/b/../d", labels = "Labels/b/../d"
+#     label_dir = os.path.join(
+#         labels_root, os.path.sep.join(detections.split(os.path.sep)[-2:])
+#     )
+#     # check if it exists
+#     if not os.path.exists(label_dir):
+#         print(f"Label directory {label_dir} does not exist, skipping image...")
+#         return []
+#     # ML classifications
+#     ML_classifications, _ = read_classifications(class_folder=detections)
+#     ML_classifications_stat = ML_classifications[ML_classifications[:, 3] == 0.0]
+#     ML_classifications_moving = ML_classifications[ML_classifications[:, 3] == 1.0]
+#     # cluster
+#     ML_clusters_stat = cluster(ML_classifications_stat, STAT_DISTANCE_CUTOFF_PIX)
+#     ML_clusters_moving = cluster(ML_classifications_moving, MOVING_DISTANCE_CUTOFF_PIX)
+#     # save clusters as csv for later analysis
+#     if not os.path.exists(os.path.join(detections, "clusters")):
+#         os.makedirs(os.path.join(detections, "clusters"))
+#     statoutfile = os.path.join(detections, "clusters", "stat_clusters.csv")
+#     movingoutfile = os.path.join(detections, "clusters", "moving_clusters.csv")
+#     with open(statoutfile, "w") as f:
+#         for c in ML_clusters_stat:
+#             f.write(",".join([str(i) for i in c]) + "\n")
+#     with open(movingoutfile, "w") as f:
+#         for c in ML_clusters_moving:
+#             f.write(",".join([str(i) for i in c]) + "\n")
 
-    # manual annotations
-    manual_annotations, _ = read_classifications(class_folder=label_dir)
-    if len(manual_annotations) == 0:
-        manual_annotations_stat = np.empty((0, 7))
-        manual_annotations_moving = np.empty((0, 7))
-    else:
-        manual_annotations_stat = manual_annotations[manual_annotations[:, 3] == 0.0]
-        manual_annotations_moving = manual_annotations[manual_annotations[:, 3] == 1.0]
-    # cluster
-    manual_clusters_stat = cluster(manual_annotations_stat, STAT_DISTANCE_CUTOFF_PIX)
-    manual_clusters_moving = cluster(
-        manual_annotations_moving, MOVING_DISTANCE_CUTOFF_PIX
-    )
+#     # manual annotations
+#     manual_annotations, _ = read_classifications(class_folder=label_dir)
+#     if len(manual_annotations) == 0:
+#         manual_annotations_stat = np.empty((0, 7))
+#         manual_annotations_moving = np.empty((0, 7))
+#     else:
+#         manual_annotations_stat = manual_annotations[manual_annotations[:, 3] == 0.0]
+#         manual_annotations_moving = manual_annotations[manual_annotations[:, 3] == 1.0]
+#     # cluster
+#     manual_clusters_stat = cluster(manual_annotations_stat, STAT_DISTANCE_CUTOFF_PIX)
+#     manual_clusters_moving = cluster(
+#         manual_annotations_moving, MOVING_DISTANCE_CUTOFF_PIX
+#     )
 
-    # process
-    ML_clusters_stat = process_clusters(ML_clusters_stat)
-    ML_clusters_moving = process_clusters(ML_clusters_moving)
-    manual_clusters_stat = process_clusters(manual_clusters_stat)
-    manual_clusters_moving = process_clusters(manual_clusters_moving)
+#     # process
+#     ML_clusters_stat = process_clusters(ML_clusters_stat)
+#     ML_clusters_moving = process_clusters(ML_clusters_moving)
+#     manual_clusters_stat = process_clusters(manual_clusters_stat)
+#     manual_clusters_moving = process_clusters(manual_clusters_moving)
 
-    ML_clusters = np.concatenate((ML_clusters_stat, ML_clusters_moving))
-    manual_clusters = np.concatenate((manual_clusters_stat, manual_clusters_moving))
-    comparison = compare(ML_clusters, manual_clusters, COMPARE_DISTANCE_CUTOFF_PIX)
-    return comparison
+#     ML_clusters = np.concatenate((ML_clusters_stat, ML_clusters_moving))
+#     manual_clusters = np.concatenate((manual_clusters_stat, manual_clusters_moving))
+#     comparison = compare(ML_clusters, manual_clusters, COMPARE_DISTANCE_CUTOFF_PIX)
+#     return comparison
 
 
 def process_image_AF(
@@ -915,12 +915,25 @@ def process_image_AF(
     AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
     Should run smoothly and did not modify the dependent functions. 
     """
-    config=parse_config(config)
     # labels will be in a parallel directory to detections
     # e.g detections = "Detections/b/../d", labels = "Labels/b/../d"
-    label_dir = os.path.join(
-        labels_root, os.path.sep.join(detections.split(os.path.sep)[-2:])
-    )
+
+    # Ensure path normalization first 
+    detections = os.path.normpath(detections)
+    labels_root = os.path.normpath(labels_root)
+
+     # Extract the relative path after classifications root
+    rel_path = os.path.relpath(detections, start=os.path.commonpath([detections, labels_root]))
+
+    # label_dir = os.path.join(
+    #     labels_root, os.path.sep.join(detections.split(os.path.sep)[-2:])
+    # ) #AF: commented away to check smooth running of it. 
+
+    # Construct label directory correctly
+    label_dir = os.path.join(labels_root, rel_path)
+
+    print(f"Expected label directory: {label_dir}")
+
     # check if it exists
     if not os.path.exists(label_dir):
         print(f"Label directory {label_dir} does not exist, skipping image...")
@@ -1323,9 +1336,9 @@ def classifications_to_lat_long_AF(run_folder, run_config):
     all_waterholes.to_csv(os.path.join(run_folder, "all_waterholes.csv"), index=False)
 
 
-def boat_count_compare(run_folder, config):
+def waterholes_count_compare(run_folder, config):
     """
-    Column graph with each group being one image, showing number of labelled and number of detected boats next to each other
+    Column graph with each group being one image, showing number of labelled and number of detected waterhoels next to each other
 
     Args:
 
@@ -1336,8 +1349,8 @@ def boat_count_compare(run_folder, config):
 
         None
     """
-    if os.path.exists(os.path.join(run_folder, "all_boats.csv")):
-        all_data = pd.read_csv(os.path.join(run_folder, "all_boats.csv"))
+    if os.path.exists(os.path.join(run_folder, "all_waterholes.csv")):
+        all_data = pd.read_csv(os.path.join(run_folder, "all_waterholes.csv"))
     else:
         csvs = [
             os.path.join(run_folder, file)
@@ -1365,7 +1378,7 @@ def boat_count_compare(run_folder, config):
         x="filename",
         y=["manual", "ml"],
         kind="bar",
-        title="Boat Counts by Image",
+        title="Whaterholes Counts by Image",
         figsize=(20, 10),
         fontsize=20,
     )
@@ -1377,9 +1390,9 @@ def boat_count_compare(run_folder, config):
 ### Metrics Helpers
 
 
-def plot_boats(csvs: str, imgs: str, **kwargs):
+def plot_waterholes(csvs: str, imgs: str, **kwargs):
     """
-    given a directory of csvs, plot the boats on the images and save the images
+    given a directory of csvs, plot the waterholes on the images and save the images
 
     Args:
 
