@@ -1,6 +1,7 @@
 import os
 import datetime
 from PIL import Image
+import re
 
 """
 Given the training image grids, stitch them back together into one image
@@ -87,6 +88,101 @@ def stitch(dir, output_dir=None):
     image.save(output_path)
     print(f"Saved stitched image to {output_path}")
 
+
+def stitch_AF(dir, output_dir=None):
+    """
+    Stitches back together images that were segmented into smaller images.
+    Handles multiple images in the same directory, differentiating them by their name.
+    
+    Image naming format should be: 'YYYYMMDD_area_xx_yy.png',
+    where area is the name of the area of interest, xx is the row and yy is the column.
+    
+    The stitched image will be named 'YYYYMMDD_area_stitched.png'.
+    
+    Args:
+        dir (str): directory containing images to stitch
+        output_dir (str, optional): directory to save the stitched images. 
+                                   If None, saves to input_dir
+
+    Returns:
+        None
+    """
+    # If output_dir is not provided, use input_dir
+    if output_dir is None:
+        output_dir = dir
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    # Get list of files in directory
+    all_imgs = [f for f in os.listdir(dir) if f.endswith(".png") and not f.endswith("_stitched.png")]
+    
+    # Pattern to match date and area name: YYYYMMDD_area
+    pattern = r"^(\d{8}_[^_]+)"
+    
+    # Group images by prefix (date and area name)
+    image_groups = {}
+    for img in all_imgs:
+        match = re.match(pattern, img)
+        if match:
+            prefix = match.group(1)
+            if prefix not in image_groups:
+                image_groups[prefix] = []
+            image_groups[prefix].append(img)
+    
+    # Process each group of images
+    for prefix, imgs in image_groups.items():
+        # Check if stitched image already exists in output directory
+        stitched_filename = f"{prefix}_stitched.png"
+        if stitched_filename in os.listdir(output_dir):
+            print(f"Already stitched, output exists at {os.path.join(output_dir, stitched_filename)}")
+            continue
+            
+        # Extract coordinates for each image
+        coords = []
+        for img in imgs:
+            parts = img.split('_')
+            # The last two parts are row and column
+            if len(parts) >= 4:
+                try:
+                    y = int(parts[-2])  # row
+                    x = int(parts[-1].split('.')[0])  # column
+                    coords.append((img, x, y))
+                except ValueError:
+                    print(f"Skipping {img}: could not parse coordinates")
+        
+        if not coords:
+            print(f"No valid images found for {prefix}")
+            continue
+        
+        # Get the maximum x and y values
+        max_x = max([x[1] for x in coords])
+        max_y = max([x[2] for x in coords])
+        print(f"Group {prefix} - Max x: {max_x}, Max y: {max_y}")
+        
+        # Create a new image with the appropriate size
+        # Images are 416x416 with 104 pixels overlap
+        width = 416 + (max_x * (416 - 104))
+        height = 416 + (max_y * (416 - 104))
+        stitched_image = Image.new("RGB", (width, height))
+        
+        # For each image, paste it into the new image at the correct position
+        for img, x, y in coords:
+            img_path = os.path.join(dir, img)
+            try:
+                current_img = Image.open(img_path)
+                # Calculate position considering overlap
+                pos_x = x * (416 - 104)
+                pos_y = y * (416 - 104)
+                stitched_image.paste(current_img, (pos_x, pos_y))
+            except Exception as e:
+                print(f"Error processing {img_path}: {e}")
+        
+        # Save the stitched image to the output directory
+        output_path = os.path.join(output_dir, stitched_filename)
+        stitched_image.save(output_path)
+        print(f"Saved stitched image to {output_path}")
 
 if __name__ == "__main__":
     main()
