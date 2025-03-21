@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 import scipy
 import random
+import re
 
 from .classifier import cluster, process_clusters, read_classifications, pixel2latlong
 from .classifier import cluster_AF, read_classifications_AF, process_clusters_AF 
@@ -35,6 +36,8 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 import json
 import subprocess
+from . import stitch_PNGs as stitch_AF
+
 
 #Manualy change them in accordance to the desired value. Are not called in some functions so to be easier they are here...
 # STAT_DISTANCE_CUTOFF_PIX = 50
@@ -1390,7 +1393,7 @@ def waterholes_count_compare(run_folder, config):
 ### Metrics Helpers
 
 
-def plot_waterholes(csvs: str, imgs: str, **kwargs):
+def plot_boats(csvs: str, imgs: str, **kwargs):
     """
     given a directory of csvs, plot the waterholes on the images and save the images
 
@@ -1562,6 +1565,193 @@ def plot_waterholes(csvs: str, imgs: str, **kwargs):
         plt.close()
         i += 1
         print(f"Plotted {i}/{len(all_images)} images", end="\r")
+
+
+
+def plot_waterholes(csvs, imgs, **kwargs):
+    """
+    Given a directory of CSVs, plot the waterholes on the images and save the results.
+    
+    Args:
+        csvs (str): Directory containing CSVs with waterhole data.
+                    Must be of form: x, y, ml_class, manual_class
+        imgs (str): Base folder with the images (png), or a folder with subfolders with images
+        **kwargs: Additional arguments
+            outdir (str): Output directory for plotted images. If not provided, uses CSV directory
+            box_size (int): Size of box to draw around waterholes. Default is 20
+            stitch_first (bool): Whether to stitch images before plotting. Default is True
+    
+    Returns:
+        None
+
+    Comment:
+    AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
+    Should run smoothly and did not modify the dependent functions. 
+    """
+    # Set output directory
+    outdir = kwargs.get("outdir", csvs)
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+    
+    # Set box size (waterholes can vary in size)
+    box_size = kwargs.get("box_size", 20)
+    half_box = box_size // 2
+    
+    # Stitch images if needed
+    if kwargs.get("stitch_first", True):
+        print("Stitching images first...")
+        stitched_images = stitch_AF(imgs, output_dir=os.path.join(imgs, "stitched"))
+        all_images = stitched_images
+    else:
+        # Get all individual images
+        all_images = [
+            os.path.join(imgs, file) for file in os.listdir(imgs) if file.endswith(".png")
+        ]
+    
+    # Get all CSV files (excluding summary files)
+    all_csvs = [
+        os.path.join(csvs, file)
+        for file in os.listdir(csvs)
+        if file.endswith(".csv") and "summary" not in file
+    ]
+    
+    # Dictionary to map numerical classes to names
+    class_names = {
+        0: "Dry_W",
+        1: "WH_swamp",
+        2: "WH_wet",
+        3: "WH_sink",
+        4: "U"  # Unknown
+    }
+    
+    # Color mapping for different scenarios
+    color_map = {
+        "match": "g",           # Green for matches
+        "mismatch": "r",        # Red for mismatches
+        "detected_only": "b",   # Blue for detected but not labeled
+        "labeled_only": "y"     # Yellow for labeled but not detected
+    }
+    
+    # Process each CSV file
+    for i, csv_path in enumerate(all_csvs):
+        csv_name = os.path.basename(csv_path).split(".")[0]
+        print(f"Processing {csv_name} ({i+1}/{len(all_csvs)})")
+        
+        # Find corresponding image
+        matching_images = [img for img in all_images if csv_name in img]
+        if not matching_images:
+            print(f"No matching image found for {csv_name}, skipping")
+            continue
+        
+        img_path = matching_images[0]
+        
+        # Load waterhole data
+        try:
+            df = pd.read_csv(csv_path, header=0)
+        except:
+            # If header is missing, try to read without header
+            df = pd.read_csv(csv_path, header=None, names=["x", "y", "ml_class", "manual_class"])
+        
+        # Create figure and plot the image
+        fig, ax = plt.subplots(figsize=(12, 10))
+        img = plt.imread(img_path)
+        ax.imshow(img)
+        
+        # Track statistics
+        matches = 0
+        mismatches = 0
+        detected_only = 0
+        labeled_only = 0
+        
+        # Process each waterhole
+        for _, waterhole in df.iterrows():
+            x = float(waterhole["x"])
+            y = float(waterhole["y"])
+            ml_class = int(float(waterhole["ml_class"]))
+            manual_class = int(float(waterhole["manual_class"]))
+            
+            # Determine the type of match/mismatch
+            if ml_class != -1 and manual_class != -1:
+                if ml_class == manual_class:
+                    # Match between ML and manual
+                    color = color_map["match"]
+                    matches += 1
+                else:
+                    # Mismatch between ML and manual
+                    color = color_map["mismatch"]
+                    mismatches += 1
+            elif ml_class != -1 and manual_class == -1:
+                # Detected by ML but not manually labeled
+                color = color_map["detected_only"]
+                detected_only += 1
+            else:
+                # Manually labeled but not detected by ML
+                color = color_map["labeled_only"]
+                labeled_only += 1
+            
+            # Draw rectangle around waterhole
+            rect = plt.Rectangle(
+                (x - half_box, y - half_box), 
+                box_size, 
+                box_size, 
+                linewidth=1.5, 
+                edgecolor=color, 
+                facecolor="none"
+            )
+            ax.add_patch(rect)
+            
+            # Add annotation for mismatches to show the classes
+            if color == color_map["mismatch"]:
+                ml_name = class_names.get(ml_class, str(ml_class))
+                manual_name = class_names.get(manual_class, str(manual_class))
+                ax.annotate(
+                    f"ML: {ml_name}\nLabel: {manual_name}", 
+                    (x, y - half_box - 10), 
+                    color=color, 
+                    fontsize=8,
+                    ha='center'
+                )
+        
+        # Calculate accuracy
+        total_classified = matches + mismatches
+        accuracy = round(matches / max(1, total_classified), 3)
+        
+        # Add title and legend
+        plt.title(f"Waterhole Detection Results - Accuracy: {accuracy:.1%}")
+        plt.axis("off")
+        
+        # Create legend
+        legend_elements = [
+            plt.Rectangle((0, 0), 1, 1, color=color_map["match"], label=f"Match ({matches})"),
+            plt.Rectangle((0, 0), 1, 1, color=color_map["mismatch"], label=f"Mismatch ({mismatches})"),
+            plt.Rectangle((0, 0), 1, 1, color=color_map["detected_only"], label=f"Detected Only ({detected_only})"),
+            plt.Rectangle((0, 0), 1, 1, color=color_map["labeled_only"], label=f"Labeled Only ({labeled_only})"),
+        ]
+        
+        ax.legend(
+            handles=legend_elements,
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.05),
+            ncol=2,
+            fontsize=10
+        )
+        
+        # Add class information as text
+        class_info = "Class Legend:\n"
+        for class_num, class_name in class_names.items():
+            class_info += f"{class_num}: {class_name}\n"
+        
+        plt.figtext(0.02, 0.02, class_info, fontsize=8)
+        
+        # Save the figure
+        output_path = os.path.join(outdir, f"{csv_name}_waterholes.png")
+        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.close()
+        
+        print(f"Saved plot to {output_path}")
+    
+    print("All waterhole plots have been generated.")
+
 
 
 def all_mistakes(run_folder, config):
