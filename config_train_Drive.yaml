@@ -7,7 +7,7 @@ yolo_dir: C:/Users/fossatia/Documents/Waterholes_project/yolov5
 python: python
 #raw_images: C:\ML_Software\active_learning\data\downloads
 #AF: 
-raw_images: D:\Waterholes_project\counting_waterholes\training_v4\extra_tif
+raw_images: D:\Waterholes_project\counting_waterholes\training_v4\raw_images
 
 proj_root: .
 
@@ -22,7 +22,7 @@ segmented_images : D:\Waterholes_project\counting_waterholes\training_v4\output\
 segmented_labels : D:\Waterholes_project\counting_waterholes\training_v4\output\labels\train
 
 #AF:
-weights: C:/Users/fossatia/Documents/Waterholes_project/yolov5/runs/train/exp3/weights/best.pt
+weights: D:\yolo_runs\exp\weights\best.pt
 #AF: file existing but from the previous runs of Charlie 
 cache: False
 
