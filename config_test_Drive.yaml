@@ -13,7 +13,7 @@ proj_root: C:/Users/fossatia/Documents/Waterholes_project/counting_waterholes/co
 
 # Auxiliary Paths (relative to run folder, or absolute if using existing)
 # These paths either exist (and are used) or are created (and used) by the run
-pngs: pngs # Pngs for the tif files
+pngs: ./pngs # Pngs for the tif files
 raw_images: ./raw_images
 segmented_images: ./segmented_images # Segmented images 
 #AF: haven't got any folder that keeps all the segmented images. The segment function splits already the images into training and validation.

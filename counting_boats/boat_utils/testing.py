@@ -558,7 +558,7 @@ def backwards_annotation_AF(run_folder, config):
     config = parse_config(config)  # To solve the error: 'str' object has no attribute 'get'
     run_folder = os.path.normpath(run_folder)
     detection_dir = os.path.join(config["path"], config["classifications"])
-    
+    print(detection_dir)
     for root, _, files in os.walk(detection_dir):
         # Skip if json file exists
         if os.path.exists(
@@ -568,6 +568,7 @@ def backwards_annotation_AF(run_folder, config):
                 f"{os.path.basename(root)}_labelme_auto.json",
             )
         ):
+            print(root)
             continue
             
         if len(files) > 0 and files[0].endswith(".txt"):
@@ -723,6 +724,7 @@ def compare_detections_to_ground_truth(run_folder, config):
     run_folder = os.path.normpath(run_folder) #AF
     label_dir = os.path.join(config["path"], config["labels"])
     detection_dir = os.path.join(config["path"], config["classifications"])
+    print(detection_dir)
     for root, _, files in os.walk(detection_dir):
         if len(files) > 0 and files[0].endswith(".txt"):
             this_img = os.path.basename(root)
