@@ -3,8 +3,8 @@
 yolo_dir: C:/Users/fossatia/Documents/Waterholes_project/yolov5
 python: python
 # Configuration for Validation/Analysis Runs
-path:  D:/Waterholes_project/counting_waterholes/testing_v3
-weights: C:/Users/fossatia/Documents/Waterholes_project/yolov5/runs/train/exp3/weights/best.pt
+path:  D:/Waterholes_project/counting_waterholes/testing_v4
+weights: D:\yolo_runs\exp\weights\best.pt
 # weights: /Users/charlieturner/Desktop/Yolov5l.pt
 device: cuda:0
 proj_root: C:/Users/fossatia/Documents/Waterholes_project/counting_waterholes/counting_waterholes # root of project (where this file is) % base directory
