@@ -26,6 +26,8 @@ output_dir: ./results #AF: created the folder in accordance
 tif_dir: ./images/RawImages #AF: created the subfolder in accordance and adapted the path
 download_dir: ./images/downloads #AF: created the subfolder in accordance and adapted the path
 
+plot_box_size: 100 #plotting WH size of boxes. To be fine tuned. 
+
 archive_dir: ./archive_counting_waterholes #AF: Archive folder in the same OneDrive but other folder
 use_comet: False # If true, make sure comet is setup (needs env vars or a .comet.config file)
 

@@ -1,0 +1,742 @@
+def compare_detections_to_ground_truth(run_folder, config):
+    """
+    Match up labels and detections, compare them, and save the results
+
+    Args:
+
+        run_folder (str): The folder to run detection on.
+        config (dict): The configuration dictionary.
+
+    Returns:
+
+        None
+
+    """
+    config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
+    run_folder = os.path.normpath(run_folder) #AF
+    label_dir = os.path.join(config["path"], config["labels"])
+    detection_dir = os.path.join(config["path"], config["classifications"])
+    print(f"Folder directory {run_folder}")
+    print(f"Detection directory {detection_dir}")
+    print(f"Labels directory {label_dir}")
+    for root, _, files in os.walk(detection_dir):
+        if len(files) > 0 and files[0].endswith(".txt"):
+            this_img = os.path.basename(root)
+            data = process_image_AF(root, label_dir, config)
+            comparisons_to_csv(data, os.path.join(run_folder, this_img + ".csv"))
+    # create an overall file, with all boats in lat long
+    if config.get("raw_images", False):
+        classifications_to_lat_long_AF(run_folder, config)
+
+
+def process_image_AF(
+    detections,
+    labels_root,
+    config
+):
+    """
+    Compare the detections and labels for a single image
+
+    Args:
+
+        detections (str): The directory of detections for the image
+        labels_root (str): The root directory of labels
+
+    Returns:
+
+        list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]
+    
+    Comment:
+    AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
+    Should run smoothly and did not modify the dependent functions. 
+    """
+    # labels will be in a parallel directory to detections
+    # e.g detections = "Detections/b/../d", labels = "Labels/b/../d"
+
+    # Ensure path normalization first 
+    detections = os.path.normpath(detections)
+    labels_root = os.path.normpath(labels_root)
+
+     # Extract the relative path after classifications root
+    rel_path = os.path.relpath(detections, start=os.path.commonpath([detections, labels_root]))
+
+    # label_dir = os.path.join(
+    #     labels_root, os.path.sep.join(detections.split(os.path.sep)[-2:])
+    # ) #AF: commented away to check smooth running of it. 
+
+    # Construct label directory correctly
+    label_dir = os.path.join(labels_root, rel_path)
+
+    print(f"Expected label directory: {label_dir}")
+
+    # check if it exists
+    if not os.path.exists(label_dir):
+        print(f"Label directory {label_dir} does not exist, skipping image...")
+        return []
+    
+    # ML classifications
+    ML_classifications, _ = read_classifications_AF(class_folder=detections)
+    
+    # Separate classifications by class
+    ML_classifications_dry_wh = ML_classifications[ML_classifications[:, 3] == 0.0]
+    ML_classifications_wh_swamp = ML_classifications[ML_classifications[:, 3] == 1.0]
+    ML_classifications_wh_wet = ML_classifications[ML_classifications[:, 3] == 2.0]
+    ML_classifications_wh_sink = ML_classifications[ML_classifications[:, 3] == 3.0]
+    ML_classifications_u = ML_classifications[ML_classifications[:, 3] == 4.0]
+    
+    # Define distance cutoffs for each class (adjust these as needed)
+    STAT_DISTANCE_CUTOFF_PIX_DRY = config["STAT_DISTANCE_CUTOFF_PIX_DRY"]
+    STAT_DISTANCE_CUTOFF_PIX_WET = config["STAT_DISTANCE_CUTOFF_PIX_WET"]
+    STAT_DISTANCE_CUTOFF_PIX_SWAMP = config["STAT_DISTANCE_CUTOFF_PIX_SWAMP"]
+    STAT_DISTANCE_CUTOFF_PIX_SINK = config["STAT_DISTANCE_CUTOFF_PIX_SINK"]
+    STAT_DISTANCE_CUTOFF_PIX_U = config["STAT_DISTANCE_CUTOFF_PIX_U"]
+    
+    # cluster each class separately
+    ML_clusters_dry_wh = cluster_AF(ML_classifications_dry_wh, STAT_DISTANCE_CUTOFF_PIX_DRY)
+    ML_clusters_wh_swamp = cluster_AF(ML_classifications_wh_swamp, STAT_DISTANCE_CUTOFF_PIX_SWAMP)
+    ML_clusters_wh_wet = cluster_AF(ML_classifications_wh_wet, STAT_DISTANCE_CUTOFF_PIX_WET)
+    ML_clusters_wh_sink = cluster_AF(ML_classifications_wh_sink, STAT_DISTANCE_CUTOFF_PIX_SINK)
+    ML_clusters_u = cluster_AF(ML_classifications_u, STAT_DISTANCE_CUTOFF_PIX_U)
+    
+    # save clusters as csv for later analysis
+    if not os.path.exists(os.path.join(detections, "clusters")):
+        os.makedirs(os.path.join(detections, "clusters"))
+    
+    # Save each class clusters separately
+    dry_wh_outfile = os.path.join(detections, "clusters", "dry_wh_clusters.csv")
+    wh_swamp_outfile = os.path.join(detections, "clusters", "wh_swamp_clusters.csv")
+    wh_wet_outfile = os.path.join(detections, "clusters", "wh_wet_clusters.csv")
+    wh_sink_outfile = os.path.join(detections, "clusters", "wh_sink_clusters.csv")
+    u_outfile = os.path.join(detections, "clusters", "u_clusters.csv")
+    
+    with open(dry_wh_outfile, "w") as f:
+        for c in ML_clusters_dry_wh:
+            f.write(",".join([str(i) for i in c]) + "\n")
+    with open(wh_swamp_outfile, "w") as f:
+        for c in ML_clusters_wh_swamp:
+            f.write(",".join([str(i) for i in c]) + "\n")
+    with open(wh_wet_outfile, "w") as f:
+        for c in ML_clusters_wh_wet:
+            f.write(",".join([str(i) for i in c]) + "\n")
+    with open(wh_sink_outfile, "w") as f:
+        for c in ML_clusters_wh_sink:
+            f.write(",".join([str(i) for i in c]) + "\n")
+    with open(u_outfile, "w") as f:
+        for c in ML_clusters_u:
+            f.write(",".join([str(i) for i in c]) + "\n")
+
+    # manual annotations
+    manual_annotations, _ = read_classifications_AF(class_folder=label_dir)
+    
+    # Handle empty manual annotations
+    if len(manual_annotations) == 0:
+        manual_annotations_dry_wh = np.empty((0, 7))
+        manual_annotations_wh_swamp = np.empty((0, 7))
+        manual_annotations_wh_wet = np.empty((0, 7))
+        manual_annotations_wh_sink = np.empty((0, 7))
+        manual_annotations_u = np.empty((0, 7))
+    else:
+        # Separate manual annotations by class
+        manual_annotations_dry_wh = manual_annotations[manual_annotations[:, 3] == 0.0]
+        manual_annotations_wh_swamp = manual_annotations[manual_annotations[:, 3] == 1.0]
+        manual_annotations_wh_wet = manual_annotations[manual_annotations[:, 3] == 2.0]
+        manual_annotations_wh_sink = manual_annotations[manual_annotations[:, 3] == 3.0]
+        manual_annotations_u = manual_annotations[manual_annotations[:, 3] == 4.0]
+    
+    # cluster manual annotations
+    manual_clusters_dry_wh = cluster_AF(manual_annotations_dry_wh, STAT_DISTANCE_CUTOFF_PIX_DRY)
+    manual_clusters_wh_swamp = cluster_AF(manual_annotations_wh_swamp, STAT_DISTANCE_CUTOFF_PIX_SWAMP)
+    manual_clusters_wh_wet = cluster_AF(manual_annotations_wh_wet, STAT_DISTANCE_CUTOFF_PIX_WET)
+    manual_clusters_wh_sink = cluster_AF(manual_annotations_wh_sink, STAT_DISTANCE_CUTOFF_PIX_SINK)
+    manual_clusters_u = cluster_AF(manual_annotations_u, STAT_DISTANCE_CUTOFF_PIX_U)
+
+    # process all clusters
+    ML_clusters_dry_wh = process_clusters_AF(ML_clusters_dry_wh)
+    ML_clusters_wh_swamp = process_clusters_AF(ML_clusters_wh_swamp)
+    ML_clusters_wh_wet = process_clusters_AF(ML_clusters_wh_wet)
+    ML_clusters_wh_sink = process_clusters_AF(ML_clusters_wh_sink)
+    ML_clusters_u = process_clusters_AF(ML_clusters_u)
+    
+    manual_clusters_dry_wh = process_clusters_AF(manual_clusters_dry_wh)
+    manual_clusters_wh_swamp = process_clusters_AF(manual_clusters_wh_swamp)
+    manual_clusters_wh_wet = process_clusters_AF(manual_clusters_wh_wet)
+    manual_clusters_wh_sink = process_clusters_AF(manual_clusters_wh_sink)
+    manual_clusters_u = process_clusters_AF(manual_clusters_u)
+
+    # Combine all ML clusters and manual clusters
+    ML_clusters = np.concatenate(
+        (
+            ML_clusters_dry_wh, 
+            ML_clusters_wh_swamp, 
+            ML_clusters_wh_wet, 
+            ML_clusters_wh_sink, 
+            ML_clusters_u
+        ), 
+        axis=0
+    ) if any(len(arr) > 0 for arr in [ML_clusters_dry_wh, ML_clusters_wh_swamp, ML_clusters_wh_wet, ML_clusters_wh_sink, ML_clusters_u]) else np.empty((0, 6))
+    
+    manual_clusters = np.concatenate(
+        (
+            manual_clusters_dry_wh, 
+            manual_clusters_wh_swamp, 
+            manual_clusters_wh_wet, 
+            manual_clusters_wh_sink, 
+            manual_clusters_u
+        ), 
+        axis=0
+    ) if any(len(arr) > 0 for arr in [manual_clusters_dry_wh, manual_clusters_wh_swamp, manual_clusters_wh_wet, manual_clusters_wh_sink, manual_clusters_u]) else np.empty((0, 6))
+    
+    # Compare ML and manual clusters
+    COMPARE_DISTANCE_CUTOFF_PIX = config["COMPARE_DISTANCE_CUTOFF_PIX"]
+    comparison = compare(ML_clusters, manual_clusters, COMPARE_DISTANCE_CUTOFF_PIX)
+    return comparison
+
+def read_classifications_AF(
+    yolo_dir=None,
+    class_folder=None,
+    confidence_threshold: float = 0.5,
+    delete_folder=False,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Read classifications from either the given directory, or the latest detection from yolo.
+    Classifications are per-image, this function reads all files and returns a single list.
+
+    Args:
+        yolo_dir: The directory where yolo is installed, used to find the latest detection.
+        class_folder: The folder to read classifications from. If None, reads from the latest detection in yolo.
+        confidence_threshold = 0.5: The confidence threshold to use when separating low confidence classifications.
+        delete_folder: Whether to delete the classification folder after reading.
+
+    Returns:
+        tuple[classifications, low_conf]: where each is in the form (x, y, conf, class, w, h)
+    """
+    latest_exp = None
+    if class_folder is None:
+        assert (
+            yolo_dir is not None
+        ), "Must provide yolo_dir if class_folder is not provided"
+        # Classifications are stored in the CLASS_PATH directory in the latest exp folder
+        exps = [
+            int(f.split("exp")[1]) if f != "exp" else 0
+            for f in os.listdir(os.path.join(yolo_dir, "runs", "detect"))
+            if "exp" in f
+        ]
+        latest_exp = max(exps) if max(exps) != 0 else ""
+        classification_path = os.path.join(
+            os.path.join(yolo_dir, "runs", "detect"), f"exp{latest_exp}", "labels"
+        )
+    else:
+        classification_path = os.path.join(class_folder)
+    all_cs = [
+        parse_classifications_AF(os.path.join(classification_path, file))
+        for file in os.listdir(classification_path)
+        if not "DS" in file and os.path.isfile(os.path.join(classification_path, file))
+    ]
+    # remove empty arrays
+    all_cs = [cs for cs in all_cs if cs.shape[0] != 0]
+    if len(all_cs) == 0:
+        return np.array([]), np.array([])
+    # flatten list of lists
+    all_cs = np.concatenate(all_cs)
+    # remove low confidence
+    classifications, low_confidence = remove_low_confidence_AF(
+        all_cs, confidence_threshold
+    )
+    # remove the classification path
+    if delete_folder and latest_exp is not None and yolo_dir is not None:
+        folder = os.path.join(yolo_dir, "runs", "detect", f"exp{latest_exp}")
+        remove(folder)
+    return classifications, low_confidence
+
+def parse_classifications_AF(file: str) -> np.ndarray:
+    """
+    parse a single text file of classifications into the desired format
+
+    Args:
+        file: path to text file with classifications in form:
+        class, x, y, w, h, conf
+
+    Returns:
+        array of classifications from the file in the form:
+        x, y, confidence, class, width, height
+    """
+    across, down, lines = classification_file_info_AF(file)
+    if len(lines) == 0:
+        return np.array([])
+
+    # split lines into classifications
+    classifications = np.array([line.split(" ") for line in lines])
+    # if no confidence, add column of 1s (for manual label files)
+    if classifications.shape[1] == 5:
+        classifications = np.c_[classifications, np.ones(classifications.shape[0])]
+    # move columns around
+    # from: class, x, y, w, h, conf
+    # to:   x, y, conf, class, w, h
+    classifications = np.c_[
+        classifications[:, 1],  # xMid
+        classifications[:, 2],  # yMid
+        classifications[:, 5],  # Confidence
+        classifications[:, 0],  # Class
+        classifications[:, 3],  # xWid
+        classifications[:, 4],
+    ]  # yWid
+    # convert to float
+    classifications = classifications.astype(np.float64)
+    # adjust x and y for the full image
+    classifications[:, 0] = classifications[:, 0] * TILE_SIZE + across
+    classifications[:, 1] = classifications[:, 1] * TILE_SIZE + down
+    # adjust width and height for the full image
+    classifications[:, 4] = classifications[:, 4] * TILE_SIZE
+    classifications[:, 5] = classifications[:, 5] * TILE_SIZE
+    return classifications
+
+
+def classification_file_info_AF(file: str) -> tuple[int, int, list[str]]:
+    """
+    Get information and data from a small png file
+    The file-name is in the format: <.*>_<row>_<col>.txt
+
+    Args:
+        file: The file path to get information from
+
+    Returns:
+        The across, down, and data from the file
+    """
+    fname = os.path.basename(file)
+    fname = fname.split(".txt")[0].split("_")
+    row = int(fname[-2])
+    col = int(fname[-1])
+    across = col * STRIDE
+    down = row * STRIDE
+    with open(file) as f:
+        lines = [line.rstrip() for line in f]
+    return across, down, lines
+
+
+def remove_low_confidence_AF(
+    classifications: np.ndarray, confidence_threshold: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Remove all classifications with confidence < confidence_threshold
+
+    Args:
+        classifications: The classifications to remove low confidence from. Confidence is the third column.
+        confidence_threshold: The threshold to remove below
+
+    Returns:
+        The same classifications as a tuple, with the first element being the high confidence classifications
+    """
+    low_confidence = classifications[classifications[:, 2] < confidence_threshold]
+    classifications = classifications[classifications[:, 2] >= confidence_threshold]
+    return classifications, low_confidence
+
+
+def cluster_AF(classifications: np.ndarray, cutoff: float) -> np.ndarray:
+    """
+    Cluster the given classifications using the given cutoff.
+
+    Args:
+        classifications: The classifications to cluster, in the form x, y, confidence, class, width, height
+        cutoff: The cutoff to use for clustering
+
+    Returns:
+        The classifications with an additional column for the cluster number
+        Columns: x, y, confidence, class, width, height, cluster
+    """
+    if classifications.shape[0] < 2:
+        # add cluster = 1 to point
+        if classifications.shape[0] == 1:
+            classifications = np.array([np.append(classifications[0], 1)])
+        return classifications
+    points = classifications[:, [0, 1]].astype(np.float64)
+    distances = scipy.spatial.distance.pdist(points, metric="euclidean")
+    clustering = scipy.cluster.hierarchy.linkage(distances, "average")
+    clusters = scipy.cluster.hierarchy.fcluster(
+        clustering, cutoff, criterion="distance"
+    )
+    points_with_cluster = np.c_[classifications, clusters]
+    return points_with_cluster
+
+
+def process_clusters_AF(classifications_with_clusters: np.ndarray) -> np.ndarray:
+    """
+    Process the given classifications with clusters. Condenses each cluster into a single point.
+
+    Args:
+        classifications_with_clusters: The classifications as x, y, confidence, class, width, height, cluster
+
+    Return:
+        An array of the condensed classifications in the form: x, y, confidence, class, width, height
+    """
+    waterholes = np.array([], dtype=np.float64).reshape(0, 6)
+    if len(classifications_with_clusters) == 0:
+        return waterholes
+    waterholes = [
+        condense_AF(
+            classifications_with_clusters[classifications_with_clusters[:, -1] == i]
+        )
+        for i in np.unique(classifications_with_clusters[:, -1])
+    ]
+    return np.asarray(waterholes)
+
+
+def condense_AF(cluster: np.ndarray) -> np.ndarray:
+    """
+    Given a cluster, condense it into a single point.
+    Uses the mean of x, y, w, and h - the most common class, and the maximum confidence.
+
+    Args:
+        cluster: The cluster to condense
+
+    Returns:
+        The condensed cluster in the form x, y, confidence, class, width, height
+    """
+    # remove cluster number
+    thisWaterhole = np.asarray(cluster)[:, [0, 1, 2, 3, 4, 5]].astype(np.float64)
+    thisWaterholeMean = np.mean(thisWaterhole, axis=0)
+    # using maximum confidence as the cluster confidence
+    maxVals = np.max(thisWaterhole, axis=0)
+    thisWaterholeMean[2] = maxVals[2]
+    # use the most common class
+    thisWaterholeMean[3] = scipy.stats.mode(thisWaterhole[:, 3])[0]
+    if cluster.shape[1] == 8:
+        files = np.unique(np.asarray(cluster)[:, 6])
+        return np.append(thisWaterholeMean.astype(str), " ".join(files))
+    return thisWaterholeMean
+
+
+def compare(ml: np.ndarray, manual: np.ndarray, cutoff):
+    """
+    given two lists of clusters, compare them (cluster them and note the results)
+    e.g if ml has the point (52, 101), and manual has (51.8, 101.2), they should be clustered together
+    , and this boat should be noted as being in both sets
+
+    Args:
+
+        ml: list of clusters in form [x, y, confidence, class, width, height, filename]
+        manual: list of clusters in form [x, y, confidence, class, width, height, filename]
+
+    Returns:
+
+        list of clusters in form [x, y, ml_class, manual_class]
+
+    Comment: 
+    AF: Should be able to work without modification and handle more label classes. 
+    """
+    all_clusters, all_points = combine_detections_and_labels(ml, manual)
+    if len(all_points) < 2:
+        # if its 1, still need to pretend cluster
+        if len(all_points) == 1:
+            list(all_points[0]).append(0)
+            clusters = [0]
+            points_with_cluster = np.c_[
+                all_points, np.asarray(all_clusters)[:, 2:], clusters
+            ]
+        else:
+            return []
+    else:
+        # cluster
+        distances = scipy.spatial.distance.pdist(all_points, metric="euclidean")
+        clustering = scipy.cluster.hierarchy.linkage(distances, "average")
+        clusters = scipy.cluster.hierarchy.fcluster(
+            clustering, cutoff, criterion="distance"
+        )
+        points_with_cluster = np.c_[
+            all_points, np.asarray(all_clusters)[:, 2:], clusters
+        ]
+    # for each cluster, note if it is in ml, manual, or both
+    results = []
+    for cluster in np.unique(clusters):
+        res = [0.0, 0.0, -1, -1]  # x, y, ml class, manual class 
+        #AF: The -1 value is used as a default to indicate "no class assigned". This should work but could modify to use a different default value. 
+        #However, since -1 is already separate from WH class values (0-4), it should work correctly as is.
+        points = points_with_cluster[points_with_cluster[:, -1] == str(cluster)]
+        if len(points) == 0:
+            print("No points in cluster")
+            continue
+        # 6th is the source, 3 is the class
+        ml_cls = []
+        manual_cls = []
+        x = 0
+        y = 0
+        for point in points:
+            x += float(point[0])
+            y += float(point[1])
+            if point[6] == "ml":
+                ml_cls.append(int(float(point[3])))
+            elif point[6] == "manual":
+                manual_cls.append(int(float(point[3])))
+        res[0] = round(x / len(points), 3)
+        res[1] = round(y / len(points), 3)
+        # class should be most common class
+        if len(ml_cls) > 0:
+            res[2] = max(set(ml_cls), key=ml_cls.count)
+        if len(manual_cls) > 0:
+            res[3] = max(set(manual_cls), key=manual_cls.count)
+        results.append(res)
+    return results
+
+
+def combine_detections_and_labels(ml, manual):
+    """
+    Combine the detections and labels into one list of annotated clusters for comparison
+
+    Args:
+
+        ml: list of clusters in form [x, y, confidence, class, width, height, filename]
+        manual: list of clusters in form [x, y, confidence, class, width, height, filename]
+
+    Returns:
+
+        list of clusters in form [x, y, confidence, class, width, height, filename, source]
+    """
+    # add "ml" to the end of each ml cluster
+    if len(ml) > 0:
+        ml = np.c_[ml, np.full(len(ml), "ml")]
+    # add "manual" to the end of each manual cluster
+    if len(manual) > 0:
+        manual = np.c_[manual, np.full(len(manual), "manual")]
+    # one of ml or manual could be empty so we need to check
+    if len(ml) == 0:
+        all = manual
+    elif len(manual) == 0:
+        all = ml
+    else:
+        all = np.concatenate((ml, manual))
+    points_ml = ml[:, :2] if len(ml) > 0 else np.empty((0, 2))
+    points_man = manual[:, :2] if len(manual) > 0 else np.empty((0, 2))
+    # join together
+    all_points = np.concatenate((points_ml, points_man)).astype(float)
+    return all, all_points
+
+
+
+def comparisons_to_csv(comparisons, filename):
+    """
+    Write the comparisons to a csv file
+
+    Args:
+
+        comparisons: list of clusters in form [x, y, ml_class, manual_class]
+        filename: the name of the file to write to
+
+    Returns:
+
+        None
+
+    """
+    df = pd.DataFrame(comparisons, columns=["x", "y", "ml_class", "manual_class"])
+    df.to_csv(filename, index=False)
+
+
+def classifications_to_lat_long_AF(run_folder, run_config):
+    """
+    Convert x and y of image classifications to lat/long and saves csv for waterhole classifications
+
+    Args:
+
+        run_folder (str): The folder to run detection on.
+        run_config (dict): The configuration dictionary.
+
+    Returns:
+
+        None
+    """
+    # Initialise dataframe
+    all_waterholes = pd.DataFrame(
+        columns=[
+            "date",
+            "latitude",
+            "longitude",
+            "ml_class",
+            "manual_class",
+            "agree",
+            "filename",
+            "class_name"  # Added to store the class names
+        ]
+    )
+    
+    # Class dictionary for mapping numeric classes to names
+    class_dict = {
+        0: "Dry_WH",
+        1: "WH_swamp",
+        2: "WH_wet", 
+        3: "WH_sink",
+        4: "U"
+    }
+    
+    # Get all the images that are relevant
+    # Involves reading all of the output files from the detections function
+    # raw_images = run_config["raw_images"] AF
+    raw_images = os.path.join(run_config["path"], run_config["raw_images"]) #AF
+    print(f"raw_images folder {raw_images}")
+    for file in os.listdir(run_folder):
+        if not file.endswith(".csv"):
+            continue
+        # try to parse the date, if not, skip
+        date = file.split("_")[0]
+        if len(date) != 8:
+            print(f"Could not parse date from {file}")
+            continue
+        date = f"{date[:4]}-{date[4:6]}-{date[6:]}"
+        image_name = file.split(".")[0]
+        waterholes = pd.read_csv(os.path.join(run_folder, file)).values.tolist()
+        # remove index
+        if len(waterholes) == 0:
+            continue
+        im_name = image_name.split(".")[0] + ".tif"
+        image = [
+            os.path.join(root, i)
+            for root, dirs, files in os.walk(raw_images)
+            for i in files
+            if i == im_name
+        ]
+        if len(image) == 0:
+            print(f"Could not find image {im_name} for {file}")
+            continue
+        image = image[0]
+        waterholes = pixel2latlong(waterholes, image)
+        # append the waterholes to the 'all_waterholes' dataframe
+        waterholes = pd.DataFrame(
+            waterholes, columns=["longitude", "latitude", "ml_class", "manual_class"]
+        )
+        # Add class name based on numeric class
+        waterholes["class_name"] = waterholes["ml_class"].apply(lambda x: class_dict.get(int(x), "Unknown"))
+        waterholes["date"] = date
+        waterholes["filename"] = image_name
+        # Agree: True if ml_class matches manual_class, False otherwise
+        waterholes["agree"] = waterholes["ml_class"] == waterholes["manual_class"]
+        
+        all_waterholes = pd.concat([all_waterholes, waterholes]) if all_waterholes.size != 0 else waterholes
+    
+    if all_waterholes.size == 0:
+        return
+    
+    all_waterholes.to_csv(os.path.join(run_folder, "all_waterholes.csv"), index=False)
+
+
+
+def pixel2latlong(classifications, tif) -> np.ndarray:
+    """
+    Convert the given classifications from pixel coordinates to lat/long.
+
+    Args:
+        classifications: The classifications to convert, must have x, y as first two columns.
+        tif: The tif file these classifications came from.
+
+    Returns:
+        The same classifications with x, y converted to lat/long
+    """
+    leftPad, _, topPad, _ = ics.get_required_padding(tif, TILE_SIZE, STRIDE)
+    crs = ics.get_crs(tif)
+    # get the crs from the tif, e.g EPSG:4326
+    for c in classifications:
+        x = int(c[0]) - leftPad
+        y = int(c[1]) - topPad
+        xp, yp = ics.pixel2coord(x, y, tif)
+        c[0], c[1] = ics.coord2latlong(xp, yp, crs)
+    return classifications
+
+
+def get_required_padding(filepath, tilesize=416, stride=104) -> tuple[int, int, int, int]:
+    """
+    Determines how much padding is required on each edge of an image so that the image lengths and widths will be
+    divisible by 416 and that each part of the images will be seen by the neural networm 16 times in either training
+    or classification.
+
+    Args:
+
+        filepath: The path of the file to evaluate.
+        tilesize: The size of the sub-images that will be created from this image.
+        stride: The amount of overlap that the sub-images will have.
+
+    Returns:
+
+        (L, R, T, B) - A tuple containing the padding required on the left (L), right (R), top (T), and bottom (b)
+            of the images to make it suitable for use in the neural network.
+    """
+    ds = gdal.Open(filepath)
+
+    metadata = gdal.Info(ds)
+    ds = None
+    metadata_components = metadata.split("\n")
+
+    # Get new width and height in preparation of paddingthe image
+    size = filter(lambda x: "Size is" in x, metadata_components)
+    if not size:
+        print(metadata)
+        raise Exception("Size is not in the metadata")
+    size = list(size)[0]
+    height = int(size.split(",")[1])
+    width = int(size.split(",")[0].split(" ")[-1])
+
+    # Calculate individual padding for each edge
+    # we have to go at least (tilesize/stride) * stride pixels in each direction
+    # in the case of 416/104, this is 4*104 = 416 padding. This means the first tile is all padding but the rest will be seen by the network properly
+    min_pad = (tilesize - stride)
+
+    leftPad = min_pad
+    topPad = min_pad
+    bottomPad = min_pad
+    rightPad = min_pad
+
+    min_h = height + 2 * min_pad
+    min_w = width + 2 * min_pad
+    # ensure the image will be divisible by the tile size and stride
+    if min_h % tilesize != 0:
+        topPad += tilesize - (min_h % tilesize)
+    if min_w % tilesize != 0:
+        leftPad += tilesize - (min_w % tilesize)
+    
+    # ensure integer padding
+    leftPad = int(leftPad)
+    rightPad = int(rightPad)
+    topPad = int(topPad)
+    bottomPad = int(bottomPad)
+
+
+    return leftPad, rightPad, topPad, bottomPad
+
+
+
+def pixel2coord(x: int, y: int, original_image_path: str) -> tuple[float, float]:
+    """
+        Returns global coordinates to pixel center using base-0 raster index
+
+        Args:
+
+            x: The x coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
+            y: The y coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
+            original_image_path: The path of the file to evaluate - a .tif files should be located here. This file will
+                also need geospatial metadata. Images obtained from Planet have the required metadata.
+    e
+        Returns:
+
+            (xp, yp) - A tuple containing the global coordinates of the provided pixel coordinates.
+    """
+    ds = gdal.Open(original_image_path)
+    c, a, b, f, d, e = ds.GetGeoTransform()
+    xp = a * x + b * y + a * 0.5 + b * 0.5 + c
+    yp = d * x + e * y + d * 0.5 + e * 0.5 + f
+    return (xp, yp)
+
+
+def coord2latlong(x: float, y: float, crs: int = 32756) -> tuple[float, float]:
+    """
+    Converts global coordinates to latitude/longitude coordinates
+
+    Args:
+
+        x: The x coordinate in a pair of global coordinates.
+        y: The y coordinate in a pair of global coordinates.
+        crs: The coordinate reference system of the global coordinates.
+
+    Returns:
+
+        (long, lat) - A tuple containing the longitude and latitude at the provided global coordinates.
+    """
+    proj = pyproj.Transformer.from_crs(crs, 4326, always_xy=True)
+    long, lat = proj.transform(x, y)
+    return long, lat
+
+

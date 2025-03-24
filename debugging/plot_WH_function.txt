@@ -1,0 +1,348 @@
+from counting_boats.boat_utils.stitch_PNGs import stitch_AF
+import pandas as pd
+import re
+from PIL import Image
+
+
+def plot_waterholes(config_path, config):
+    """
+    Given a directory of CSVs, plot the waterholes on the images and save the results.
+    
+    Args:
+        csvs (str): Directory containing CSVs with waterhole data.
+                    Must be of form: x, y, ml_class, manual_class
+        imgs (str): Base folder with the images (png), or a folder with subfolders with images
+        **kwargs: Additional arguments
+            outdir (str): Output directory for plotted images. If not provided, uses CSV directory
+            box_size (int): Size of box to draw around waterholes. Default is 20
+            stitch_first (bool): Whether to stitch images before plotting. Default is True
+    
+    Returns:
+        None
+
+    Comment:
+    AF: Modified the above function to plot some waterholes. 
+    """
+    #Load config file:
+    config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
+
+    # Set output directory
+    outdir = os.path.join(config["path"], config["plots"])
+    outdir = os.path.normpath(outdir)
+    print(f'Using output directory: {outdir}')
+    # if not os.path.exists(outdir):
+    #     os.makedirs(outdir)
+    
+    #get images as pngs path: 
+    imgs = os.path.join(config["path"], config["segmented_images"])
+    imgs = os.path.normpath(imgs)
+    print(f"Using segmented PNG directory: {imgs}")
+
+    # Set box size (waterholes can vary in size)
+    box_size = config.get("plot_box_size", 20)
+    print(f'Using box size to plot of dimension: {box_size}')
+    half_box = box_size // 2
+    
+    # Stitch images if needed
+    if config.get("stitch_first", True):
+        print("Stitching images first...")
+        stitched_images = stitch_AF(imgs, outdir)
+        all_images = stitched_images
+    else:
+        # Get all individual images
+        all_images = [
+            os.path.join(imgs, file) for file in os.listdir(imgs) if file.endswith(".png")
+        ]
+    print(f'Images called: {all_images}')
+    # Get all CSV files (excluding summary files)
+    all_csvs = [
+        os.path.normpath(config_path)
+        for file in os.listdir(config_path)
+        if file.endswith(".csv") and "agree" not in file
+    ]
+    print(f'CSVs called: {all_csvs}')
+
+    # Dictionary to map numerical classes to names
+    class_names = {
+        0: "Dry_W",
+        1: "WH_swamp",
+        2: "WH_wet",
+        3: "WH_sink",
+        4: "U"  # Unknown
+    }
+    
+    # Color mapping for different scenarios
+    color_map = {
+        "match": "g",           # Green for matches
+        "mismatch": "r",        # Red for mismatches
+        "detected_only": "b",   # Blue for detected but not labeled
+        "labeled_only": "y"     # Yellow for labeled but not detected
+    }
+    
+    # Process each CSV file
+    for i, csv_path in enumerate(all_csvs):
+        csv_name = os.path.basename(csv_path).split(".")[0]
+        print(f"Processing {csv_name} ({i+1}/{len(all_csvs)})")
+        
+        # Find corresponding image
+        matching_images = [img for img in all_images if csv_name in img]
+        if not matching_images:
+            print(f"No matching image found for {csv_name}, skipping")
+            continue
+        
+        img_path = matching_images[0]
+        
+        # Load waterhole data
+        try:
+            df = pd.read_csv(csv_path, header=0)
+        except:
+            # If header is missing, try to read without header
+            df = pd.read_csv(csv_path, header=None, names=["x", "y", "ml_class", "manual_class"])
+        
+        # Create figure and plot the image
+        fig, ax = plt.subplots(figsize=(12, 10))
+        img = plt.imread(img_path)
+        ax.imshow(img)
+        
+        # Track statistics
+        matches = 0
+        mismatches = 0
+        detected_only = 0
+        labeled_only = 0
+        
+        # Process each waterhole
+        for _, waterhole in df.iterrows():
+            x = float(waterhole["x"])
+            y = float(waterhole["y"])
+            ml_class = int(float(waterhole["ml_class"]))
+            manual_class = int(float(waterhole["manual_class"]))
+            
+            # Determine the type of match/mismatch
+            if ml_class != -1 and manual_class != -1:
+                if ml_class == manual_class:
+                    # Match between ML and manual
+                    color = color_map["match"]
+                    matches += 1
+                else:
+                    # Mismatch between ML and manual
+                    color = color_map["mismatch"]
+                    mismatches += 1
+            elif ml_class != -1 and manual_class == -1:
+                # Detected by ML but not manually labeled
+                color = color_map["detected_only"]
+                detected_only += 1
+            else:
+                # Manually labeled but not detected by ML
+                color = color_map["labeled_only"]
+                labeled_only += 1
+            
+            # Draw rectangle around waterhole
+            rect = plt.Rectangle(
+                (x - half_box, y - half_box), 
+                box_size, 
+                box_size, 
+                linewidth=1.5, 
+                edgecolor=color, 
+                facecolor="none"
+            )
+            ax.add_patch(rect)
+            
+            # Add annotation for mismatches to show the classes
+            if color == color_map["mismatch"]:
+                ml_name = class_names.get(ml_class, str(ml_class))
+                manual_name = class_names.get(manual_class, str(manual_class))
+                ax.annotate(
+                    f"ML: {ml_name}\nLabel: {manual_name}", 
+                    (x, y - half_box - 10), 
+                    color=color, 
+                    fontsize=8,
+                    ha='center'
+                )
+        
+        # Calculate accuracy
+        total_classified = matches + mismatches
+        accuracy = round(matches / max(1, total_classified), 3)
+        
+        # Add title and legend
+        plt.title(f"Waterhole Detection Results - Accuracy: {accuracy:.1%}")
+        plt.axis("off")
+        
+        # Create legend
+        legend_elements = [
+            plt.Rectangle((0, 0), 1, 1, color=color_map["match"], label=f"Match ({matches})"),
+            plt.Rectangle((0, 0), 1, 1, color=color_map["mismatch"], label=f"Mismatch ({mismatches})"),
+            plt.Rectangle((0, 0), 1, 1, color=color_map["detected_only"], label=f"Detected Only ({detected_only})"),
+            plt.Rectangle((0, 0), 1, 1, color=color_map["labeled_only"], label=f"Labeled Only ({labeled_only})"),
+        ]
+        
+        ax.legend(
+            handles=legend_elements,
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.05),
+            ncol=2,
+            fontsize=10
+        )
+        
+        # Add class information as text
+        class_info = "Class Legend:\n"
+        for class_num, class_name in class_names.items():
+            class_info += f"{class_num}: {class_name}\n"
+        
+        plt.figtext(0.02, 0.02, class_info, fontsize=8)
+        
+        # Save the figure
+        output_path = os.path.join(outdir, f"{csv_name}_waterholes.png")
+        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.close()
+        
+        print(f"Saved plot to {output_path}")
+    
+    print("All waterhole plots have been generated.")
+
+
+def stitch_AF(dir, output_dir=None):
+    """
+    for each png in the directory, pull out the x, y coords
+    images have names like imagessdfasdf_x_y.png
+    They are all 416x416, and overlap 104 pixels.
+    need to stich them back together into one image
+
+    Args:
+        dir (str): directory containing images to stitch
+        output_dir (str, optional): directory to save the stitched image. 
+                                   If None, saves to input_dir
+
+    Returns:
+        None
+
+    Comment: 
+    AF: modified to give an output directory of my choice. 
+    """
+    # If output_dir is not provided, use input_dir
+    if output_dir is None:
+        output_dir = dir
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    # Check if stitched image already exists in output directory
+    if "stitched.png" in os.listdir(output_dir):
+        print(f"Already stitched, output exists at {os.path.join(output_dir, 'stitched.png')}")
+        return
+        
+    # get list of files in directory
+    imgs = os.listdir(dir)
+    imgs = filter(lambda x: x.endswith(".png"), imgs)
+    
+    # for each file, get the x and y coords
+    coords = [
+        (img, int(img.split("_")[-1].split(".")[0]), int(img.split("_")[-2]))
+        for img in imgs
+        if img != "stitched.png"
+    ]
+    
+    # get the maximum x and y values
+    max_x = max([x[1] for x in coords])
+    max_y = max([x[2] for x in coords])
+    print("Max x: {}, Max y: {}".format(max_x, max_y))
+    
+    # we want to use every 4th of each from 0-max_x and 0-max_y
+    image = Image.new("RGB", (104 * (max_x + 1), 104 * (max_y + 1)))
+    
+    # for each image, paste it into the new image
+    [
+        image.paste(Image.open(os.path.join(dir, img)), (x * 104, y * 104))
+        for img, x, y in coords
+    ]
+    
+    # Save the stitched image to the output directory
+    output_path = os.path.join(output_dir, "stitched.png")
+    image.save(output_path)
+    print(f"Saved stitched image to {output_path}")
+
+
+
+Yaml file content: 
+# Validation run with Best weights from TrainFinalandOld
+
+yolo_dir: C:/Users/fossatia/Documents/Waterholes_project/yolov5
+python: python
+# Configuration for Validation/Analysis Runs
+path:  D:/Waterholes_project/counting_waterholes/testing_v4
+weights: D:\yolo_runs\exp\weights\best.pt
+# weights: /Users/charlieturner/Desktop/Yolov5l.pt
+device: cuda:0
+proj_root: C:/Users/fossatia/Documents/Waterholes_project/counting_waterholes/counting_waterholes # root of project (where this file is) % base directory
+
+# raw_images: C:\ML_Software\active_learning\data\downloads # Folders as downloaded from Planet (extracted zips)
+
+# Auxiliary Paths (relative to run folder, or absolute if using existing)
+# These paths either exist (and are used) or are created (and used) by the run
+pngs: ./pngs # Pngs for the tif files
+raw_images: ./raw_images
+segmented_images: ./segmented_images # Segmented images 
+#AF: haven't got any folder that keeps all the segmented images. The segment function splits already the images into training and validation.
+#AF: might need to pull them back? Or use the training folder only?
+labels: ./labels # Labels for the images
+classifications: ./classifications # Classifications for the images #AF: classification? Meaning the json file?
+
+plots: ./plots
+output_dir: ./results #AF: created the folder in accordance
+tif_dir: ./images/RawImages #AF: created the subfolder in accordance and adapted the path
+download_dir: ./images/downloads #AF: created the subfolder in accordance and adapted the path
+
+plot_box_size: 20 #plotting WH size of boxes. To be fine tuned. 
+
+archive_dir: ./archive_counting_waterholes #AF: Archive folder in the same OneDrive but other folder
+use_comet: False # If true, make sure comet is setup (needs env vars or a .comet.config file)
+
+#AF: all int to be rechecked later and see what we want to put in there. 
+workers: 6
+
+BATCH_SIZE: 8
+EPOCHS: 500
+
+img_size: 416
+img_stride: 104
+
+TILE_SIZE: 416
+STRIDE: 104
+
+#Testing configs. Added precision on the cutoff pixel stats:
+CONFIDENCE_THRESHOLD: 0.5
+STAT_DISTANCE_CUTOFF_PIX_DRY: 80 #manually changed in the file. 
+STAT_DISTANCE_CUTOFF_PIX_WET: 80
+STAT_DISTANCE_CUTOFF_PIX_SWAMP: 100
+STAT_DISTANCE_CUTOFF_PIX_SINK: 50
+STAT_DISTANCE_CUTOFF_PIX_U: 50
+
+# MOVING_DISTANCE_CUTOFF_PIX: 6 #AF: from the boat detection. For WH, removed it. Shouldn't be used.
+
+# The lat/long cutoff should be roughly related to the resolution of the images
+# For 3m resolution, 10 pix is roughly 30m. At approx -27 deg lat, this is approx 0.0003 degrees.
+STAT_DISTANCE_CUTOFF_LATLONG: 0.00025 
+# MOVING_DISTANCE_CUTOFF_LATLONG: 0.0003 #same, removed as shouldn't be needed
+
+COMPARE_DISTANCE_CUTOFF_PIX: 20
+
+#Tasks to be performed but for now, I'm just putting all false and run manually. 
+tasks:
+  # These 4 are not required if have been done before (and above paths are absolute and exist)
+  prepare: False # Prepare for labelling
+  segment: False # Segment images/labels
+  run_detection: False # Run the classifier
+  backwards_annotation: False # Generate annotations from the classifier output
+
+  analyse:
+    # Main analysis step: cluster and compare outputs a comparison csv
+    compare_detections_to_ground_truth: False # Cluster and compare results to ground truth (have to do this for all analysis below)
+
+    # Supplementary analysis
+    plots:
+      confusion_matrix: False # Confusion matrix
+      boat_count_compare: False # Compare boat counts in each image detections to ground truth and output a graph
+    images:
+      all_mistakes: False # Collate all mistakes into images with comparison
+      subimage_confidence: False # Show confidence of detection for all subimages of a given boat (number of random boats to do this for)
+      coverage_heatmap: False # generate a tif file with a heatmap of coverage of images in the test data
