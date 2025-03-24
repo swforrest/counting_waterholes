@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "mimal_full1",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 133.549586967155932, -13.429496521737805 ], [ 133.553800320802765, -12.706992811563094 ], [ 134.54186052982152, -12.710539675432209 ], [ 134.540525275335085, -13.433252152859923 ], [ 133.549586967155932, -13.429496521737805 ] ] ] } }
+]
+}
