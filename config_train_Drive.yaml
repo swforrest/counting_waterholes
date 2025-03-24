@@ -1,42 +1,35 @@
-#Updates to run on Adriano Fossati (AF) comupter. Commented out the base directories
+#Updated to run on the GPU PC at CDS
+#AF 24.03.2025 
 
-# yolo_dir: C:\yolov5
-#AF:
 yolo_dir: C:/Users/fossatia/Documents/Waterholes_project/yolov5
-#AF:
-python: python
-#raw_images: C:\ML_Software\active_learning\data\downloads
-#AF: 
-raw_images: D:\Waterholes_project\counting_waterholes\training_v4\raw_images
 
-proj_root: .
+python: python
+
+raw_images: D:\Waterholes_project\counting_waterholes\training_v4\raw_images #tif files
+
+proj_root: C:/Users/fossatia/Documents/Waterholes_project/counting_waterholes/counting_waterholes
 
 # reccommended to change outdir for each run if using different images/params!!!
-#base dir: output_dir:C:\ML_Software\active_learning\data
-#AF:
-output_dir: D:\Waterholes_project\counting_waterholes\training_v4\output
-#base dir: weights: C:\yolov5\runs\train\63ImageTraim_19Mar_(S300)\weights\best.pt
+
+#AF: Output of the pre-training processes 
+output_dir: D:\Waterholes_project\counting_waterholes\training_v4\output 
 
 #AF: creating new paths to manipulate the output of the segmentation. 
 segmented_images : D:\Waterholes_project\counting_waterholes\training_v4\output\images\train
 segmented_labels : D:\Waterholes_project\counting_waterholes\training_v4\output\labels\train
 
-#AF:
-weights: D:\yolo_runs\exp\weights\best.pt
-#AF: file existing but from the previous runs of Charlie 
+#AF: Using the simple model weights provided by yolo itself. 
+weights: C:\Users\fossatia\Documents\Waterholes_project\yolov5\yolov5s.pt
+ 
 cache: False
 
 # yaml config describing the training data and classes
-#AF: all int to be rechecked later and see what we want to put in there. 
+#AF: various values and parameters of the model manipulation, to be checked when running it or change in the code directly. 
 workers: 6
-
 BATCH_SIZE: 8
 EPOCHS: 100
-
-#AF: to be checked and potentially modified. 
 img_size: 416
 img_stride: 104
-
 TILE_SIZE: 416
 STRIDE: 104
 
@@ -63,7 +56,3 @@ names:
   2: WH_wet
   3: WH_sink
   4: U
-
-  #AF: what if it need two categories in the whole script? 
-  #If I delete the second one, or don't put a second cat, might fuck up all the scripts workflow...
-
