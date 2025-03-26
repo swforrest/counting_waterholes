@@ -2,21 +2,26 @@
 
 ## What
 
-This project counts small marine vessels from satellite imagery of the Moreton Bay
-region. The counts are recorded and can be analysed or presented later. Tools for
-visualising training and inference data are also available.
+This project aims to to determine the locations and assess the health of waterholes in Northern Australia, which are susceptible to damage from invasive herbivores such as water buffalo, feral cattle and pigs. 
+Satellite imagery of the Northern Territories region is used to train a classification algorithm. 
+The counts are recorded and can be analysed or presented later. Tools for
+visualising training and infered detection data are also available.
+
+Based on a pipeline to detect and count boats and moving boats in the Moreton Bay area, we attapted the pipeline to waterholes. The CountingBoats [repository](https://github.com/charlie-turner-314/CountingBoats) was originally designed as a whole pipeline developped to detect boats only. For our workflow, we diverged away from the usage of modules and we use notebooks. This provides you with more control on what you run and allowing you to order single functions and commands. 
+
 
 ## How
 
 This project utilises satellite images, and harnesses machine learning
-object detection to count small marine vessels (boats) in the Moreton Bay area.
-Extendable to any images from any area, the recommended pipeline runs as follows:
+object detection to detect waterholes in the Arnhem Land and Cape York area.
+Extendable to any images from any area, the recommended workflow runs as follows:
 
-1. Using Planet, satellite images of the area of interest are automatically ordered for recent dates
+1. Using Planet, satellite images of the area of interest are automatically ordered for recent dates. 
 2. Once the orders are available, imagery is automatically downloaded from planet.
-3. A pre-processing pipeline prepares imagery for detection
-4. Our YOLOv5 model detects and labels both stationary and moving boats in the images
-5. We collate and analyse the boat counts as time-series data, outputting a CSV of detected boats and their coordinates
+3. A pre-processing pipeline prepares imagery for detection. 
+4. Our YOLOv5 pre-trained model detects and classifies waterholes in your processed images. 
+5. We collate and analyse the waterholes counts, outputting a CSV of detected locations, classes and coordinates. 
+
 
 ## Usage
 
@@ -28,21 +33,27 @@ Clone [YoloV5](https://github.com/ultralytics/yolov5). This is used for the Neur
 
 #### Python Dependencies
 
-It's recommended to install a conda-based package manager such as [Miniconda](https://docs.conda.io/projects/miniconda/en/latest/).
-Running the following will then install all required dependencies:
+It's recommended to install a conda-based package manager such as [Miniconda](https://docs.conda.io/projects/miniconda/en/latest/).  
+
+Running the following will then install all required dependencies (run only once to set the environment up):
 
 ```
 conda env create --file env.yaml
 ```
 
-Activate the environment (if not already) with `conda activate Boats`, and you should be good to go.
-
 ### Setup
 
-#### Configuration
+To start working on this project, activate the environment with:
 
-Set the variables in `config.yaml` to align with your environment and preferences.
-Similarly for `config_train.yaml` or `config_test.yaml` for training and testing respectively.
+```
+conda activate Boats
+```
+
+#### Configurations
+
+Modify the paths and variables in `config_train_Drive.yaml` to align with your environment and preferences as described in the file. This will allow you to train your own model from your images and area(s) of interest.  
+Following a training proces, to test your model, modify the paths and variables in `config_test_Drive.yaml`.   
+Finally if you prefer runing the detection of our model directly on your images, you can modify the paths and variables in `config_deploy_Drive.yaml`. 
 
 ### Running
 
