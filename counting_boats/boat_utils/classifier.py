@@ -87,11 +87,11 @@ def process_tif(
         static = classifications[classifications[:, 3].astype(float) == 0]
         moving = classifications[classifications[:, 3].astype(float) == 1]
         # cluster each set separately
-        static_clusters = cluster(static, stat_cutoff)
-        moving_clusters = cluster(moving, moving_cutoff)
+        static_clusters = cluster_AF(static, stat_cutoff)
+        moving_clusters = cluster_AF(moving, moving_cutoff)
         # process each set separately
-        static_boats = process_clusters(static_clusters)
-        moving_boats = process_clusters(moving_clusters)
+        static_boats = process_clusters_AF(static_clusters)
+        moving_boats = process_clusters_AF(moving_clusters)
         # convert pixel coordinates to lat/long
         # tif file should have coord details
         static_boats = pixel2latlong(static_boats, os.path.join(cfg["tif_dir"], file))
@@ -111,6 +111,60 @@ def process_tif(
     # os.rename(path.join(cfg["tif_dir"], file), target)
 
     return static_boats, moving_boats
+
+def process_tif_waterhole(
+    file: str, 
+    distance_cutoffs: dict
+) -> np.ndarray:
+    """
+    Process a single tiff file for waterhole detection.
+
+    Args:
+        file: The tiff file to process
+        distance_cutoffs: Dictionary of distance cutoffs for each waterhole type
+
+    Returns:
+        Array of classified waterholes
+    """
+    # Detect waterholes using the model
+    classifications, _ = detect_from_tif(
+        file,
+        cfg["tif_dir"],
+        cfg["yolo_dir"],
+        cfg["python"],
+        cfg["weights"],
+        cfg["CONFIDENCE_THRESHOLD"]
+    )
+
+    # If no classifications, return empty array
+    if len(classifications) == 0:
+        return np.array([])
+
+    # Separate waterholes by type
+    waterhole_types = {}
+    for waterhole_type in range(5):  # 0-4 waterhole types
+        type_waterholes = classifications[classifications[:, 3].astype(float) == waterhole_type]
+        
+        # Apply type-specific clustering
+        if len(type_waterholes) > 0:
+            clustered_waterholes = cluster_AF(type_waterholes, distance_cutoffs[waterhole_type])
+            processed_waterholes = process_clusters_AF(clustered_waterholes)
+            
+            # Convert pixel coordinates to lat/long
+            processed_waterholes = pixel2latlong(processed_waterholes, os.path.join(cfg["tif_dir"], file))
+            
+            # Add filename to each waterhole
+            processed_waterholes = np.c_[processed_waterholes, [file] * len(processed_waterholes)]
+            
+            waterhole_types[waterhole_type] = processed_waterholes
+
+    # Combine all waterhole types
+    all_waterholes = np.concatenate(list(waterhole_types.values())) if waterhole_types else np.array([])
+
+    # Remove the tiff file after processing to save storage
+    os.remove(os.path.join(cfg["tif_dir"], file))
+
+    return all_waterholes
 
 
 def process_day(
@@ -156,6 +210,90 @@ def process_day(
     # process again
     static_boats = process_clusters(static_boats)
     moving_boats = process_clusters(moving_boats)
+
+    return (static_boats, moving_boats, day)
+
+
+def process_day_waterhole(
+    files: list[str],
+    distance_cutoffs: dict,
+    day: str,
+    day_index: int,
+    total_days: int
+) -> tuple[np.ndarray, str]:
+    """
+    Process a day's images for waterhole detection.
+
+    Args:
+        files: List of files to process for the day
+        distance_cutoffs: Dictionary of distance cutoffs for each waterhole type
+        day: The day being processed
+        day_index: Index of the current day
+        total_days: Total number of days to process
+
+    Returns:
+        Tuple of classified waterholes and the day
+    """
+    print(f"Classifying day {day_index+1} of {total_days} - {day} ({day_index/total_days*100:.2f}%)")
+
+    # Process each file and collect waterhole detections
+    all_waterhole_classifications = [
+        process_tif_waterhole(
+            file, 
+            distance_cutoffs
+        ) for file in files
+    ]
+
+    # Combine and deduplicate waterholes
+    all_waterholes = np.concatenate(all_waterhole_classifications) if all_waterhole_classifications else np.array([])
+
+    # Return processed waterholes
+    return all_waterholes, day
+
+
+def process_day_AF(
+    files: list[str],
+    stat_cutoff: int,
+    moving_cutoff: int,
+    day: str,
+    i: int,
+    n_days: int,
+) -> tuple[np.ndarray, np.ndarray, str]:
+    """
+    Process a day's images. Runs process_tif for each of the given files,
+    and then clusters and processes the results.
+
+    Args:
+        files: The files to process
+        img_path: The path to the directory to store the data in
+        stat_cutoff: The cutoff for static boats (pixels)
+        moving_cutoff: The cutoff for moving boats (pixels)
+        day: The day to process
+        i: The index of the day
+        n_days: The total number of days
+
+    Returns:
+        A tuple of the static boats, moving boats, and the day
+        With boats as a list of: [x, y, confidence, class, width, height, filename]
+    """
+    print(f"Classifying day {i+1} of {n_days} - {day} ({i/n_days*100:.2f}%)")
+
+    all_static_boats, all_moving_boats = zip(
+        *[process_tif(file, stat_cutoff, moving_cutoff) for file in files]
+    )
+
+    all_static_boats = all_static_boats[0]
+    all_moving_boats = all_moving_boats[0]
+    # once a day has been classified, need to cluster again
+    static_boats = cluster_AF(
+        np.array(all_static_boats), cfg["STAT_DISTANCE_CUTOFF_LATLONG"]
+    )
+    moving_boats = cluster_AF(
+        np.array(all_moving_boats), cfg["MOVING_DISTANCE_CUTOFF_LATLONG"]
+    )
+    # process again
+    static_boats = process_clusters_AF(static_boats)
+    moving_boats = process_clusters_AF(moving_boats)
 
     return (static_boats, moving_boats, day)
 
@@ -233,6 +371,95 @@ def classify_directory(directory, classify_days=None):
             else:
                 print("No metadata file found for", file)
         save_coverage(day, polygons)
+
+def classify_directory_AF(directory, classify_days=None):
+    """
+    Use for directory of tiff images. Preprocesses, classifies, clusters.
+    Writes the results to a csv file called boat_detections.csv in the output directory
+
+    Args:
+        directory: The directory to classify
+        classify_days: list of days to classify in format "DD/MM/YYYY"
+
+    Returns:
+        None
+    """
+     # Extract unique days from the files
+    days = {ics.get_date_from_filename(file) for file in os.listdir(directory)}
+    days.discard(None)
+
+    # Filter days if specific days are provided
+    if classify_days is not None:
+        days = days.intersection(set(classify_days))
+
+    # Collect all tiff files, excluding udm (uncertainty) files
+    all_tif_files = [
+        f for f in os.listdir(directory) 
+        if f.endswith(".tif") and "udm" not in f
+    ]
+
+    # Group files by day, maintaining order
+    daily_data = [
+        (
+            [file for file in all_tif_files if ics.get_date_from_filename(file) == day],
+            day
+        )
+        for day in days
+    ]
+    daily_data.sort(key=lambda x: x[1])
+
+    # Process each day's files
+    daily_results = [
+        process_day_waterhole(
+            files,
+            # Use different cutoffs for different waterhole types
+            {
+                0: cfg["STAT_DISTANCE_CUTOFF_PIX_DRY"],    # Dry_WH
+                1: cfg["STAT_DISTANCE_CUTOFF_PIX_SWAMP"],  # WH_swamp
+                2: cfg["STAT_DISTANCE_CUTOFF_PIX_WET"],    # WH_wet
+                3: cfg["STAT_DISTANCE_CUTOFF_PIX_SINK"],   # WH_sink
+                4: cfg["STAT_DISTANCE_CUTOFF_PIX_U"]       # Unclassified
+            },
+            day,
+            i,
+            len(days)
+        )
+        for i, (files, day) in enumerate(daily_data)
+    ]
+
+    # Write results to CSV
+    for classified_waterholes, day in daily_results:
+        write_to_csv(classified_waterholes, day, "waterhole_detections.csv")
+
+    # Optional: Save image coverage information
+    if SAVE_COVERAGE:
+        polygons = []
+        for file in all_tif_files:
+            # Find and process metadata files
+            possible_metadata_files = [
+                file.replace(".tif", "metadata.json"),
+                "_".join(file.split("_")[:4]) + "_metadata.json"
+            ]
+            
+            existing_metadata = [
+                f for f in possible_metadata_files 
+                if os.path.exists(os.path.join(cfg["tif_dir"], f))
+            ]
+            
+            if existing_metadata:
+                metadata_file = existing_metadata[0]
+                with open(os.path.join(cfg["tif_dir"], metadata_file), 'r') as f:
+                    metadata = json.load(f)
+                    polygon = metadata.get("geometry")
+                    if polygon:
+                        polygons.append(polygon)
+                    else:
+                        print(f"No geometry found in {metadata_file}")
+        
+        # Save coverage if polygons are found
+        if polygons:
+            save_coverage(day, polygons)
+
 
 
 def classify_images(images_dir, STAT_DISTANCE_CUTOFF_PIX, OUTFILE):
@@ -394,6 +621,85 @@ def detect_from_tif(
     # return read_classifications(
     #     yolo_dir=yolo_dir, confidence_threshold=confidence_threshold, delete_folder=True
     # )
+
+def detect_from_tif_AF(
+    file, tif_dir, yolo_dir, python, weights, confidence_threshold
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Detect waterholes from a tif file using YOLO model
+
+    Args:
+        file: The tif file to detect from
+        tif_dir: The directory containing the tif file
+        yolo_dir: The directory containing yolo
+        python: The python executable to use
+        weights: The weights to use for the NN
+        confidence_threshold: The confidence threshold to use
+
+    Returns:
+        A tuple of the classifications and low confidence classifications
+    """
+    prepare_temp_dirs()
+    file_name = path.basename(file)
+    ics.create_padded_png(
+        tif_dir, TEMP_PNG, file_name, tile_size=TILE_SIZE, stride=STRIDE
+    )
+    png_path = path.join(os.getcwd(), TEMP_PNG, f"{file_name[0:-4]}.png")
+    
+    print("Segmenting image. Start:" + str(datetime.now()))
+    images = ics.segment_image_for_classification_nosave(
+        png_path, TEMP, tile_size=TILE_SIZE, stride=STRIDE
+    )
+    print("Segmenting image. End:" + str(datetime.now()))
+    
+    predictions = []
+    for idx, img in tqdm(enumerate(images), total=len(images), mininterval=30):
+        [row, col, image, _, _] = img
+        sub_image = np.moveaxis(image, 0, -1).squeeze()
+        if np.all(sub_image == 0):
+            continue
+        
+        # Run the model
+        with torch.no_grad():
+            prediction = model(sub_image)
+        
+        # Convert to numpy
+        prediction = prediction.xywhn
+        if len(prediction) == 0:
+            continue
+        if len(prediction) > 1:
+            print("Multiple predictions")
+            exit()
+
+        # Adjust prediction coordinates
+        prediction = prediction[0].cpu().numpy()
+        across = col * STRIDE
+        down = row * STRIDE
+        
+        # Reformat prediction: x, y, confidence, class, width, height
+        prediction = np.c_[
+            prediction[:, 0],  # xMid
+            prediction[:, 1],  # yMid
+            prediction[:, 4],  # Confidence
+            prediction[:, 5],  # Class
+            prediction[:, 2],  # xWid
+            prediction[:, 3],  # yHeight
+        ]
+        prediction = prediction.astype(np.float64)
+        
+        # Adjust for full image coordinates
+        prediction[:, 0] = prediction[:, 0] * TILE_SIZE + across
+        prediction[:, 1] = prediction[:, 1] * TILE_SIZE + down
+        prediction[:, 4] = prediction[:, 4] * TILE_SIZE
+        prediction[:, 5] = prediction[:, 5] * TILE_SIZE
+        
+        predictions.append(prediction)
+    
+    # Combine predictions
+    predictions = np.concatenate(predictions)
+    print("Total Predictions: ", len(predictions))
+    
+    return remove_low_confidence(predictions, confidence_threshold)
 
 
 def detect_from_dir(

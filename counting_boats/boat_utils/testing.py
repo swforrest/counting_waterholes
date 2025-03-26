@@ -148,9 +148,10 @@ def segment(run_folder, config):
     config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
     tile_size = config.get("img_size", 416)
     stride = config.get("img_stride", 104)
-    pngs = os.path.join(config["path"], config["pngs"])
-    im_save_folder = os.path.join(config["path"], config["segmented_images"])
-    label_save_folder = os.path.join(config["path"], config["labels"])
+    pngs = os.path.normpath(os.path.join(config["path"], config["pngs"]))
+    im_save_folder = os.path.normpath(os.path.join(config["path"], config["segmented_images"]))
+    label_save_folder = os.path.normpath(os.path.join(config["path"], config["labels"]))
+    print(f'pngs folder {pngs}')
     if not os.path.exists(im_save_folder):
         os.makedirs(im_save_folder, exist_ok=True)
     if not os.path.exists(label_save_folder):
@@ -242,7 +243,7 @@ def run_detection(run_folder, config):
             # print(f"Command output: {res.stdout}")
             # print(f"Command error: {res.stderr}")
             print(f"Command exit code: {res.returncode}")
-            print(f"Command returned exit code: {res}")
+            # print(f"Command returned exit code: {res}")
             if res.returncode != 0:
                 raise Exception(f"Error running detection on {root}")
             latest_exp = (
@@ -298,13 +299,13 @@ def backwards_annotation_AF(run_folder, config):
             )
         ):
             continue
-        print(f"Root dir {root}") #AF
-        print(f"Root dir {files}") #AF
+        # print(f"Root dir {root}") #AF
+        # print(f"Root dir {files}") #AF
         
         if len(files) > 0 and files[0].endswith(".txt"):
             this_image = os.path.basename(root)
             ML_classifications, _ = read_classifications_AF(
-                class_folder=root, confidence_threshold=0.5
+                class_folder=root, confidence_threshold=config["CONFIDENCE_THRESHOLD"]
             )  # Read all
             
             # Separate classifications by class
@@ -433,6 +434,7 @@ def backwards_annotation_AF(run_folder, config):
             json_path = os.path.join(
                 config["path"], config["pngs"], f"{this_image}_labelme_auto.json"
             )
+            print(f"{this_image}_labelme_auto.json saved to {json_path}")
             with open(json_path, "w+") as f:
                 json.dump(json_data, f)
 
