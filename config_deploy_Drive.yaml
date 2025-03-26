@@ -7,7 +7,7 @@ yolo_dir: C:/Users/fossatia/Documents/Waterholes_project/yolov5
 
 python: python
 
-raw_images: D:/Waterholes_project/counting_waterholes/deployment/raw_images #tif files
+# raw_images: D:/Waterholes_project/counting_waterholes/deployment/raw_images #tif files
 
 proj_root: C:/Users/fossatia/Documents/Waterholes_project/counting_waterholes/counting_waterholes
 

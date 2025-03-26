@@ -148,9 +148,10 @@ def segment(run_folder, config):
     config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
     tile_size = config.get("img_size", 416)
     stride = config.get("img_stride", 104)
-    pngs = os.path.join(config["path"], config["pngs"])
-    im_save_folder = os.path.join(config["path"], config["segmented_images"])
-    label_save_folder = os.path.join(config["path"], config["labels"])
+    pngs = os.path.normpath(os.path.join(config["path"], config["pngs"]))
+    im_save_folder = os.path.normpath(os.path.join(config["path"], config["segmented_images"]))
+    label_save_folder = os.path.normpath(os.path.join(config["path"], config["labels"]))
+    print(f'pngs folder {pngs}')
     if not os.path.exists(im_save_folder):
         os.makedirs(im_save_folder, exist_ok=True)
     if not os.path.exists(label_save_folder):

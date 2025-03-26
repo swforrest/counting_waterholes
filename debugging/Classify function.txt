@@ -1,0 +1,794 @@
+def classify_directory_AF(directory, classify_days=None):
+    """
+    Use for directory of tiff images. Preprocesses, classifies, clusters.
+    Writes the results to a csv file called boat_detections.csv in the output directory
+
+    Args:
+        directory: The directory to classify
+        classify_days: list of days to classify in format "DD/MM/YYYY"
+
+    Returns:
+        None
+    """
+    days = {ics.get_date_from_filename(file) for file in os.listdir(directory)}
+    days.discard(None)
+    # set days to be intersection of all days and classify_days
+    if classify_days is not None:
+        days = days.intersection(set(classify_days))
+
+    all_tif_files = [
+        f for f in os.listdir(directory) if f.endswith(".tif") and "udm" not in f
+    ]
+    # list of files, and the day they belong to
+    daily_data = (
+        (
+            [file for file in all_tif_files if ics.get_date_from_filename(file) == day],
+            day,
+        )
+        for day in days
+    )
+
+    # sort the data by day
+    daily_data = sorted(daily_data, key=lambda x: x[1])
+
+    daily_results = [
+        process_day_AF(
+            files,
+            cfg["STAT_DISTANCE_CUTOFF_PIX"],
+            cfg["MOVING_DISTANCE_CUTOFF_PIX"],
+            day,
+            i,
+            len(days),
+        )
+        for i, (files, day) in enumerate(daily_data)
+    ]
+
+    # write to csv
+    for static_boats, moving_boats, day in daily_results:
+        write_to_csv(static_boats, day, "boat_detections.csv")
+        write_to_csv(moving_boats, day, "boat_detections.csv")
+
+    polygons = []
+    if SAVE_COVERAGE:
+        for file in all_tif_files:
+            # check if there is a metadata file alongside the tif
+            # HACK: this is a bit of a hack, but works
+            possible_metadata_files = [
+                file.replace(".tif", "metadata.json"),
+                # replace everything after the 4th underscore
+                "_".join(file.split("_")[:4]) + "_metadata.json",
+            ]
+            exists = [
+                os.path.exists(path.join(cfg["tif_dir"], f))
+                for f in possible_metadata_files
+            ]
+            if any(exists):
+                metadata_file = possible_metadata_files[exists.index(True)]
+                # get the coverage polygon from this file
+                metadata = json.load(open(path.join(cfg["tif_dir"], metadata_file)))
+                polygon = metadata["geometry"]
+                polygons.append(polygon)
+            else:
+                print("No metadata file found for", file)
+        save_coverage(day, polygons)
+
+
+def get_date_from_filename(filename: str):
+    """
+        Get the date from a file. The file must have a date in the format "yyyymmdd_" at the start of the filename .
+    first
+        Args:
+
+            filename: The name of the file to extract the date from.
+
+        Returns:
+
+            The date in the format "dd/mm/yyyy" from the filename.
+    """
+    str_date = filename.split("_")[0]
+    if len(str_date) != 8:
+        return None
+    year = str_date[0:4]
+    month = str_date[4:6]
+    day = str_date[6:8]
+    return f"{day}/{month}/{year}"
+
+
+def process_day_AF(
+    files: list[str],
+    stat_cutoff: int,
+    moving_cutoff: int,
+    day: str,
+    i: int,
+    n_days: int,
+) -> tuple[np.ndarray, np.ndarray, str]:
+    """
+    Process a day's images. Runs process_tif for each of the given files,
+    and then clusters and processes the results.
+
+    Args:
+        files: The files to process
+        img_path: The path to the directory to store the data in
+        stat_cutoff: The cutoff for static boats (pixels)
+        moving_cutoff: The cutoff for moving boats (pixels)
+        day: The day to process
+        i: The index of the day
+        n_days: The total number of days
+
+    Returns:
+        A tuple of the static boats, moving boats, and the day
+        With boats as a list of: [x, y, confidence, class, width, height, filename]
+    """
+    print(f"Classifying day {i+1} of {n_days} - {day} ({i/n_days*100:.2f}%)")
+
+    all_static_boats, all_moving_boats = zip(
+        *[process_tif(file, stat_cutoff, moving_cutoff) for file in files]
+    )
+
+    all_static_boats = all_static_boats[0]
+    all_moving_boats = all_moving_boats[0]
+    # once a day has been classified, need to cluster again
+    static_boats = cluster_AF(
+        np.array(all_static_boats), cfg["STAT_DISTANCE_CUTOFF_LATLONG"]
+    )
+    moving_boats = cluster_AF(
+        np.array(all_moving_boats), cfg["MOVING_DISTANCE_CUTOFF_LATLONG"]
+    )
+    # process again
+    static_boats = process_clusters_AF(static_boats)
+    moving_boats = process_clusters_AF(moving_boats)
+
+    return (static_boats, moving_boats, day)
+
+
+def process_tif(
+    file: str, stat_cutoff: int, moving_cutoff: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Processes a single tif file
+
+    Args:
+        file: The tif file to process
+        img_path: The path to the directory to store the data in
+        stat_cutoff: The cutoff for static boats (pixels)
+        moving_cutoff: The cutoff for moving boats (pixels)
+    Returns:
+        A tuple of the static boats and moving boats
+        With boats as a list of: [x, y, filename]
+    """
+    classifications, _ = detect_from_tif(
+        file,
+        cfg["tif_dir"],
+        cfg["yolo_dir"],
+        cfg["python"],
+        cfg["weights"],
+        cfg["CONFIDENCE_THRESHOLD"],
+    )
+    if len(classifications) == 0:
+        static_boats = np.array([])
+        moving_boats = np.array([])
+    else:
+        # split into moving and static boats
+        static = classifications[classifications[:, 3].astype(float) == 0]
+        moving = classifications[classifications[:, 3].astype(float) == 1]
+        # cluster each set separately
+        static_clusters = cluster_AF(static, stat_cutoff)
+        moving_clusters = cluster_AF(moving, moving_cutoff)
+        # process each set separately
+        static_boats = process_clusters_AF(static_clusters)
+        moving_boats = process_clusters_AF(moving_clusters)
+        # convert pixel coordinates to lat/long
+        # tif file should have coord details
+        static_boats = pixel2latlong(static_boats, os.path.join(cfg["tif_dir"], file))
+        moving_boats = pixel2latlong(moving_boats, os.path.join(cfg["tif_dir"], file))
+        # add the image name to each classification (as the last column)
+        static_boats = np.c_[static_boats, [file] * len(static_boats)]
+        moving_boats = np.c_[moving_boats, [file] * len(moving_boats)]
+    # # move the tif into the processed folder
+    # NOTE: deleting here cause we are running out of storage.
+    os.remove(os.path.join(cfg["tif_dir"], file))
+
+    # Can also move to a processed file if you want
+    # os.makedirs(path.join(cfg["tif_dir"], "processed"), exist_ok=True)
+    # target = path.join(cfg["tif_dir"], "processed", file)
+    # if path.exists(target):
+    #     os.remove(target)
+    # os.rename(path.join(cfg["tif_dir"], file), target)
+
+    return static_boats, moving_boats
+
+
+def detect_from_tif(
+    file, tif_dir, yolo_dir, python, weights, confidence_threshold
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Detect from a tif file
+
+    Args:
+        file: The tif file to detect from
+        tif_dir: The directory containing the tif file
+        yolo_dir: The directory containing yolo
+        python: The python executable to use
+        weights: The weights to use for the NN
+        confidence_threshold: The confidence threshold to use where if confidence < threshold, it is considered low confidence
+
+    Returns:
+        A tuple of the classifications and low confidence classifications
+        With boats as a list of: [x, y, confidence, class, width, height]
+    """
+    prepare_temp_dirs()
+    file_name = path.basename(file)
+    ics.create_padded_png(
+        tif_dir, TEMP_PNG, file_name, tile_size=TILE_SIZE, stride=STRIDE
+    )
+    png_path = path.join(os.getcwd(), TEMP_PNG, f"{file_name[0:-4]}.png")
+    # time this bit
+    print("Segmenting image. Start:" + str(datetime.now()))
+    images = ics.segment_image_for_classification_nosave(
+        png_path, TEMP, tile_size=TILE_SIZE, stride=STRIDE
+    )
+    print("Segmenting image. End:" + str(datetime.now()))
+    # run the images through the model
+    predictions = []
+    for idx, img in tqdm(enumerate(images), total=len(images), mininterval=30):
+        [row, col, image, _, _] = img
+        sub_image = np.moveaxis(image, 0, -1).squeeze()
+        if np.all(sub_image == 0):
+            continue
+        # run the model
+        with torch.no_grad():
+            prediction = model(sub_image)
+        # convert to numpy
+        prediction = prediction.xywhn
+        if len(prediction) == 0:
+            continue
+        if len(prediction) > 1:
+            print("Multiple predictions")
+            exit()
+
+        # convert prediction to numpy from list
+        prediction = prediction[0].cpu().numpy()
+        # fix the coordinates/format like parse_classifications
+        across = col * STRIDE
+        down = row * STRIDE
+        # we want: x, y, confidence, class, width, height
+        # prediciton is: x, y, w, h, confidence, class
+        # move columns around
+        prediction = np.c_[
+            prediction[:, 0],  # xMid
+            prediction[:, 1],  # yMid
+            prediction[:, 4],  # Confidence
+            prediction[:, 5],  # Class
+            prediction[:, 2],  # xWid
+            prediction[:, 3],
+        ]
+        # convert to float
+        prediction = prediction.astype(np.float64)
+        # adjust x and y for the full image
+        prediction[:, 0] = prediction[:, 0] * TILE_SIZE + across
+        prediction[:, 1] = prediction[:, 1] * TILE_SIZE + down
+        # adjust width and height for the full image
+        prediction[:, 4] = prediction[:, 4] * TILE_SIZE
+        prediction[:, 5] = prediction[:, 5] * TILE_SIZE
+        # add the predictions
+        predictions.append(prediction)
+    # convert to numpy
+    predictions = np.concatenate(predictions)
+    print("Total Predictions: ", len(predictions))
+    return remove_low_confidence(predictions, confidence_threshold)
+    # ics.segment_image_for_classification(
+    #     png_path, TEMP, tile_size=TILE_SIZE, stride=STRIDE
+    # )
+    # detect_path = path.join(yolo_dir, "detect.py")
+    # output = os.system(
+    #     f"{python} {detect_path} --imgsz {TILE_SIZE} --save-txt --save-conf --weights {weights} --source {TEMP}"
+    # )
+    # if output != 0:
+    #     raise Exception("Error running detection - check logs")
+
+    # return read_classifications(
+    #     yolo_dir=yolo_dir, confidence_threshold=confidence_threshold, delete_folder=True
+    # )
+
+
+def create_padded_png(
+    raw_dir, output_dir, file_name, tile_size=416, stride=104, rename=False
+):
+    """
+    Creates an image which is padded for use in training/classifying within a neural network. Note: this images pads
+    the images expecting that the size of sub-images created from this images will be 416x416 pixels.
+
+    Args:
+
+        raw_dir: Directory where raw .tif files downloaded from Planet are located
+        output_dir: The name of the directory where the padded .png files will be created.
+        file_name: The name of the .tif file that is to be padded.
+        tile_size: The size of the sub-images that will be created from this image.
+        stride: The amount of overlap that the sub-images will have.
+        rename: The name that the padded image will be saved as. If False, the image will be saved as the original name but with a .png extension.
+
+    Returns:
+
+        None
+    """
+    rawImageDirectory = os.path.join(os.getcwd(), raw_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    PNGpath = output_dir
+
+    savePath = os.path.join(PNGpath, file_name.split(".")[0] + ".png")
+    if os.path.exists(savePath):
+        return
+
+    # Set the options for the gdal.Translate() call
+    opsString2 = (
+        "-ot UInt16 -of png -b 3 -b 2 -b 1 -scale_1 0 2048 0 65535 -scale_2 0 2048 0 65535 -scale_3 0 2048 0 "
+        "65535"
+    )
+    # Translate original from tif into png
+    print("Doing gdal work...")
+    gdal.Translate(
+        os.path.join(PNGpath, f"colorCorrected{file_name.split('.')[0]}.png"),
+        os.path.join(rawImageDirectory, file_name),
+        options=opsString2,
+    )
+    print("\rDone with gdal work for " + file_name)
+
+    # Open the new color corrected PNG we have just made.
+    colorImagePath = os.path.join(
+        PNGpath, f"colorCorrected{file_name.split('.')[0]}.png"
+    )
+    colourImage = PIL.Image.open(colorImagePath)
+
+    # Get new width and height in preparation of padding the image
+    width, height = colourImage.size
+
+    leftPad, rightPad, topPad, bottomPad = get_required_padding(colorImagePath, tile_size, stride)
+
+    # Pad the edges (add_margin is a function in imageCuttingSupport.py that adds a margin to an opened PIL image.)
+    im_new = add_margin(
+        colourImage,
+        leftPad,
+        rightPad,
+        topPad,
+        bottomPad,
+        (0, 0, 0),
+    )
+
+    # Save the padded image which is now ready for classification
+    if rename != False and type(rename) == str:
+        savePath = os.path.join(PNGpath, rename + ".png")
+    else:
+        savePath = os.path.join(PNGpath, file_name.split(".")[0] + ".png")
+    im_new.save(savePath, quality=100, compress_level=0)
+
+    # Close loose file descriptors
+    colourImage.close()
+    im_new.close()
+
+    # Cleanup any images that aren't the image that is used for classification
+    for filename in os.listdir(PNGpath):
+        if filename[0:5] == "color":
+            os.remove(os.path.join(PNGpath, filename))
+
+
+def get_required_padding(filepath, tilesize=416, stride=104) -> tuple[int, int, int, int]:
+    """
+    Determines how much padding is required on each edge of an image so that the image lengths and widths will be
+    divisible by 416 and that each part of the images will be seen by the neural networm 16 times in either training
+    or classification.
+
+    Args:
+
+        filepath: The path of the file to evaluate.
+        tilesize: The size of the sub-images that will be created from this image.
+        stride: The amount of overlap that the sub-images will have.
+
+    Returns:
+
+        (L, R, T, B) - A tuple containing the padding required on the left (L), right (R), top (T), and bottom (b)
+            of the images to make it suitable for use in the neural network.
+    """
+    ds = gdal.Open(filepath)
+
+    metadata = gdal.Info(ds)
+    ds = None
+    metadata_components = metadata.split("\n")
+
+    # Get new width and height in preparation of paddingthe image
+    size = filter(lambda x: "Size is" in x, metadata_components)
+    if not size:
+        print(metadata)
+        raise Exception("Size is not in the metadata")
+    size = list(size)[0]
+    height = int(size.split(",")[1])
+    width = int(size.split(",")[0].split(" ")[-1])
+
+    # Calculate individual padding for each edge
+    # we have to go at least (tilesize/stride) * stride pixels in each direction
+    # in the case of 416/104, this is 4*104 = 416 padding. This means the first tile is all padding but the rest will be seen by the network properly
+    min_pad = (tilesize - stride)
+
+    leftPad = min_pad
+    topPad = min_pad
+    bottomPad = min_pad
+    rightPad = min_pad
+
+    min_h = height + 2 * min_pad
+    min_w = width + 2 * min_pad
+    # ensure the image will be divisible by the tile size and stride
+    if min_h % tilesize != 0:
+        topPad += tilesize - (min_h % tilesize)
+    if min_w % tilesize != 0:
+        leftPad += tilesize - (min_w % tilesize)
+    
+    # ensure integer padding
+    leftPad = int(leftPad)
+    rightPad = int(rightPad)
+    topPad = int(topPad)
+    bottomPad = int(bottomPad)
+
+
+    return leftPad, rightPad, topPad, bottomPad
+
+
+def add_margin(
+    pil_img: Image.Image, left: int, right: int, top: int, bottom: int, color: tuple
+) -> Image.Image:
+    """
+    Pads an OPEN PIL (pillow/python imaging library) image on each edge by the amount specified.
+
+    Args:
+
+        pil_img: The open PIL image to pad.
+        left: The number of pixels to pad the left edge of the image by.
+        right: The number of pixels to pad the right edge of the image by.
+        top: The number of pixels to pad the top edge of the image by.
+        bottom: The number of pixels to pad the bottom edge of the image by.
+        color: What colour the padding should be as a tuple (0, 0, 0) for black (255, 255, 255) for white.
+
+    Returns:
+
+        The open PIL image after the padding has been applied
+    """
+    width, height = pil_img.size
+    new_width = width + right + left
+    new_height = height + top + bottom
+    print("New Width: ", new_width, "New Height: ", new_height)
+    result = Image.new(pil_img.mode, (new_width, new_height), color)
+    result.paste(pil_img, (left, top))
+    return result
+
+
+
+def segment_image_for_classification_nosave(image, data_path, tile_size, stride):
+    """
+    Segments a large .tif file into smaller .png files for use in a neural network.
+    Does not save the images to disk, but returns them as an array of views into 
+    a larger numpy array.
+
+    Args:
+
+        image: The large .tif that is to be segmented
+        tile_size: The desired size (both length and width) of the segmented images.
+        data_path: The path to the directory where the segmented images will be saved.
+        stride: The desired amount of overlap that the segmented images should have
+
+    Returns:
+
+        The images as an array with:
+            i, j, sub_image, image, data_path
+    """
+    # Open the image with pillow - this reads the image in as a 2d array
+    openImage = Image.open(image)
+
+    # Get width and height by indexing the image array
+    width, height = openImage.size
+    width = int(width)
+    height = int(height)
+
+    print(width, height)
+
+    # Ensure that the image is divisible by the desired size with no remainder.
+    if width % stride != 0 or height % stride != 0:
+        raise Exception(
+            "The image is not exactly divisible by the desired size of subset images"
+        )
+
+    # Ensure that the desired size is divisible by the desired overlap with no remainder.
+    if tile_size % stride != 0:
+        raise Exception(
+            "The subset image size indicated is not divisible by the input overlap size"
+        )
+
+    # open the image as a numpy array
+    image_array = np.array(openImage)
+    # use np.lib.stride_tricks.sliding_window_view to create a sliding window view of the image
+    # this will allow us to extract the sub-images
+    image_shape = np.array(image_array.shape)
+    print(image_shape)
+    window_shape = np.array((tile_size, tile_size, 1)).reshape(-1)
+    step = np.array((stride, stride, 1)).reshape(-1)
+    image_stride = np.array(image_array.strides)
+    shape = tuple((image_shape - window_shape) // step + 1) + tuple(window_shape)
+    strides = tuple(image_stride * step) + tuple(image_stride)
+    as_strided = np.lib.stride_tricks.as_strided
+    sub_images = as_strided(image_array, shape=shape, strides=strides)
+
+    print(sub_images.shape)
+
+    # flatten the 2d grid of sub-images into a list with indices (for parallel processing)
+    sub_images_list = [
+        (i, j, sub_images[i, j], image, data_path)
+        for i in range(sub_images.shape[0])
+        for j in range(sub_images.shape[1])
+    ]
+    return sub_images_list
+
+
+def remove_low_confidence(
+    classifications: np.ndarray, confidence_threshold: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Remove all classifications with confidence < confidence_threshold
+
+    Args:
+        classifications: The classifications to remove low confidence from. Confidence is the third column.
+        confidence_threshold: The threshold to remove below
+
+    Returns:
+        The same classifications as a tuple, with the first element being the high confidence classifications
+    """
+    low_confidence = classifications[classifications[:, 2] < confidence_threshold]
+    classifications = classifications[classifications[:, 2] >= confidence_threshold]
+    return classifications, low_confidence
+
+
+def cluster_AF(classifications: np.ndarray, cutoff: float) -> np.ndarray:
+    """
+    Cluster the given classifications using the given cutoff.
+
+    Args:
+        classifications: The classifications to cluster, in the form x, y, confidence, class, width, height
+        cutoff: The cutoff to use for clustering
+
+    Returns:
+        The classifications with an additional column for the cluster number
+        Columns: x, y, confidence, class, width, height, cluster
+    """
+    if classifications.shape[0] < 2:
+        # add cluster = 1 to point
+        if classifications.shape[0] == 1:
+            classifications = np.array([np.append(classifications[0], 1)])
+        return classifications
+    points = classifications[:, [0, 1]].astype(np.float64)
+    distances = scipy.spatial.distance.pdist(points, metric="euclidean")
+    clustering = scipy.cluster.hierarchy.linkage(distances, "average")
+    clusters = scipy.cluster.hierarchy.fcluster(
+        clustering, cutoff, criterion="distance"
+    )
+    points_with_cluster = np.c_[classifications, clusters]
+    return points_with_cluster
+
+def process_clusters_AF(classifications_with_clusters: np.ndarray) -> np.ndarray:
+    """
+    Process the given classifications with clusters. Condenses each cluster into a single point.
+
+    Args:
+        classifications_with_clusters: The classifications as x, y, confidence, class, width, height, cluster
+
+    Return:
+        An array of the condensed classifications in the form: x, y, confidence, class, width, height
+    """
+    waterholes = np.array([], dtype=np.float64).reshape(0, 6)
+    if len(classifications_with_clusters) == 0:
+        return waterholes
+    waterholes = [
+        condense_AF(
+            classifications_with_clusters[classifications_with_clusters[:, -1] == i]
+        )
+        for i in np.unique(classifications_with_clusters[:, -1])
+    ]
+    return np.asarray(waterholes)
+
+
+def condense_AF(cluster: np.ndarray) -> np.ndarray:
+    """
+    Given a cluster, condense it into a single point.
+    Uses the mean of x, y, w, and h - the most common class, and the maximum confidence.
+
+    Args:
+        cluster: The cluster to condense
+
+    Returns:
+        The condensed cluster in the form x, y, confidence, class, width, height
+    """
+    # remove cluster number
+    thisWaterhole = np.asarray(cluster)[:, [0, 1, 2, 3, 4, 5]].astype(np.float64)
+    thisWaterholeMean = np.mean(thisWaterhole, axis=0)
+    # using maximum confidence as the cluster confidence
+    maxVals = np.max(thisWaterhole, axis=0)
+    thisWaterholeMean[2] = maxVals[2]
+    # use the most common class
+    thisWaterholeMean[3] = scipy.stats.mode(thisWaterhole[:, 3])[0]
+    if cluster.shape[1] == 8:
+        files = np.unique(np.asarray(cluster)[:, 6])
+        return np.append(thisWaterholeMean.astype(str), " ".join(files))
+    return thisWaterholeMean
+
+
+def pixel2latlong(classifications, tif) -> np.ndarray:
+    """
+    Convert the given classifications from pixel coordinates to lat/long.
+
+    Args:
+        classifications: The classifications to convert, must have x, y as first two columns.
+        tif: The tif file these classifications came from.
+
+    Returns:
+        The same classifications with x, y converted to lat/long
+    """
+    leftPad, _, topPad, _ = ics.get_required_padding(tif, TILE_SIZE, STRIDE)
+    crs = ics.get_crs(tif)
+    # get the crs from the tif, e.g EPSG:4326
+    for c in classifications:
+        x = int(c[0]) - leftPad
+        y = int(c[1]) - topPad
+        xp, yp = ics.pixel2coord(x, y, tif)
+        c[0], c[1] = ics.coord2latlong(xp, yp, crs)
+    return classifications
+
+
+
+def get_required_padding(filepath, tilesize=416, stride=104) -> tuple[int, int, int, int]:
+    """
+    Determines how much padding is required on each edge of an image so that the image lengths and widths will be
+    divisible by 416 and that each part of the images will be seen by the neural networm 16 times in either training
+    or classification.
+
+    Args:
+
+        filepath: The path of the file to evaluate.
+        tilesize: The size of the sub-images that will be created from this image.
+        stride: The amount of overlap that the sub-images will have.
+
+    Returns:
+
+        (L, R, T, B) - A tuple containing the padding required on the left (L), right (R), top (T), and bottom (b)
+            of the images to make it suitable for use in the neural network.
+    """
+    ds = gdal.Open(filepath)
+
+    metadata = gdal.Info(ds)
+    ds = None
+    metadata_components = metadata.split("\n")
+
+    # Get new width and height in preparation of paddingthe image
+    size = filter(lambda x: "Size is" in x, metadata_components)
+    if not size:
+        print(metadata)
+        raise Exception("Size is not in the metadata")
+    size = list(size)[0]
+    height = int(size.split(",")[1])
+    width = int(size.split(",")[0].split(" ")[-1])
+
+    # Calculate individual padding for each edge
+    # we have to go at least (tilesize/stride) * stride pixels in each direction
+    # in the case of 416/104, this is 4*104 = 416 padding. This means the first tile is all padding but the rest will be seen by the network properly
+    min_pad = (tilesize - stride)
+
+    leftPad = min_pad
+    topPad = min_pad
+    bottomPad = min_pad
+    rightPad = min_pad
+
+    min_h = height + 2 * min_pad
+    min_w = width + 2 * min_pad
+    # ensure the image will be divisible by the tile size and stride
+    if min_h % tilesize != 0:
+        topPad += tilesize - (min_h % tilesize)
+    if min_w % tilesize != 0:
+        leftPad += tilesize - (min_w % tilesize)
+    
+    # ensure integer padding
+    leftPad = int(leftPad)
+    rightPad = int(rightPad)
+    topPad = int(topPad)
+    bottomPad = int(bottomPad)
+
+
+    return leftPad, rightPad, topPad, bottomPad
+
+
+def pixel2coord(x: int, y: int, original_image_path: str) -> tuple[float, float]:
+    """
+        Returns global coordinates to pixel center using base-0 raster index
+
+        Args:
+
+            x: The x coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
+            y: The y coordinate (pixel coordinates) of the object in the image to be converted to global coordinates.
+            original_image_path: The path of the file to evaluate - a .tif files should be located here. This file will
+                also need geospatial metadata. Images obtained from Planet have the required metadata.
+    e
+        Returns:
+
+            (xp, yp) - A tuple containing the global coordinates of the provided pixel coordinates.
+    """
+    ds = gdal.Open(original_image_path)
+    c, a, b, f, d, e = ds.GetGeoTransform()
+    xp = a * x + b * y + a * 0.5 + b * 0.5 + c
+    yp = d * x + e * y + d * 0.5 + e * 0.5 + f
+    return (xp, yp)
+
+
+def coord2latlong(x: float, y: float, crs: int = 32756) -> tuple[float, float]:
+    """
+    Converts global coordinates to latitude/longitude coordinates
+
+    Args:
+
+        x: The x coordinate in a pair of global coordinates.
+        y: The y coordinate in a pair of global coordinates.
+        crs: The coordinate reference system of the global coordinates.
+
+    Returns:
+
+        (long, lat) - A tuple containing the longitude and latitude at the provided global coordinates.
+    """
+    proj = pyproj.Transformer.from_crs(crs, 4326, always_xy=True)
+    long, lat = proj.transform(x, y)
+    return long, lat
+
+
+def write_to_csv(classifications, day, filepath) -> None:
+    """
+    Write the given classifications to a csv file.
+
+    Args:
+        classifications: The classifications to write
+        day: The day the classifications are from
+        file: The file to write to
+
+    Returns:
+        None
+    """
+    print(f"Writing {len(classifications)} boats to {filepath} for {day}")
+    # Write to output csv
+    # Create output csv if it doesn't exist
+    filepath = os.path.join(cfg["output_dir"], filepath)
+    if not os.path.isfile(filepath):
+        with open(filepath, "a+") as outFile:
+            outFile.writelines("date,class,images,latitude,longitude,confidence,w,h\n")
+
+    # Write the data for that day to a csv
+    lines = [
+        f"{day},{int(float(boat[3]))},{boat[6]},{boat[1]},{boat[0]},{boat[2]},{boat[4]},{boat[5]}\n"
+        for boat in classifications
+    ]
+    with open(filepath, "a+") as outFile:
+        outFile.writelines(lines)
+
+
+def save_coverage(day: str, polygons: list):
+    """
+    Save the coverage polygons to the coverage file.
+    """
+    # TODO: need to do the coverage file as parameter
+    coverage_path = os.path.join(cfg["output_dir"], "coverage.csv")
+    coverage = pd.read_csv(coverage_path)
+    aoi = "unknown"  # we don't know anything about AOIs in the manual case
+    cov_amount = None
+    new_rows = []
+    for polygon in polygons:
+        new_rows.append(
+            {
+                "aoi": aoi,
+                "date": day,
+                "area_coverage": cov_amount,
+                "polygon": json.dumps(polygon),
+            }
+        )
+    coverage = pd.concat([coverage, pd.DataFrame(new_rows)])
+    coverage.to_csv(coverage_path, index=False)
+
+

@@ -7,7 +7,7 @@ Satellite imagery of the Northern Territories region is used to train a classifi
 The counts are recorded and can be analysed or presented later. Tools for
 visualising training and infered detection data are also available.
 
-Based on a pipeline to detect and count boats and moving boats in the Moreton Bay area, we attapted the pipeline to waterholes. The CountingBoats [repository](https://github.com/charlie-turner-314/CountingBoats) was originally designed as a whole pipeline developped to detect boats only. For our workflow, we diverged away from the usage of modules and we use notebooks. This provides you with more control on what you run and allowing you to order single functions and commands. 
+Based on a pipeline to detect and count boats and moving boats in the Moreton Bay area, we attapted the pipeline to waterholes. The [CountingBoats](https://github.com/charlie-turner-314/CountingBoats) repository was originally designed as a whole pipeline developped to detect boats only. For our workflow, we diverged away from the usage of modules and we use notebooks. One notebook is dedicated to a specific section of the whole process. This provides you with more clarity, control on what you run, and allows you to order single functions or commands. 
 
 
 ## How
@@ -56,6 +56,8 @@ Following a training proces, to test your model, modify the paths and variables 
 Finally if you prefer runing the detection of our model directly on your images, you can modify the paths and variables in `config_deploy_Drive.yaml`. 
 
 ### Running
+
+
 
 From the root directory, run the following commands:
 
