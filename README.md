@@ -73,37 +73,27 @@ Either simply run the last code block from `from_tif_to_trainable_AF.ipynb` func
 
 #### Testing
 
-Using the notebook `post_training.ipynb`, the notebook will guide you along the main steps to test the model you just trained. Thos utilities are: 
-    - prepare: Prepare the images for segmentation
-    - segment: Segment the images
-    - run_detection: Run the YoloV5 detection
-    - backwards_annotation_AF: Generate labelme style annotations from the classifications
-    - compare_detections_to_ground_truth: Match up labels and detections, compare them, and save the results
-    - confusion_matrix_AF: Summarize the results of the comparison
-    - plot_waterholes: Plot a comparison of my labels vs the model detection of waterholes on single stitched back together images. 
+Using the notebook `post_training.ipynb`, the notebook will guide you along the main steps to test the model you just trained. Thos utilities are:   
+    - prepare: Prepare the images for segmentation  
+    - segment: Segment the images  
+    - run_detection: Run the YoloV5 detection  
+    - backwards_annotation_AF: Generate labelme style annotations from the classifications  
+    - compare_detections_to_ground_truth: Match up labels and detections, compare them, and save the results  
+    - confusion_matrix_AF: Summarize the results of the comparison  
+    - plot_waterholes: Plot a comparison of my labels vs the model detection of waterholes on single stitched back together images.   
 
 #### Deployment
 
-```
-python -m counting_boats.classify auto
-```
+Originally the repository had a whole section about the classifying process, which included many functions dependent on the classes of the detection. The adaptation of this existing code to waterhole detection, has proven to be more difficult and time consumming than anticipated. As a result, the deployment section of this repository still requires some debugging work.  
+Most of the functions and their dependencies are created, but the smooth running of those needs some work. 
 
 ### Visualisation
 
 There are some visualisation notebooks in the visualisation folder. These can be run to perform some visualisations of the data.
-The `plot_output` script is also a useful tool for visualising the output of the detection model on individual images. Run:
+The `plot_output` script is also a useful tool for visualising the output of the detection model on individual images. 
 
-```
-python -m counting_boats.plot_output --detections {path_to_detections} { --image {path_to_image} | --zip {path_to_zip} }
-```
-
-If you have an image already e.g 'AOI_date.tif', use the `--image` flag. If you want to run on a zip file straight from Planet, use the `--zip` flag.
-e.g.
-
-```
-
-python -m counting_boats.plot_output --detections "U:\Research\Projects\sef\livingplayingmb\Boat Detection TMBF\BoatDetectionResults\boat_detections.csv" --zip "U:\Research\Projects\sef\livingplayingmb\Boat Detection TMBF\PlanetArchive\moreton_20171106.zip"
-
-```
+All thos functions and modules were developped for the visualisation of Boats and was not adapted to waterholes by lack of time. 
 
 ## Acknowledgements
+
+We acknowledge 
