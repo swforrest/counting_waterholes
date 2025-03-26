@@ -57,23 +57,30 @@ Finally if you prefer runing the detection of our model directly on your images,
 
 ### Running
 
+As mentionned, the whole pipeline flow designed by Charlie Turner for the boat detection, is not used here. You will need to run specific blocks of code in the respective jupyter notebooks of each stage of our workflow.  
 
+#### Images dowload
 
-From the root directory, run the following commands:
+Using the notebook `planet_download.ipynb`, you are able to define the Area Of Interest (AOI), the output directory, and the date range before ordering from Planet. Once the order is completed, it can be downloaded and automatically extracts the obtained composite.tif from the .zip file.  
+
+#### Prepare for training
+
+Using the notebook `from_tif_to_trainable_AF.ipynb`, you will follow multiple steps that guide you form the tif file to a product that allows you to train your model. 
 
 #### Training
 
-```
-python -m counting_boats.train {prepare|segment|train} --config config_train.yaml
-```
+Either simply run the last code block from `from_tif_to_trainable_AF.ipynb` function train() or copy paste the function output in the yolov5 folder command prompt. 
 
 #### Testing
 
-```
-python -m counting_boats.testing --config config_test.yaml
-```
-
-By altering `config_test.yaml`, you can change the test data and test tasks that are run.
+Using the notebook `post_training.ipynb`, the notebook will guide you along the main steps to test the model you just trained. Thos utilities are: 
+    - prepare: Prepare the images for segmentation
+    - segment: Segment the images
+    - run_detection: Run the YoloV5 detection
+    - backwards_annotation_AF: Generate labelme style annotations from the classifications
+    - compare_detections_to_ground_truth: Match up labels and detections, compare them, and save the results
+    - confusion_matrix_AF: Summarize the results of the comparison
+    - plot_waterholes: Plot a comparison of my labels vs the model detection of waterholes on single stitched back together images. 
 
 #### Deployment
 
