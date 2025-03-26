@@ -297,6 +297,110 @@ def extract_zip(downloadFile, aoi=None, date=None):
     return newfname
 
 
+def parse_config_AF(config: str) -> dict:
+    """
+    Parse the config file
+
+    Args:
+        config (str): path to the config file
+
+    Returns:
+        dict: the parsed config file
+    """
+    with open(config, "r") as f:
+        return yaml.load(f, Loader=yaml.FullLoader)
+    
+
+def extract_zip_AF(downloadFile, aoi, date, cfg):
+    """
+    Extract the zip file and move the tif file to the raw tiffs directory
+
+    Args:
+
+        downloadFile: the path to the zip file
+        aoi: the area of interest
+        date: the date of the image
+
+    Returns:
+
+        the name of the tif file after extracting
+    """
+    cfg=parse_config_AF(cfg)
+    
+    # Ensure tif_dir exists
+    if not os.path.exists(cfg["tif_dir"]):
+        os.makedirs(cfg["tif_dir"], exist_ok=True)
+    
+    # List to store processed tif filenames
+    processed_tifs = []
+    
+    # Handle both single file and directory inputs
+    if os.path.isfile(downloadFile):
+        zip_files = [downloadFile]
+    elif os.path.isdir(downloadFile):
+        zip_files = [
+            os.path.join(downloadFile, f) 
+            for f in os.listdir(downloadFile) 
+            if f.endswith('.zip')
+        ]
+    else:
+        raise ValueError(f"Invalid input path: {downloadFile}")
+    
+    # Process each zip file
+    for zip_path in zip_files:
+        # Determine AOI and date if not provided
+        current_aoi = aoi
+        current_date = date
+        
+        if current_aoi is None or current_date is None:
+            try:
+                # Extract AOI and date from filename
+                filename = os.path.basename(zip_path).split(".zip")[0]
+                seps = filename.split("_")
+                current_date = seps[-1]
+                current_aoi = "_".join(seps[:-1])
+            except:
+                raise Exception(f"Could not extract AOI and date from {zip_path}")
+        
+        # Create extraction path
+        extractPath = zip_path.split(".zip")[0]
+        print(f"Processing: {zip_path}, Extract Path: {extractPath}")
+        
+        # Extract zip file
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(extractPath)
+        
+        # Define paths for composite tif
+        tif = os.path.join(extractPath, "composite.tif")
+        
+        # Check if tif exists
+        if not os.path.isfile(tif):
+            print(f"Warning: No tif file found in {extractPath}")
+            continue
+        
+        # Create new filename
+        newfname = f"{current_date}_{current_aoi}.tif"
+        new_tif_path = os.path.join(cfg["tif_dir"], newfname)
+        
+        # Move file
+        try:
+            # If file already exists, skip
+            if os.path.exists(new_tif_path):
+                print(f"File {newfname} already exists, skipping")
+                continue
+            
+            # Move the file
+            os.replace(tif, new_tif_path)
+            processed_tifs.append(newfname)
+            print(f"Successfully moved {newfname} to {cfg['tif_dir']}")
+        
+        except Exception as e:
+            print(f"Error processing {zip_path}: {e}")
+    
+    # Return list of processed tif filenames
+    return processed_tifs
+
+
 
 def get_with_retry(uri, auth, retries=5):
     """

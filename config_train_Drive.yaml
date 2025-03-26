@@ -56,3 +56,6 @@ names:
   2: WH_wet
   3: WH_sink
   4: U
+
+#If using manually the extract_zip() need to define the tif directory here: CHANGE:
+tif_dir: D:\Waterholes_project\counting_waterholes\deployment\raw_images
