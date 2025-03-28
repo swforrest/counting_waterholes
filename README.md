@@ -32,6 +32,8 @@ The project follows a comprehensive pipeline:
 
 ### Installation
 
+Clone this [repository](https://github.com/swforrest/counting_waterholes). Will allow you to run all the notebooks and follow the instructions bellow.
+
 #### Yolov5
 
 Clone [YoloV5](https://github.com/ultralytics/yolov5). This is used for the Neural Network detections.

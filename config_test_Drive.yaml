@@ -1,34 +1,79 @@
+#-------------------
+#All absolute paths you need to change are located at the top of this file
+#All the other ones should be relative paths and thus do not need to be created in your folder. 
+#AF 28.03.2025 
+
+
+#-------------------
+##Expected folder structure##
+#They should be created as you go along the functions but as a reference this is how it will look like at the end:
+
+#testing\  
+#   classifications\                   # Classifications (segmented labels from model detection)
+#       date(s)\
+#           image_name\
+#   labels\                            # Segmented labels output path
+#       date(s)\
+#           image_name\
+#   plots\                             #plots outputs from testing 
+#   pngs\                              # pngs created, json labels, and location of the created labelme_auto.json files. 
+#   raw_images\                        # tif files location
+#   segmented_images\                  # segmented images output 
+
+
+#-------------------
+##General paths## 
+
+#MODIFY ALL THOSE PATHS TO YOUR ABSOLUTE PATHS:
+
 #Yolo directory:
 yolo_dir: C:/Users/fossatia/Documents/Waterholes_project/yolov5
+# Configuration for Validation/Analysis Runs.
+path:  D:/Waterholes_project/counting_waterholes/testing
+# Validation run with Best weights from your last model training or the weights of your choice.
+weights: D:\yolo_runs\exp_v4\weights\best.pt
+#To use the GPU, use the cuda:0. Might need some updating of your dependencies to match youor GPU version.
+device: cuda:0
+#Repository root path (where this file is)
+proj_root: C:/Users/fossatia/Documents/Waterholes_project/counting_waterholes/counting_waterholes 
+
+
+
+#-------------------
+##Those paths are relative and should not need to be modified.##
+
 #Python language. Shouldn't need any change. 
 python: python
-# Configuration for Validation/Analysis Runs. CHANGE:
-path:  D:/Waterholes_project/counting_waterholes/testing_v4_improved
-# Validation run with Best weights from your last model training or the weights of your choice. CHANGE:
-weights: D:\yolo_runs\exp_v4\weights\best.pt
-#To use the GPU, use the cuda:0. Might need some updating of your dependencies to match youor GPU version.  Adapt:
-device: cuda:0
-#Path of your project/repo:  CHANGE:
-proj_root: C:/Users/fossatia/Documents/Waterholes_project/counting_waterholes/counting_waterholes # root of project (where this file is) % base directory
+# pngs created, json labels, and location of the created labelme_auto.json files. 
+pngs: ./pngs  
+#tif files location:
+raw_images: ./raw_images
+# Segmented images output path
+segmented_images: ./segmented_images 
+#Segmented labels output path
+labels: ./labels 
+# Classifications (segmented labels from model detection) 
+#{Caution! need to delete this path everytime you run the detection, if you run into errors etc...}
+classifications: ./classifications 
+#figures and plots outputs 
+plots: ./plots 
+#not actually used in the testing 
+output_dir: ./results 
 
-# These paths either exist (and are used) or are created (and used) by the run
-pngs: ./pngs # pngs created, json labels, and location of the created labelme_auto.json files.  
-raw_images: ./raw_images #tif files 
-segmented_images: ./segmented_images # Segmented images 
-labels: ./labels #Segmented labels  
-classifications: ./classifications # Classifications (segmented labels from model detection)
-plots: ./plots #figures and plots outputs 
-output_dir: ./results #AF: not actually used in the testing 
 
-plot_box_size: 100 #plotting WH size of boxes. To be fine tuned. 
+#-------------
+##WH clustering, testing, and plotting parameters##
+
+#plotting WH size of boxes when comparing visualy the labeled vs classified WH. To be fine tuned as pleased. 
+plot_box_size: 100 
 
 use_comet: False # If true, make sure comet is setup (needs env vars or a .comet.config file)
 
-
-#AF: various values and parameters of the model manipulation, to be checked when running it or change in the code directly. 
+#Various values and parameters of the model manipulation. 
+#To be checked. Adapted when running it. 
 workers: 6
 BATCH_SIZE: 8
-EPOCHS: 500
+EPOCHS: 250
 img_size: 416
 img_stride: 104
 TILE_SIZE: 416
@@ -48,11 +93,14 @@ STAT_DISTANCE_CUTOFF_PIX_U: 120
 # For 3m resolution, 10 pix is roughly 30m. At approx -27 deg lat, this is approx 0.0003 degrees.
 STAT_DISTANCE_CUTOFF_LATLONG: 0.00025 
 
-
+#Comparison of my labels and the clustered ones of the classification:
 COMPARE_DISTANCE_CUTOFF_PIX: 40
 
-#Tasks to be performed if running by modules. 
-#I'm just putting all false and run manually in our pipeline. 
+
+#------------------
+##Tasks to be performed if running by modules.## 
+
+#I'm just putting all false and run manually in our pipeline. Not ran by modules so not necessary.
 tasks:
   # These 4 are not required if have been done before (and above paths are absolute and exist)
   prepare: False # Prepare for labelling
