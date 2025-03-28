@@ -41,7 +41,7 @@ path: D:/Waterholes_project/counting_waterholes/deployment
 pngs: ./pngs
 #tif files 
 raw_images: ./raw_images
-segmented_images: ./segmented_images # Segmented images 
+segmented_images: ./segmented_images/07_06_2024/20240607_mimalfull2 # Segmented images 
 labels: ./labels #Segmented labels  
 classifications: ./classifications # Classifications (segmented labels from model detection)
 plots: ./plots #figures and plots outputs 
