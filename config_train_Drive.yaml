@@ -1,26 +1,27 @@
 #-------------------
 #All absolute paths you need to change are located at the top of this file
 #All the other ones should be relative paths and thus do not need to be created in your folder. 
-#AF 24.03.2025 
+#AF 28.03.2025 
 
 
 #-------------------
 ##Expected folder structure##
+
+#The only folder you manually should create or populate is the 'raw_images\' with the tif file.  
 #They should be created as you go along the functions but as a reference this is how it will look like at the end:
 
 #training\  
-#   images\
-#   labels\
-#   output\
+#   images\                               # pngs and their manual labels json files
+#   output\                               # Output of the pre-training processes i.e. segmented images and labels
 #       images\
-#           train\
+#           train\                        
 #           val\
-#           moved_empty_images\ 
+#           moved_empty_images\           # removed images to stay <10% of background images in the training
 #       labels\
 #           train\
 #           val\
-#           moved_empty_images\ 
-#   raw_images\
+#           moved_empty_images\           # removed labels to stay <10% of background images in the training
+#   raw_images\                           #Location of your tif files for the training workflow
 #   train\
 #       train\
 #           images\
