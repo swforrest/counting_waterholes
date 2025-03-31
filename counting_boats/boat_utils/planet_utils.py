@@ -60,8 +60,27 @@ def PlanetSearch(
     """
     # get the polygon
     polygon = None
+
     with open(polygon_file, "r") as f:
-        polygon = json.load(f)
+        geojson_data = json.load(f)
+
+    # # Load GeoJSON from file
+    # with open(selected_polygon, 'r') as f:
+    #     geojson_data = json.load(f)
+
+    # Extract the geometry from the GeoJSON
+    # Depending on your GeoJSON structure, you might need one of these approaches:
+    if 'geometry' in geojson_data:
+        # For a Feature
+        polygon = geojson_data['geometry']
+    elif 'type' in geojson_data and geojson_data['type'] == 'FeatureCollection':
+        # For a FeatureCollection, use the first feature's geometry
+        polygon = geojson_data['features'][0]['geometry']
+    elif 'coordinates' in geojson_data and 'type' in geojson_data:
+        # If it's already a bare geometry
+        polygon = geojson_data
+
+
     # Get the format-string json file as text
     search_body = SEARCH_BODY.replace("MIN_DATE", min_date)
     search_body = search_body.replace("MAX_DATE", max_date)
