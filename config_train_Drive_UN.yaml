@@ -106,7 +106,7 @@ labels: .\labels
 classifications: .\images\classifications
 
 #Training images path. 
-#If not working replace the ./ by your path. Example for me: 'D:\Waterholes_project\counting_waterholes\training'
+#If not working replace the .\ by your path. Example for me: 'D:\Waterholes_project\counting_waterholes\training'
 train: .\train\images
 #Validation images path. Same debugging advice. 
 val: .train\val\images
