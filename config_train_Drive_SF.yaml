@@ -1,0 +1,71 @@
+#Updates to run on Adriano Fossati (AF) comupter. Commented out the base directories
+
+# yolo_dir: C:\yolov5
+#AF:
+yolo_dir: C:/Users/fossatia/Documents/Waterholes_project/yolov5
+#AF:
+python: python
+#raw_images: C:\ML_Software\active_learning\data\downloads
+#AF: 
+# raw_images: D:\Waterholes_project\counting_waterholes\training_v4\raw_images
+raw_images: C:\Users\for329\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes\images\planet_2_sentinel\tifs
+
+proj_root: .
+
+# reccommended to change outdir for each run if using different images/params!!!
+#base dir: output_dir:C:\ML_Software\active_learning\data
+#AF:
+# output_dir: D:\Waterholes_project\counting_waterholes\training_v4\output
+output_dir: C:\Users\for329\OneDrive - Queensland University of Technology\FirstByte Waterholes WD\counting_waterholes\images\planet_2_sentinel
+#base dir: weights: C:\yolov5\runs\train\63ImageTraim_19Mar_(S300)\weights\best.pt
+
+#AF: creating new paths to manipulate the output of the segmentation. 
+segmented_images : D:\Waterholes_project\counting_waterholes\training_v4\output\images\train
+segmented_labels : D:\Waterholes_project\counting_waterholes\training_v4\output\labels\train
+
+#AF:
+weights: D:\yolo_runs\exp\weights\best.pt
+#AF: file existing but from the previous runs of Charlie 
+cache: False
+
+# yaml config describing the training data and classes
+#AF: all int to be rechecked later and see what we want to put in there. 
+workers: 6
+
+BATCH_SIZE: 8
+EPOCHS: 100
+
+#AF: to be checked and potentially modified. 
+img_size: 416
+img_stride: 104
+
+TILE_SIZE: 416
+STRIDE: 104
+
+# training Dataset
+path: .
+#added the pngs path on the script as it was missing and it was called by my personal script. 
+pngs: .\images
+# segmented_images: .\images\SegmentedImages # Segmented images but not used so removed
+labels: .\training\labels # Labels for the images as creation or manipulation 
+  # D:/Waterholes_project/counting_waterholes/images/train_v1/labels
+classifications: .\images\classifications # Classifications for the images
+
+training_path: D:\Waterholes_project\counting_waterholes\training_v4\train
+
+train: D:\Waterholes_project\counting_waterholes\training_v4\train\train\images
+  # - C:\yoloDatasets\trainFinal\images 
+  # - \\hpc-fs.qut.edu.au\turner30\Projects\Boats\Training\trainOrig\trainFinal\images
+
+val: D:\Waterholes_project\counting_waterholes\training_v4\train\val\images
+  # - C:\ML_Software\MoretonVal\images
+names:
+  0: Dry_WH
+  1: WH_swamp
+  2: WH_wet
+  3: WH_sink
+  4: U
+
+  #AF: what if it need two categories in the whole script? 
+  #If I delete the second one, or don't put a second cat, might fuck up all the scripts workflow...
+

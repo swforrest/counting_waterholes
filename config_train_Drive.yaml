@@ -1,62 +1,78 @@
-#Updates to run on Adriano Fossati (AF) comupter. Commented out the base directories
+#-------------------
+#All absolute paths you need to change are located at the top of this file
+#All the other ones should be relative paths and thus do not need to be created in your folder. 
+#AF 28.03.2025 
 
-# yolo_dir: C:\yolov5
-#AF:
+
+#-------------------
+##Expected folder structure##
+
+#The only folder you manually should create or populate is the 'raw_images\' with the tif file.  
+#They should be created as you go along the functions but as a reference this is how it will look like at the end:
+
+#training\  
+#   images\                               # pngs and their manual labels json files
+#   output\                               # Output of the pre-training processes i.e. segmented images and labels
+#       images\
+#           train\                        
+#           val\
+#           moved_empty_images\           # removed images to stay <10% of background images in the training
+#       labels\
+#           train\
+#           val\
+#           moved_empty_images\           # removed labels to stay <10% of background images in the training
+#   raw_images\                           #Location of your tif files for the training workflow
+#   train\
+#       train\
+#           images\
+#           labels\
+#       val\
+#           images\
+#           labels\
+
+
+
+#-------------------
+##General paths## 
+
+#MODIFY ALL THOSE PATHS TO YOUR ABSOLUTE PATHS:
+#Unfortunately, the functions in the training workflow require quite a lot of absolute paths. 
+#Reccommended to change outdir for each run if using different images/params!!!
+#Root of the repository:
+proj_root: C:/Users/fossatia/Documents/Waterholes_project/counting_waterholes
+#Yolo directory:
 yolo_dir: C:/Users/fossatia/Documents/Waterholes_project/yolov5
-#AF:
-python: python
-#raw_images: C:\ML_Software\active_learning\data\downloads
-#AF: 
-raw_images: D:\Waterholes_project\counting_waterholes\training_v4\extra_tif
+#AF: Using the simple model weights provided by yolo itself. 
+weights: C:\Users\fossatia\Documents\Waterholes_project\yolov5\yolov5s.pt
 
-proj_root: .
 
-# reccommended to change outdir for each run if using different images/params!!!
-#base dir: output_dir:C:\ML_Software\active_learning\data
-#AF:
-output_dir: D:\Waterholes_project\counting_waterholes\training_v4\output
-#base dir: weights: C:\yolov5\runs\train\63ImageTraim_19Mar_(S300)\weights\best.pt
+#--------------------
+##Training paths modification##
 
-#AF: creating new paths to manipulate the output of the segmentation. 
+#In this section, modify 'D:\Waterholes_project\counting_waterholes\training_v4' by your training path. 
+#What follows the '\training_v4' should remain intact.  
+#Location of your tif files for the training workflow:
+raw_images: D:\Waterholes_project\counting_waterholes\training_v4\raw_images 
+#If using manually the extract_zip() need to define the tif directory here. 
+#Could be the same as raw_images for a uniform workflow:
+tif_dir: D:\Waterholes_project\counting_waterholes\training_v4\raw_images
+#Output of the pre-training processes: 
+output_dir: D:\Waterholes_project\counting_waterholes\training_v4\output 
+
+#Creating new paths to manipulate the output of the segmentation. 
+#The structure of the segmentation's output does not match the train one. Those are paths to reorganise it.
+#Modify these two with up to your training path only. 
+#replace 'D:\Waterholes_project\counting_waterholes\training_v4' by your path. 
+#'\output\images\train' and '\output\labels\train' need to remain intact. 
 segmented_images : D:\Waterholes_project\counting_waterholes\training_v4\output\images\train
 segmented_labels : D:\Waterholes_project\counting_waterholes\training_v4\output\labels\train
 
-#AF:
-weights: C:/Users/fossatia/Documents/Waterholes_project/yolov5/runs/train/exp3/weights/best.pt
-#AF: file existing but from the previous runs of Charlie 
-cache: False
-
-# yaml config describing the training data and classes
-#AF: all int to be rechecked later and see what we want to put in there. 
-workers: 6
-
-BATCH_SIZE: 8
-EPOCHS: 100
-
-#AF: to be checked and potentially modified. 
-img_size: 416
-img_stride: 104
-
-TILE_SIZE: 416
-STRIDE: 104
-
-# training Dataset
-path: .
-#added the pngs path on the script as it was missing and it was called by my personal script. 
-pngs: .\images
-# segmented_images: .\images\SegmentedImages # Segmented images but not used so removed
-labels: .\training\labels # Labels for the images as creation or manipulation 
-  # D:/Waterholes_project/counting_waterholes/images/train_v1/labels
-classifications: .\images\classifications # Classifications for the images
-
+#Training material folder path
 training_path: D:\Waterholes_project\counting_waterholes\training_v4\train
 
-train: D:\Waterholes_project\counting_waterholes\training_v4\train\train\images
-  # - C:\yoloDatasets\trainFinal\images 
-  # - \\hpc-fs.qut.edu.au\turner30\Projects\Boats\Training\trainOrig\trainFinal\images
-
-val: D:\Waterholes_project\counting_waterholes\training_v4\train\val\images
-  # - C:\ML_Software\MoretonVal\images
+#Labels classes. Strongly advice not to modify them and use ours.
+#Multiple functions are deisgned to work with those label classes. 
+#If really needed to modify them, you would need to check all function of the training workflow to adapt with yours.   
 names:
   0: Dry_WH
   1: WH_swamp
@@ -64,6 +80,35 @@ names:
   3: WH_sink
   4: U
 
-  #AF: what if it need two categories in the whole script? 
-  #If I delete the second one, or don't put a second cat, might fuck up all the scripts workflow...
 
+#-------------------
+##Those paths are relative and should not need to be modified.##
+python: python
+cache: False
+
+#Various values and parameters of the model manipulation. 
+#To be checked?adapted when running it. 
+workers: 6
+BATCH_SIZE: 8
+EPOCHS: 100
+img_size: 416
+img_stride: 104
+TILE_SIZE: 416
+STRIDE: 104
+
+# training Dataset
+path: .
+#manually labeled pngs and their corresponding json files:
+pngs: .\images
+#Segmented labels directory
+labels: .\labels
+#Classifications for the images
+classifications: .\images\classifications
+
+#Training images path. 
+#If not working replace the ./ by your path. Example for me: 'D:\Waterholes_project\counting_waterholes\training_v4'
+train: .\train\images
+#Validation images path. Same debugging advice. 
+val: .train\val\images
+
+##End of the config file of training##

@@ -73,6 +73,41 @@ def prepare(
         print(f"Processed {i+1}/{len(tif_files)}", end="\r")
     print(f"Processed {len(tif_files)}/{len(tif_files)} images")
 
+@app.command()
+def prepare_S2(
+    config: str = typer.Option("", help="Path to the config file"),
+):
+    """
+    Prepare the TIFF images for labelling by converting them to PNGs
+    Does this for all TIF images in the raw_images folder specified in the config
+
+    Args:
+        config (str): path to the config
+
+    Returns:
+        None
+    """
+    cfg = parse_config(config)
+    # Create the directory
+    os.makedirs(cfg["output_dir"], exist_ok=True)
+    # find all the tif files that we want
+    # from cfg["raw_images"] folder
+    tif_files = [
+        os.path.join(root, f)
+        for root, _, files in os.walk(cfg["raw_images"])
+        for f in files
+        if f.endswith(".tif")
+    ]
+    # use ics to convert to padded pngs (the padding is specific to the segment size and stride that will be used)
+    for i, tif in enumerate(tif_files):
+        tif_dir = os.path.dirname(tif)
+        tif_name = os.path.basename(tif)
+        ics.create_padded_png_S2(
+            tif_dir, cfg["output_dir"], tif_name, cfg["TILE_SIZE"], cfg["STRIDE"]
+        )
+        print(f"Processed {i+1}/{len(tif_files)}", end="\r")
+    print(f"Processed {len(tif_files)}/{len(tif_files)} images")
+
 
 @app.command()
 def segment(

@@ -1,0 +1,8 @@
+Folder directory D:\Waterholes_project\counting_waterholes\testing_v4
+Detection directory D:/Waterholes_project/counting_waterholes/testing_v4\./classifications
+Labels directory D:/Waterholes_project/counting_waterholes/testing_v4\./labels
+Expected label directory: D:\Waterholes_project\counting_waterholes\testing_v4\labels\classifications\04_06_2024\20240604_mimal_test
+Label directory D:\Waterholes_project\counting_waterholes\testing_v4\labels\classifications\04_06_2024\20240604_mimal_test does not exist, skipping image...
+Expected label directory: D:\Waterholes_project\counting_waterholes\testing_v4\labels\classifications\28_04_2023\20230428_example
+Label directory D:\Waterholes_project\counting_waterholes\testing_v4\labels\classifications\28_04_2023\20230428_example does not exist, skipping image...
+raw_images folder D:/Waterholes_project/counting_waterholes/testing_v4\./raw_images

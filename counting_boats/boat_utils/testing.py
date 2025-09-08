@@ -36,7 +36,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 import json
 import subprocess
-from . import stitch_PNGs as stitch_AF
+from counting_boats.boat_utils.stitch_PNGs import stitch_AF
 
 
 #Manualy change them in accordance to the desired value. Are not called in some functions so to be easier they are here...
@@ -148,9 +148,10 @@ def segment(run_folder, config):
     config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
     tile_size = config.get("img_size", 416)
     stride = config.get("img_stride", 104)
-    pngs = os.path.join(config["path"], config["pngs"])
-    im_save_folder = os.path.join(config["path"], config["segmented_images"])
-    label_save_folder = os.path.join(config["path"], config["labels"])
+    pngs = os.path.normpath(os.path.join(config["path"], config["pngs"]))
+    im_save_folder = os.path.normpath(os.path.join(config["path"], config["segmented_images"]))
+    label_save_folder = os.path.normpath(os.path.join(config["path"], config["labels"]))
+    print(f'pngs folder {pngs}')
     if not os.path.exists(im_save_folder):
         os.makedirs(im_save_folder, exist_ok=True)
     if not os.path.exists(label_save_folder):
@@ -242,7 +243,7 @@ def run_detection(run_folder, config):
             # print(f"Command output: {res.stdout}")
             # print(f"Command error: {res.stderr}")
             print(f"Command exit code: {res.returncode}")
-            print(f"Command returned exit code: {res}")
+            # print(f"Command returned exit code: {res}")
             if res.returncode != 0:
                 raise Exception(f"Error running detection on {root}")
             latest_exp = (
@@ -267,277 +268,6 @@ def run_detection(run_folder, config):
             print(f"Classified {root}, saved to {this_classification_dir}")
 
 
-# def backwards_annotation(run_folder, config):
-#     """
-#     Generate labelme style annotations (json) from the classifications.
-#     1. Read classifications
-#     2. Generate json file {image}_labelme_auto.json with:
-
-#     Args:
-
-#         run_folder (str): The folder to run detection on.
-#         config (dict): The configuration dictionary.
-
-#     Returns:
-
-#         None
-#     """
-#     detection_dir = os.path.join(config["path"], config["classifications"])
-#     for root, _, files in os.walk(detection_dir):
-#         # skip if json file exists
-#         if os.path.exists(
-#             os.path.join(
-#                 config["path"],
-#                 config["pngs"],
-#                 f"{os.path.basename(root)}_labelme_auto.json",
-#             )
-#         ):
-#             continue
-#         if len(files) > 0 and files[0].endswith(".txt"):
-#             this_image = os.path.basename(root)
-#             ML_classifications, _ = read_classifications(
-#                 class_folder=root, confidence_threshold=0.5
-#             )  # read all
-#             ML_classifications_stat = ML_classifications[
-#                 ML_classifications[:, 3] == 0.0
-#             ]
-#             ML_classifications_moving = ML_classifications[
-#                 ML_classifications[:, 3] == 1.0
-#             ]
-#             # cluster
-#             ML_clusters_stat = cluster(
-#                 ML_classifications_stat, STAT_DISTANCE_CUTOFF_PIX
-#             )
-#             ML_clusters_moving = cluster(
-#                 ML_classifications_moving, MOVING_DISTANCE_CUTOFF_PIX
-#             )
-#             # condense
-#             ML_clusters_stat = process_clusters(ML_clusters_stat)
-#             ML_clusters_moving = process_clusters(ML_clusters_moving)
-#             # get image metadata (width and height)
-#             img = Image.open(
-#                 os.path.join(config["path"], config["pngs"], this_image + ".png")
-#             )
-#             width, height = img.size
-
-#             json_data = {}
-#             json_data["version"] = "5.2.1"
-#             json_data["flags"] = {}
-#             json_data["imagePath"] = this_image
-#             json_data["imageHeight"] = height
-#             json_data["imageWidth"] = width
-#             # put in the shapes
-#             json_data["shapes"] = []
-#             for c in ML_clusters_stat:
-#                 x, y, _, _, w, h = c
-#                 w = int(w / 2)
-#                 h = int(h / 2)
-#                 json_data["shapes"].append(
-#                     {
-#                         "label": "boat",
-#                         "points": [[x - w, y - h], [x + w, y + h]],
-#                         "group_id": None,
-#                         "shape_type": "rectangle",
-#                         "flags": {},
-#                     }
-#                 )
-#             for c in ML_clusters_moving:
-#                 (
-#                     x,
-#                     y,
-#                     _,
-#                     _,
-#                     w,
-#                     h,
-#                 ) = c
-#                 w = int(w / 2)
-#                 h = int(h / 2)
-#                 json_data["shapes"].append(
-#                     {
-#                         "label": "movingBoat",
-#                         "points": [[x - w, y - h], [x + w, y + h]],
-#                         "group_id": None,
-#                         "shape_type": "rectangle",
-#                         "flags": {},
-#                     }
-#                 )
-#             # also need to get the "image_data" key. There will also be a {this_image}.json we can grab this from
-#             with open(
-#                 os.path.join(config["path"], config["pngs"], f"{this_image}.json"), "r"
-#             ) as f:
-#                 image_data = json.load(f)["imageData"]
-#             json_data["imageData"] = image_data
-#             # save the json
-#             json_path = os.path.join(
-#                 config["path"], config["pngs"], f"{this_image}_labelme_auto.json"
-#             )
-#             with open(json_path, "w+") as f:
-#                 json.dump(json_data, f)
-
-# def backwards_annotation_AF_old(run_folder, config):
-#     """
-#     Generate labelme style annotations (json) from the classifications.
-#     1. Read classifications
-#     2. Generate json file {image}_labelme_auto.json with:
-
-#     Args:
-
-#         run_folder (str): The folder to run detection on.
-#         config (dict): The configuration dictionary.
-
-#     Returns:
-
-#         None
-    
-#     Comment:
-#     AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
-#     Should run smoothly and did not modify the dependent functions. 
-#     """
-#     config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
-#     run_folder = os.path.normpath(run_folder) #AF
-#     detection_dir = os.path.join(config["path"], config["classifications"])
-#     for root, _, files in os.walk(detection_dir):
-#         # skip if json file exists
-#         if os.path.exists(
-#             os.path.join(
-#                 config["path"],
-#                 config["pngs"],
-#                 f"{os.path.basename(root)}_labelme_auto.json",
-#             )
-#         ):
-#             continue
-#         if len(files) > 0 and files[0].endswith(".txt"):
-#             this_image = os.path.basename(root)
-#             ML_classifications, _ = read_classifications(
-#                 class_folder=root, confidence_threshold=0.5
-#             )  # read all
-            
-#             # Separate classifications by class
-#             ML_classifications_dry_wh = ML_classifications[ML_classifications[:, 3] == 0.0]
-#             ML_classifications_wh_swamp = ML_classifications[ML_classifications[:, 3] == 1.0]
-#             ML_classifications_wh_wet = ML_classifications[ML_classifications[:, 3] == 2.0]
-#             ML_classifications_wh_sink = ML_classifications[ML_classifications[:, 3] == 3.0]
-#             ML_classifications_u = ML_classifications[ML_classifications[:, 3] == 4.0]
-            
-#             # Define distance cutoffs for each class (adjust these as needed)
-#             DRY_WH_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Using existing static distance
-#             WH_SWAMP_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
-#             WH_WET_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
-#             WH_SINK_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
-#             U_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Not using existing moving distance as we all have static objects
-            
-#             # cluster each class separately
-#             ML_clusters_dry_wh = cluster(ML_classifications_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
-#             ML_clusters_wh_swamp = cluster(ML_classifications_wh_swamp, WH_SWAMP_DISTANCE_CUTOFF_PIX)
-#             ML_clusters_wh_wet = cluster(ML_classifications_wh_wet, WH_WET_DISTANCE_CUTOFF_PIX)
-#             ML_clusters_wh_sink = cluster(ML_classifications_wh_sink, WH_SINK_DISTANCE_CUTOFF_PIX)
-#             ML_clusters_u = cluster(ML_classifications_u, U_DISTANCE_CUTOFF_PIX)
-            
-#             # condense clusters
-#             ML_clusters_dry_wh = process_clusters(ML_clusters_dry_wh)
-#             ML_clusters_wh_swamp = process_clusters(ML_clusters_wh_swamp)
-#             ML_clusters_wh_wet = process_clusters(ML_clusters_wh_wet)
-#             ML_clusters_wh_sink = process_clusters(ML_clusters_wh_sink)
-#             ML_clusters_u = process_clusters(ML_clusters_u)
-            
-#             # get image metadata (width and height)
-#             img = Image.open(
-#                 os.path.join(config["path"], config["pngs"], this_image + ".png")
-#             )
-#             width, height = img.size
-
-#             json_data = {}
-#             json_data["version"] = "5.2.1"
-#             json_data["flags"] = {}
-#             json_data["imagePath"] = this_image
-#             json_data["imageHeight"] = height
-#             json_data["imageWidth"] = width
-#             # put in the shapes
-#             json_data["shapes"] = []
-            
-#             # Add shapes for each class
-#             for c in ML_clusters_dry_wh:
-#                 x, y, _, _, w, h = c
-#                 w = int(w / 2)
-#                 h = int(h / 2)
-#                 json_data["shapes"].append(
-#                     {
-#                         "label": "Dry_WH",
-#                         "points": [[x - w, y - h], [x + w, y + h]],
-#                         "group_id": None,
-#                         "shape_type": "rectangle",
-#                         "flags": {},
-#                     }
-#                 )
-                
-#             for c in ML_clusters_wh_swamp:
-#                 x, y, _, _, w, h = c
-#                 w = int(w / 2)
-#                 h = int(h / 2)
-#                 json_data["shapes"].append(
-#                     {
-#                         "label": "WH_swamp",
-#                         "points": [[x - w, y - h], [x + w, y + h]],
-#                         "group_id": None,
-#                         "shape_type": "rectangle",
-#                         "flags": {},
-#                     }
-#                 )
-                
-#             for c in ML_clusters_wh_wet:
-#                 x, y, _, _, w, h = c
-#                 w = int(w / 2)
-#                 h = int(h / 2)
-#                 json_data["shapes"].append(
-#                     {
-#                         "label": "WH_wet",
-#                         "points": [[x - w, y - h], [x + w, y + h]],
-#                         "group_id": None,
-#                         "shape_type": "rectangle",
-#                         "flags": {},
-#                     }
-#                 )
-                
-#             for c in ML_clusters_wh_sink:
-#                 x, y, _, _, w, h = c
-#                 w = int(w / 2)
-#                 h = int(h / 2)
-#                 json_data["shapes"].append(
-#                     {
-#                         "label": "WH_sink",
-#                         "points": [[x - w, y - h], [x + w, y + h]],
-#                         "group_id": None,
-#                         "shape_type": "rectangle",
-#                         "flags": {},
-#                     }
-#                 )
-                
-#             for c in ML_clusters_u:
-#                 x, y, _, _, w, h = c
-#                 w = int(w / 2)
-#                 h = int(h / 2)
-#                 json_data["shapes"].append(
-#                     {
-#                         "label": "U",
-#                         "points": [[x - w, y - h], [x + w, y + h]],
-#                         "group_id": None,
-#                         "shape_type": "rectangle",
-#                         "flags": {},
-#                     }
-#                 )
-                
-#             # also need to get the "image_data" key. There will also be a {this_image}.json we can grab this from
-#             with open(
-#                 os.path.join(config["path"], config["pngs"], f"{this_image}.json"), "r"
-#             ) as f:
-#                 image_data = json.load(f)["imageData"]
-#             json_data["imageData"] = image_data
-#             # save the json
-#             json_path = os.path.join(
-#                 config["path"], config["pngs"], f"{this_image}_labelme_auto.json"
-#             )
-#             with open(json_path, "w+") as f:
-#                 json.dump(json_data, f)
 
 def backwards_annotation_AF(run_folder, config):
     """
@@ -558,7 +288,7 @@ def backwards_annotation_AF(run_folder, config):
     config = parse_config(config)  # To solve the error: 'str' object has no attribute 'get'
     run_folder = os.path.normpath(run_folder)
     detection_dir = os.path.join(config["path"], config["classifications"])
-    
+    print(f"Detection directory {detection_dir}")
     for root, _, files in os.walk(detection_dir):
         # Skip if json file exists
         if os.path.exists(
@@ -569,11 +299,13 @@ def backwards_annotation_AF(run_folder, config):
             )
         ):
             continue
-            
+        # print(f"Root dir {root}") #AF
+        # print(f"Root dir {files}") #AF
+        
         if len(files) > 0 and files[0].endswith(".txt"):
             this_image = os.path.basename(root)
             ML_classifications, _ = read_classifications_AF(
-                class_folder=root, confidence_threshold=0.5
+                class_folder=root, confidence_threshold=config["CONFIDENCE_THRESHOLD"]
             )  # Read all
             
             # Separate classifications by class
@@ -702,6 +434,7 @@ def backwards_annotation_AF(run_folder, config):
             json_path = os.path.join(
                 config["path"], config["pngs"], f"{this_image}_labelme_auto.json"
             )
+            print(f"{this_image}_labelme_auto.json saved to {json_path}")
             with open(json_path, "w+") as f:
                 json.dump(json_data, f)
 
@@ -723,6 +456,9 @@ def compare_detections_to_ground_truth(run_folder, config):
     run_folder = os.path.normpath(run_folder) #AF
     label_dir = os.path.join(config["path"], config["labels"])
     detection_dir = os.path.join(config["path"], config["classifications"])
+    print(f"Folder directory {run_folder}")
+    print(f"Detection directory {detection_dir}")
+    print(f"Labels directory {label_dir}")
     for root, _, files in os.walk(detection_dir):
         if len(files) > 0 and files[0].endswith(".txt"):
             this_img = os.path.basename(root)
@@ -732,51 +468,6 @@ def compare_detections_to_ground_truth(run_folder, config):
     if config.get("raw_images", False):
         classifications_to_lat_long_AF(run_folder, config)
 
-
-# def confusion_matrix(run_folder, config):
-#     """
-#     Summarize the results of the comparison. Reads all csvs and creates a confusion matrix
-
-#     Args:
-
-#         run_folder (str): The folder to run detection on.
-#         config (dict): The configuration dictionary.
-
-#     Returns:
-
-#         None
-#     """
-#     config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
-#     run_folder = os.path.normpath(run_folder) #AF
-#     if os.path.exists(os.path.join(run_folder, "all_boats.csv")):
-#         all_data = pd.read_csv(os.path.join(run_folder, "all_boats.csv"))
-#     else:
-#         # read all the csvs in the run folder that start with a date (8 numbers)
-#         all_data = pd.concat(
-#             [
-#                 pd.read_csv(os.path.join(run_folder, file))
-#                 for file in os.listdir(run_folder)
-#                 if file.endswith(".csv") and file[:8].isdigit()
-#             ]
-#         )
-#     # create confusion matrix
-#     true = all_data["manual_class"]
-#     pred = all_data["ml_class"]
-#     # save image of confusion matrix
-#     acc = np.sum(true == pred) / len(true)
-#     ConfusionMatrixDisplay.from_predictions(
-#         y_pred=pred,
-#         y_true=true,
-#         labels=[-1, 0, 1],
-#         display_labels=["Not a Boat", "Static Boat", "Moving Boat"],
-#     )
-#     fig = plt.gcf()
-#     fig.suptitle(
-#         f"{len(true[true != -1])} Labelled Boats (Detection Accuracy: {round(acc, 3)})"
-#     )
-#     fig.tight_layout()
-#     # save the confusion matrix image
-#     plt.savefig(os.path.join(run_folder, "plots", "confusion_matrix.png"))
 
 
 def confusion_matrix_AF(run_folder, config):
@@ -822,79 +513,14 @@ def confusion_matrix_AF(run_folder, config):
         f"{len(true[true != -1])} Labelled Objects (Detection Accuracy: {round(acc, 3)})"
     )
     fig.tight_layout()
+
+        # Create plots directory if it doesn't exist
+    plots_dir = os.path.join(run_folder, "plots")
+    if not os.path.exists(plots_dir):
+        os.makedirs(plots_dir)
+
     # save the confusion matrix image
     plt.savefig(os.path.join(run_folder, "plots", "confusion_matrix.png"))
-
-
-
-# def process_image(
-#     detections,
-#     labels_root,
-# ):
-#     """
-#     Compare the detections and labels for a single image
-
-#     Args:
-
-#         detections (str): The directory of detections for the image
-#         labels_root (str): The root directory of labels
-
-#     Returns:
-
-#         list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]
-#     """
-#     # labels will be in a parallel directory to detections
-#     # e.g detections = "Detections/b/../d", labels = "Labels/b/../d"
-#     label_dir = os.path.join(
-#         labels_root, os.path.sep.join(detections.split(os.path.sep)[-2:])
-#     )
-#     # check if it exists
-#     if not os.path.exists(label_dir):
-#         print(f"Label directory {label_dir} does not exist, skipping image...")
-#         return []
-#     # ML classifications
-#     ML_classifications, _ = read_classifications(class_folder=detections)
-#     ML_classifications_stat = ML_classifications[ML_classifications[:, 3] == 0.0]
-#     ML_classifications_moving = ML_classifications[ML_classifications[:, 3] == 1.0]
-#     # cluster
-#     ML_clusters_stat = cluster(ML_classifications_stat, STAT_DISTANCE_CUTOFF_PIX)
-#     ML_clusters_moving = cluster(ML_classifications_moving, MOVING_DISTANCE_CUTOFF_PIX)
-#     # save clusters as csv for later analysis
-#     if not os.path.exists(os.path.join(detections, "clusters")):
-#         os.makedirs(os.path.join(detections, "clusters"))
-#     statoutfile = os.path.join(detections, "clusters", "stat_clusters.csv")
-#     movingoutfile = os.path.join(detections, "clusters", "moving_clusters.csv")
-#     with open(statoutfile, "w") as f:
-#         for c in ML_clusters_stat:
-#             f.write(",".join([str(i) for i in c]) + "\n")
-#     with open(movingoutfile, "w") as f:
-#         for c in ML_clusters_moving:
-#             f.write(",".join([str(i) for i in c]) + "\n")
-
-#     # manual annotations
-#     manual_annotations, _ = read_classifications(class_folder=label_dir)
-#     if len(manual_annotations) == 0:
-#         manual_annotations_stat = np.empty((0, 7))
-#         manual_annotations_moving = np.empty((0, 7))
-#     else:
-#         manual_annotations_stat = manual_annotations[manual_annotations[:, 3] == 0.0]
-#         manual_annotations_moving = manual_annotations[manual_annotations[:, 3] == 1.0]
-#     # cluster
-#     manual_clusters_stat = cluster(manual_annotations_stat, STAT_DISTANCE_CUTOFF_PIX)
-#     manual_clusters_moving = cluster(
-#         manual_annotations_moving, MOVING_DISTANCE_CUTOFF_PIX
-#     )
-
-#     # process
-#     ML_clusters_stat = process_clusters(ML_clusters_stat)
-#     ML_clusters_moving = process_clusters(ML_clusters_moving)
-#     manual_clusters_stat = process_clusters(manual_clusters_stat)
-#     manual_clusters_moving = process_clusters(manual_clusters_moving)
-
-#     ML_clusters = np.concatenate((ML_clusters_stat, ML_clusters_moving))
-#     manual_clusters = np.concatenate((manual_clusters_stat, manual_clusters_moving))
-#     comparison = compare(ML_clusters, manual_clusters, COMPARE_DISTANCE_CUTOFF_PIX)
-#     return comparison
 
 
 def process_image_AF(
@@ -925,8 +551,23 @@ def process_image_AF(
     detections = os.path.normpath(detections)
     labels_root = os.path.normpath(labels_root)
 
-     # Extract the relative path after classifications root
-    rel_path = os.path.relpath(detections, start=os.path.commonpath([detections, labels_root]))
+    # Extract the path structure: we need to extract the Date/image_name part
+    # First, find the base classifications directory from the config
+    classifications_dir = os.path.join(config["path"], config["classifications"])
+    classifications_dir = os.path.normpath(classifications_dir)
+
+        # Extract the relative path from the classifications directory
+    # This should give us the 'Date/image_name' part
+    if detections.startswith(classifications_dir):
+        rel_path = os.path.relpath(detections, start=classifications_dir)
+    else:
+        # Fallback in case the path structure is different
+        print(f"Warning: Detection path {detections} doesn't start with classification directory {classifications_dir}")
+        rel_path = os.path.basename(detections)
+    
+    #AF: 24.03 debugging attempt. Commented out to replace by above code. 
+    #  # Extract the relative path after classifications root
+    # rel_path = os.path.relpath(detections, start=os.path.commonpath([detections, labels_root]))
 
     # label_dir = os.path.join(
     #     labels_root, os.path.sep.join(detections.split(os.path.sep)[-2:])
@@ -934,7 +575,7 @@ def process_image_AF(
 
     # Construct label directory correctly
     label_dir = os.path.join(labels_root, rel_path)
-
+    
     print(f"Expected label directory: {label_dir}")
 
     # check if it exists
@@ -1393,228 +1034,89 @@ def waterholes_count_compare(run_folder, config):
 ### Metrics Helpers
 
 
-def plot_boats(csvs: str, imgs: str, **kwargs):
-    """
-    given a directory of csvs, plot the waterholes on the images and save the images
-
-    Args:
-
-        csvs: directory containing csvs. Must be of form: x, y, ml_class, manual_class
-        imgs: base folder with the images (png), or a folder with subfolders with images (stitched.png)
-
-    Returns:
-
-        None
-    """
-    if "outdir" in kwargs:
-        outdir = kwargs["outdir"]
-    else:
-        outdir = csvs
-    all_csvs = [
-        os.path.join(csvs, file)
-        for file in os.listdir(csvs)
-        if file.endswith(".csv") and "summary" not in file
-    ]
-    all_images = [
-        os.path.join(imgs, file) for file in os.listdir(imgs) if file.endswith(".png")
-    ]
-    all_images = [im for im in all_images if "heron" not in im]
-    # filter to images which have a csv
-    all_images = [
-        image
-        for image in all_images
-        if any(
-            [
-                image.split(os.path.sep)[-1].split(".")[0] in csv
-                for csv in [s.split(os.path.sep)[-1].split(".")[0] for s in all_csvs]
-            ]
-        )
-    ]
-    print(all_images)
-    if len(all_images) == 0:
-        # try to see if the stitched images exist
-        all_images = [
-            os.path.join(root, file)
-            for root, dirs, files in os.walk(imgs)
-            for file in files
-            if file == "stitched.png"
-        ]
-    i = 0
-    for csv in all_csvs:
-        # get the corresponding image
-        img = [image for image in all_images if csv.split()[1].split(".")[0] in image]
-        if len(img) == 0:
-            continue
-        img = img[0]
-        # get the boats
-        boats = np.asarray(
-            [line.strip().split(",") for line in open(csv) if line[0] != "x"]
-        )
-        # plot the image
-        fig, ax = plt.subplots()
-        ax.imshow(plt.imread(img))
-        # draw a box around the boat. 10x10 pixels.
-        #   Green if : detected and labelled static
-        #   Blue If  : detected and labelled moving
-        #   Orange if: detected and labelled but disagree
-        #   Red if   : detected but not labelled
-        #   Yellow if: labelled but not detected
-        correct = 0
-        incorrect = 0
-        for boat in boats:
-            x = float(boat[0])
-            y = float(boat[1])
-            ml = int(float(boat[2]))
-            manual = int(float(boat[3]))
-            if ml == manual:
-                correct += 1
-            else:
-                incorrect += 1
-            if ml == 0 and ml == manual:  # Agree Static
-                # green
-                color = "g"
-            elif ml == 1 and ml == manual:  # Agree Moving
-                # blue
-                color = "b"
-            elif ml != -1 and manual != -1 and ml != manual:  # Disagreement
-                # orange
-                color = "orange"
-            elif ml != -1 and manual == -1:  # Detected but not Labelled
-                # red
-                color = "r"
-            else:  # Labelled but not Detected
-                # yellow
-                color = "y"
-            if "skip" in kwargs and kwargs["skip"] == True and color == "g":
-                continue
-            rect = plt.Rectangle(
-                (x - 5, y - 5), 10, 10, linewidth=0.1, edgecolor=color, facecolor="none"
-            )
-            if color == "r":
-                # also draw a big circle around the boat (50x50)
-                circ = plt.Circle(
-                    (x, y), 50, linewidth=0.3, edgecolor=color, facecolor="none"
-                )
-                ax.add_patch(circ)
-                # and annotate the detection as "ML: 0"
-                ax.annotate(f"ML: {ml}", (x, y), color=color, fontsize=6)
-            if color == "y":
-                # also draw a big star around the boat (50x50)
-                star = plt.Polygon(
-                    np.array([[x - 50, y - 50], [x + 50, y - 50], [x, y + 50]]),
-                    linewidth=0.3,
-                    edgecolor=color,
-                    facecolor="none",
-                )
-                ax.add_patch(star)
-                # and annotate the label as "Label: 1"
-                ax.annotate(f"Label: {manual}", (x, y), color=color, fontsize=6)
-            if color == "orange":
-                # also draw a big square
-                square = plt.Rectangle(
-                    (x - 50, y - 50),
-                    100,
-                    100,
-                    linewidth=0.3,
-                    edgecolor=color,
-                    facecolor="none",
-                )
-                ax.add_patch(square)
-                # and annotate the detection as "ML: 0, Label: 1"
-                ax.annotate(
-                    f"ML: {ml}, Label: {manual}", (x, y), color=color, fontsize=6
-                )
-            ax.add_patch(rect)
-            if color == "orange":
-                # also annotate the boat with the classes as "ML: 0, Label: 1"
-                ax.annotate(
-                    f"ML: {ml}, Label: {manual}", (x, y), color=color, fontsize=6
-                )
-        # save the image in really high quality with no axis labels
-        plt.axis("off")
-        # add a legend below the image (outside). Make it very small and 2 rows
-        plt.legend(
-            handles=[
-                plt.Rectangle((0, 0), 1, 1, color="g"),
-                plt.Rectangle((0, 0), 1, 1, color="b"),
-                plt.Rectangle((0, 0), 1, 1, color="orange"),
-                plt.Rectangle((0, 0), 1, 1, color="r"),
-                plt.Rectangle((0, 0), 1, 1, color="y"),
-            ],
-            labels=[
-                "Detected and Labelled Static",
-                "Detected and Labelled Moving",
-                "Disagreement",
-                "Detected but not Labelled",
-                "Labelled but not Detected",
-            ],
-            loc="lower center",
-            ncol=3,
-            bbox_to_anchor=(0.5, -0.05),
-            fontsize=6,
-        )
-        # make the title the correct, incorrect, and accuracy. Put the title at the bottom
-        plt.title(
-            f"Correct: {correct}, Incorrect: {incorrect}, Accuracy: {round(correct/(correct+incorrect), 3)}"
-        )
-        plt.savefig(
-            os.path.join(outdir, csv.split()[1].split(".")[0] + ".png"),
-            dpi=1000,
-            bbox_inches="tight",
-        )
-        plt.close()
-        i += 1
-        print(f"Plotted {i}/{len(all_images)} images", end="\r")
-
-
-
-def plot_waterholes(csvs, imgs, **kwargs):
+def plot_waterholes(config_path, config):
     """
     Given a directory of CSVs, plot the waterholes on the images and save the results.
     
     Args:
-        csvs (str): Directory containing CSVs with waterhole data.
-                    Must be of form: x, y, ml_class, manual_class
-        imgs (str): Base folder with the images (png), or a folder with subfolders with images
-        **kwargs: Additional arguments
-            outdir (str): Output directory for plotted images. If not provided, uses CSV directory
-            box_size (int): Size of box to draw around waterholes. Default is 20
-            stitch_first (bool): Whether to stitch images before plotting. Default is True
+        config_path (str): Path to the directory containing CSV files
+        config (dict or str): Configuration dictionary or path to config file
     
     Returns:
         None
-
-    Comment:
-    AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
-    Should run smoothly and did not modify the dependent functions. 
     """
+    # Load config file if it's a string path
+    if isinstance(config, str):
+        config = parse_config(config)
+
     # Set output directory
-    outdir = kwargs.get("outdir", csvs)
+    outdir = os.path.join(config["path"], config["plots"])
+    outdir = os.path.normpath(outdir)
+    print(f'Using output directory: {outdir}')
     if not os.path.exists(outdir):
         os.makedirs(outdir)
     
+    # Get base directory for segmented images
+    base_imgs_dir = os.path.join(config["path"], config["segmented_images"])
+    base_imgs_dir = os.path.normpath(base_imgs_dir)
+    print(f"Using segmented PNG base directory: {base_imgs_dir}")
+
+    # Find all image directories (going two levels deep)
+    image_dirs = []
+    for date_dir in os.listdir(base_imgs_dir):
+        date_path = os.path.join(base_imgs_dir, date_dir)
+        if os.path.isdir(date_path):
+            for img_dir in os.listdir(date_path):
+                full_img_path = os.path.join(date_path, img_dir)
+                if os.path.isdir(full_img_path):
+                    image_dirs.append((full_img_path, img_dir))  # Store both path and name
+    
+    print(f"Found {len(image_dirs)} image directories")
+
     # Set box size (waterholes can vary in size)
-    box_size = kwargs.get("box_size", 20)
+    box_size = config.get("plot_box_size", 20)
+    print(f'Using box size to plot of dimension: {box_size}')
     half_box = box_size // 2
     
+    # Dictionary to store stitched images
+    all_stitched_images = {}
+    
     # Stitch images if needed
-    if kwargs.get("stitch_first", True):
+    if config.get("stitch_first", True):
         print("Stitching images first...")
-        stitched_images = stitch_AF(imgs, output_dir=os.path.join(imgs, "stitched"))
-        all_images = stitched_images
+        for img_dir_path, img_dir_name in image_dirs:
+            print(f"Stitching images in directory: {img_dir_path} with name: {img_dir_name}")
+            stitched_image_path = stitch_AF(img_dir_path, outdir, prefix=img_dir_name)
+            if stitched_image_path:
+                all_stitched_images[img_dir_name] = stitched_image_path
     else:
         # Get all individual images
-        all_images = [
-            os.path.join(imgs, file) for file in os.listdir(imgs) if file.endswith(".png")
-        ]
+        print("Using individual images instead of stitching...")
+        for img_dir_path, img_dir_name in image_dirs:
+            all_images = [
+                os.path.join(img_dir_path, file) for file in os.listdir(img_dir_path) if file.endswith(".png")
+            ]
+            all_stitched_images[img_dir_name] = all_images
     
+    print(f'Stitched images: {all_stitched_images}')
+
+    # # Get all CSV files (excluding summary files)
+    # all_csvs = [
+    #     os.path.join(config_path, file)
+    #     for file in os.listdir(config_path)
+    #     if file.endswith(".csv") and "all_waterholes" not in file
+    # ]
+    # print(f'Found {len(all_csvs)} CSV files to process')
+
     # Get all CSV files (excluding summary files)
-    all_csvs = [
-        os.path.join(csvs, file)
-        for file in os.listdir(csvs)
-        if file.endswith(".csv") and "summary" not in file
-    ]
+    all_csvs = []
+    for file in os.listdir(config_path):
+        if file.endswith(".csv") and "agree" not in file:
+            csv_name = os.path.basename(file).split(".")[0]
+            all_csvs.append((os.path.join(config_path, file), csv_name))
     
+    print(f'CSVs found: {all_csvs}')
+
     # Dictionary to map numerical classes to names
     class_names = {
         0: "Dry_W",
@@ -1631,31 +1133,49 @@ def plot_waterholes(csvs, imgs, **kwargs):
         "detected_only": "b",   # Blue for detected but not labeled
         "labeled_only": "y"     # Yellow for labeled but not detected
     }
-    
+
     # Process each CSV file
-    for i, csv_path in enumerate(all_csvs):
-        csv_name = os.path.basename(csv_path).split(".")[0]
+    for i, (csv_path, csv_name) in enumerate(all_csvs):
         print(f"Processing {csv_name} ({i+1}/{len(all_csvs)})")
         
-        # Find corresponding image
-        matching_images = [img for img in all_images if csv_name in img]
-        if not matching_images:
+        # Find corresponding stitched image
+        matching_image = None
+        for dir_name, stitched_path in all_stitched_images.items():
+            if csv_name == dir_name:  # Exact match
+                matching_image = stitched_path
+                break
+        
+        if not matching_image:
             print(f"No matching image found for {csv_name}, skipping")
             continue
         
-        img_path = matching_images[0]
+        print(f"Found matching image: {matching_image}")
+
         
         # Load waterhole data
         try:
             df = pd.read_csv(csv_path, header=0)
-        except:
+            # Check if columns exist, if not rename them
+            if 'x' not in df.columns and len(df.columns) >= 4:
+                df.columns = ["x", "y", "ml_class", "manual_class"]
+        except Exception as e:
+            print(f"Error reading CSV file {csv_path}: {e}")
             # If header is missing, try to read without header
-            df = pd.read_csv(csv_path, header=None, names=["x", "y", "ml_class", "manual_class"])
+            try:
+                df = pd.read_csv(csv_path, header=None, names=["x", "y", "ml_class", "manual_class"])
+            except Exception as e2:
+                print(f"Failed to parse CSV even without header: {e2}")
+                continue
         
         # Create figure and plot the image
         fig, ax = plt.subplots(figsize=(12, 10))
-        img = plt.imread(img_path)
-        ax.imshow(img)
+        try:
+            img = plt.imread(matching_image)
+            ax.imshow(img)
+        except Exception as e:
+            print(f"Error reading image {matching_image}: {e}")
+            plt.close()
+            continue
         
         # Track statistics
         matches = 0
@@ -1665,10 +1185,14 @@ def plot_waterholes(csvs, imgs, **kwargs):
         
         # Process each waterhole
         for _, waterhole in df.iterrows():
-            x = float(waterhole["x"])
-            y = float(waterhole["y"])
-            ml_class = int(float(waterhole["ml_class"]))
-            manual_class = int(float(waterhole["manual_class"]))
+            try:
+                x = float(waterhole["x"])
+                y = float(waterhole["y"])
+                ml_class = int(float(waterhole["ml_class"]))
+                manual_class = int(float(waterhole["manual_class"]))
+            except (ValueError, KeyError) as e:
+                print(f"Error parsing waterhole data: {e}")
+                continue
             
             # Determine the type of match/mismatch
             if ml_class != -1 and manual_class != -1:
@@ -1694,7 +1218,7 @@ def plot_waterholes(csvs, imgs, **kwargs):
                 (x - half_box, y - half_box), 
                 box_size, 
                 box_size, 
-                linewidth=1.5, 
+                linewidth=0.25, 
                 edgecolor=color, 
                 facecolor="none"
             )
@@ -1708,13 +1232,13 @@ def plot_waterholes(csvs, imgs, **kwargs):
                     f"ML: {ml_name}\nLabel: {manual_name}", 
                     (x, y - half_box - 10), 
                     color=color, 
-                    fontsize=8,
+                    fontsize=5,
                     ha='center'
                 )
         
         # Calculate accuracy
         total_classified = matches + mismatches
-        accuracy = round(matches / max(1, total_classified), 3)
+        accuracy = round(matches / max(1, total_classified), 3) if total_classified > 0 else 0
         
         # Add title and legend
         plt.title(f"Waterhole Detection Results - Accuracy: {accuracy:.1%}")
@@ -1745,12 +1269,13 @@ def plot_waterholes(csvs, imgs, **kwargs):
         
         # Save the figure
         output_path = os.path.join(outdir, f"{csv_name}_waterholes.png")
-        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.savefig(output_path, dpi=800, bbox_inches="tight")
         plt.close()
         
         print(f"Saved plot to {output_path}")
     
     print("All waterhole plots have been generated.")
+
 
 
 
@@ -2220,3 +1745,570 @@ def segregate_by_image(directory, into=None):
         os.rename(os.path.join(directory, file), os.path.join(into, img, file))
     # return the directories
     return [os.path.join(directory, img) for img in imgs]
+
+
+#AF: 24.03.2025:
+#AF: Commented out all the functions I modified to avoid any confusion. Kept them there as reference in case. 
+
+# def confusion_matrix(run_folder, config):
+#     """
+#     Summarize the results of the comparison. Reads all csvs and creates a confusion matrix
+
+#     Args:
+
+#         run_folder (str): The folder to run detection on.
+#         config (dict): The configuration dictionary.
+
+#     Returns:
+
+#         None
+#     """
+#     config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
+#     run_folder = os.path.normpath(run_folder) #AF
+#     if os.path.exists(os.path.join(run_folder, "all_boats.csv")):
+#         all_data = pd.read_csv(os.path.join(run_folder, "all_boats.csv"))
+#     else:
+#         # read all the csvs in the run folder that start with a date (8 numbers)
+#         all_data = pd.concat(
+#             [
+#                 pd.read_csv(os.path.join(run_folder, file))
+#                 for file in os.listdir(run_folder)
+#                 if file.endswith(".csv") and file[:8].isdigit()
+#             ]
+#         )
+#     # create confusion matrix
+#     true = all_data["manual_class"]
+#     pred = all_data["ml_class"]
+#     # save image of confusion matrix
+#     acc = np.sum(true == pred) / len(true)
+#     ConfusionMatrixDisplay.from_predictions(
+#         y_pred=pred,
+#         y_true=true,
+#         labels=[-1, 0, 1],
+#         display_labels=["Not a Boat", "Static Boat", "Moving Boat"],
+#     )
+#     fig = plt.gcf()
+#     fig.suptitle(
+#         f"{len(true[true != -1])} Labelled Boats (Detection Accuracy: {round(acc, 3)})"
+#     )
+#     fig.tight_layout()
+#     # save the confusion matrix image
+#     plt.savefig(os.path.join(run_folder, "plots", "confusion_matrix.png"))
+
+
+# def process_image(
+#     detections,
+#     labels_root,
+# ):
+#     """
+#     Compare the detections and labels for a single image
+
+#     Args:
+
+#         detections (str): The directory of detections for the image
+#         labels_root (str): The root directory of labels
+
+#     Returns:
+
+#         list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]
+#     """
+#     # labels will be in a parallel directory to detections
+#     # e.g detections = "Detections/b/../d", labels = "Labels/b/../d"
+#     label_dir = os.path.join(
+#         labels_root, os.path.sep.join(detections.split(os.path.sep)[-2:])
+#     )
+#     # check if it exists
+#     if not os.path.exists(label_dir):
+#         print(f"Label directory {label_dir} does not exist, skipping image...")
+#         return []
+#     # ML classifications
+#     ML_classifications, _ = read_classifications(class_folder=detections)
+#     ML_classifications_stat = ML_classifications[ML_classifications[:, 3] == 0.0]
+#     ML_classifications_moving = ML_classifications[ML_classifications[:, 3] == 1.0]
+#     # cluster
+#     ML_clusters_stat = cluster(ML_classifications_stat, STAT_DISTANCE_CUTOFF_PIX)
+#     ML_clusters_moving = cluster(ML_classifications_moving, MOVING_DISTANCE_CUTOFF_PIX)
+#     # save clusters as csv for later analysis
+#     if not os.path.exists(os.path.join(detections, "clusters")):
+#         os.makedirs(os.path.join(detections, "clusters"))
+#     statoutfile = os.path.join(detections, "clusters", "stat_clusters.csv")
+#     movingoutfile = os.path.join(detections, "clusters", "moving_clusters.csv")
+#     with open(statoutfile, "w") as f:
+#         for c in ML_clusters_stat:
+#             f.write(",".join([str(i) for i in c]) + "\n")
+#     with open(movingoutfile, "w") as f:
+#         for c in ML_clusters_moving:
+#             f.write(",".join([str(i) for i in c]) + "\n")
+
+#     # manual annotations
+#     manual_annotations, _ = read_classifications(class_folder=label_dir)
+#     if len(manual_annotations) == 0:
+#         manual_annotations_stat = np.empty((0, 7))
+#         manual_annotations_moving = np.empty((0, 7))
+#     else:
+#         manual_annotations_stat = manual_annotations[manual_annotations[:, 3] == 0.0]
+#         manual_annotations_moving = manual_annotations[manual_annotations[:, 3] == 1.0]
+#     # cluster
+#     manual_clusters_stat = cluster(manual_annotations_stat, STAT_DISTANCE_CUTOFF_PIX)
+#     manual_clusters_moving = cluster(
+#         manual_annotations_moving, MOVING_DISTANCE_CUTOFF_PIX
+#     )
+
+#     # process
+#     ML_clusters_stat = process_clusters(ML_clusters_stat)
+#     ML_clusters_moving = process_clusters(ML_clusters_moving)
+#     manual_clusters_stat = process_clusters(manual_clusters_stat)
+#     manual_clusters_moving = process_clusters(manual_clusters_moving)
+
+#     ML_clusters = np.concatenate((ML_clusters_stat, ML_clusters_moving))
+#     manual_clusters = np.concatenate((manual_clusters_stat, manual_clusters_moving))
+#     comparison = compare(ML_clusters, manual_clusters, COMPARE_DISTANCE_CUTOFF_PIX)
+#     return comparison
+
+
+
+# def backwards_annotation(run_folder, config):
+#     """
+#     Generate labelme style annotations (json) from the classifications.
+#     1. Read classifications
+#     2. Generate json file {image}_labelme_auto.json with:
+
+#     Args:
+
+#         run_folder (str): The folder to run detection on.
+#         config (dict): The configuration dictionary.
+
+#     Returns:
+
+#         None
+#     """
+#     detection_dir = os.path.join(config["path"], config["classifications"])
+#     for root, _, files in os.walk(detection_dir):
+#         # skip if json file exists
+#         if os.path.exists(
+#             os.path.join(
+#                 config["path"],
+#                 config["pngs"],
+#                 f"{os.path.basename(root)}_labelme_auto.json",
+#             )
+#         ):
+#             continue
+#         if len(files) > 0 and files[0].endswith(".txt"):
+#             this_image = os.path.basename(root)
+#             ML_classifications, _ = read_classifications(
+#                 class_folder=root, confidence_threshold=0.5
+#             )  # read all
+#             ML_classifications_stat = ML_classifications[
+#                 ML_classifications[:, 3] == 0.0
+#             ]
+#             ML_classifications_moving = ML_classifications[
+#                 ML_classifications[:, 3] == 1.0
+#             ]
+#             # cluster
+#             ML_clusters_stat = cluster(
+#                 ML_classifications_stat, STAT_DISTANCE_CUTOFF_PIX
+#             )
+#             ML_clusters_moving = cluster(
+#                 ML_classifications_moving, MOVING_DISTANCE_CUTOFF_PIX
+#             )
+#             # condense
+#             ML_clusters_stat = process_clusters(ML_clusters_stat)
+#             ML_clusters_moving = process_clusters(ML_clusters_moving)
+#             # get image metadata (width and height)
+#             img = Image.open(
+#                 os.path.join(config["path"], config["pngs"], this_image + ".png")
+#             )
+#             width, height = img.size
+
+#             json_data = {}
+#             json_data["version"] = "5.2.1"
+#             json_data["flags"] = {}
+#             json_data["imagePath"] = this_image
+#             json_data["imageHeight"] = height
+#             json_data["imageWidth"] = width
+#             # put in the shapes
+#             json_data["shapes"] = []
+#             for c in ML_clusters_stat:
+#                 x, y, _, _, w, h = c
+#                 w = int(w / 2)
+#                 h = int(h / 2)
+#                 json_data["shapes"].append(
+#                     {
+#                         "label": "boat",
+#                         "points": [[x - w, y - h], [x + w, y + h]],
+#                         "group_id": None,
+#                         "shape_type": "rectangle",
+#                         "flags": {},
+#                     }
+#                 )
+#             for c in ML_clusters_moving:
+#                 (
+#                     x,
+#                     y,
+#                     _,
+#                     _,
+#                     w,
+#                     h,
+#                 ) = c
+#                 w = int(w / 2)
+#                 h = int(h / 2)
+#                 json_data["shapes"].append(
+#                     {
+#                         "label": "movingBoat",
+#                         "points": [[x - w, y - h], [x + w, y + h]],
+#                         "group_id": None,
+#                         "shape_type": "rectangle",
+#                         "flags": {},
+#                     }
+#                 )
+#             # also need to get the "image_data" key. There will also be a {this_image}.json we can grab this from
+#             with open(
+#                 os.path.join(config["path"], config["pngs"], f"{this_image}.json"), "r"
+#             ) as f:
+#                 image_data = json.load(f)["imageData"]
+#             json_data["imageData"] = image_data
+#             # save the json
+#             json_path = os.path.join(
+#                 config["path"], config["pngs"], f"{this_image}_labelme_auto.json"
+#             )
+#             with open(json_path, "w+") as f:
+#                 json.dump(json_data, f)
+
+# def backwards_annotation_AF_old(run_folder, config):
+#     """
+#     Generate labelme style annotations (json) from the classifications.
+#     1. Read classifications
+#     2. Generate json file {image}_labelme_auto.json with:
+
+#     Args:
+
+#         run_folder (str): The folder to run detection on.
+#         config (dict): The configuration dictionary.
+
+#     Returns:
+
+#         None
+    
+#     Comment:
+#     AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
+#     Should run smoothly and did not modify the dependent functions. 
+#     """
+#     config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
+#     run_folder = os.path.normpath(run_folder) #AF
+#     detection_dir = os.path.join(config["path"], config["classifications"])
+#     for root, _, files in os.walk(detection_dir):
+#         # skip if json file exists
+#         if os.path.exists(
+#             os.path.join(
+#                 config["path"],
+#                 config["pngs"],
+#                 f"{os.path.basename(root)}_labelme_auto.json",
+#             )
+#         ):
+#             continue
+#         if len(files) > 0 and files[0].endswith(".txt"):
+#             this_image = os.path.basename(root)
+#             ML_classifications, _ = read_classifications(
+#                 class_folder=root, confidence_threshold=0.5
+#             )  # read all
+            
+#             # Separate classifications by class
+#             ML_classifications_dry_wh = ML_classifications[ML_classifications[:, 3] == 0.0]
+#             ML_classifications_wh_swamp = ML_classifications[ML_classifications[:, 3] == 1.0]
+#             ML_classifications_wh_wet = ML_classifications[ML_classifications[:, 3] == 2.0]
+#             ML_classifications_wh_sink = ML_classifications[ML_classifications[:, 3] == 3.0]
+#             ML_classifications_u = ML_classifications[ML_classifications[:, 3] == 4.0]
+            
+#             # Define distance cutoffs for each class (adjust these as needed)
+#             DRY_WH_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Using existing static distance
+#             WH_SWAMP_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
+#             WH_WET_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
+#             WH_SINK_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX
+#             U_DISTANCE_CUTOFF_PIX = STAT_DISTANCE_CUTOFF_PIX  # Not using existing moving distance as we all have static objects
+            
+#             # cluster each class separately
+#             ML_clusters_dry_wh = cluster(ML_classifications_dry_wh, DRY_WH_DISTANCE_CUTOFF_PIX)
+#             ML_clusters_wh_swamp = cluster(ML_classifications_wh_swamp, WH_SWAMP_DISTANCE_CUTOFF_PIX)
+#             ML_clusters_wh_wet = cluster(ML_classifications_wh_wet, WH_WET_DISTANCE_CUTOFF_PIX)
+#             ML_clusters_wh_sink = cluster(ML_classifications_wh_sink, WH_SINK_DISTANCE_CUTOFF_PIX)
+#             ML_clusters_u = cluster(ML_classifications_u, U_DISTANCE_CUTOFF_PIX)
+            
+#             # condense clusters
+#             ML_clusters_dry_wh = process_clusters(ML_clusters_dry_wh)
+#             ML_clusters_wh_swamp = process_clusters(ML_clusters_wh_swamp)
+#             ML_clusters_wh_wet = process_clusters(ML_clusters_wh_wet)
+#             ML_clusters_wh_sink = process_clusters(ML_clusters_wh_sink)
+#             ML_clusters_u = process_clusters(ML_clusters_u)
+            
+#             # get image metadata (width and height)
+#             img = Image.open(
+#                 os.path.join(config["path"], config["pngs"], this_image + ".png")
+#             )
+#             width, height = img.size
+
+#             json_data = {}
+#             json_data["version"] = "5.2.1"
+#             json_data["flags"] = {}
+#             json_data["imagePath"] = this_image
+#             json_data["imageHeight"] = height
+#             json_data["imageWidth"] = width
+#             # put in the shapes
+#             json_data["shapes"] = []
+            
+#             # Add shapes for each class
+#             for c in ML_clusters_dry_wh:
+#                 x, y, _, _, w, h = c
+#                 w = int(w / 2)
+#                 h = int(h / 2)
+#                 json_data["shapes"].append(
+#                     {
+#                         "label": "Dry_WH",
+#                         "points": [[x - w, y - h], [x + w, y + h]],
+#                         "group_id": None,
+#                         "shape_type": "rectangle",
+#                         "flags": {},
+#                     }
+#                 )
+                
+#             for c in ML_clusters_wh_swamp:
+#                 x, y, _, _, w, h = c
+#                 w = int(w / 2)
+#                 h = int(h / 2)
+#                 json_data["shapes"].append(
+#                     {
+#                         "label": "WH_swamp",
+#                         "points": [[x - w, y - h], [x + w, y + h]],
+#                         "group_id": None,
+#                         "shape_type": "rectangle",
+#                         "flags": {},
+#                     }
+#                 )
+                
+#             for c in ML_clusters_wh_wet:
+#                 x, y, _, _, w, h = c
+#                 w = int(w / 2)
+#                 h = int(h / 2)
+#                 json_data["shapes"].append(
+#                     {
+#                         "label": "WH_wet",
+#                         "points": [[x - w, y - h], [x + w, y + h]],
+#                         "group_id": None,
+#                         "shape_type": "rectangle",
+#                         "flags": {},
+#                     }
+#                 )
+                
+#             for c in ML_clusters_wh_sink:
+#                 x, y, _, _, w, h = c
+#                 w = int(w / 2)
+#                 h = int(h / 2)
+#                 json_data["shapes"].append(
+#                     {
+#                         "label": "WH_sink",
+#                         "points": [[x - w, y - h], [x + w, y + h]],
+#                         "group_id": None,
+#                         "shape_type": "rectangle",
+#                         "flags": {},
+#                     }
+#                 )
+                
+#             for c in ML_clusters_u:
+#                 x, y, _, _, w, h = c
+#                 w = int(w / 2)
+#                 h = int(h / 2)
+#                 json_data["shapes"].append(
+#                     {
+#                         "label": "U",
+#                         "points": [[x - w, y - h], [x + w, y + h]],
+#                         "group_id": None,
+#                         "shape_type": "rectangle",
+#                         "flags": {},
+#                     }
+#                 )
+                
+#             # also need to get the "image_data" key. There will also be a {this_image}.json we can grab this from
+#             with open(
+#                 os.path.join(config["path"], config["pngs"], f"{this_image}.json"), "r"
+#             ) as f:
+#                 image_data = json.load(f)["imageData"]
+#             json_data["imageData"] = image_data
+#             # save the json
+#             json_path = os.path.join(
+#                 config["path"], config["pngs"], f"{this_image}_labelme_auto.json"
+#             )
+#             with open(json_path, "w+") as f:
+#                 json.dump(json_data, f)
+
+def plot_boats(csvs: str, imgs: str, **kwargs):
+    """
+    given a directory of csvs, plot the waterholes on the images and save the images
+
+    Args:
+
+        csvs: directory containing csvs. Must be of form: x, y, ml_class, manual_class
+        imgs: base folder with the images (png), or a folder with subfolders with images (stitched.png)
+
+    Returns:
+
+        None
+    """
+    if "outdir" in kwargs:
+        outdir = kwargs["outdir"]
+    else:
+        outdir = csvs
+    all_csvs = [
+        os.path.join(csvs, file)
+        for file in os.listdir(csvs)
+        if file.endswith(".csv") and "summary" not in file
+    ]
+    all_images = [
+        os.path.join(imgs, file) for file in os.listdir(imgs) if file.endswith(".png")
+    ]
+    all_images = [im for im in all_images if "heron" not in im]
+    # filter to images which have a csv
+    all_images = [
+        image
+        for image in all_images
+        if any(
+            [
+                image.split(os.path.sep)[-1].split(".")[0] in csv
+                for csv in [s.split(os.path.sep)[-1].split(".")[0] for s in all_csvs]
+            ]
+        )
+    ]
+    print(all_images)
+    if len(all_images) == 0:
+        # try to see if the stitched images exist
+        all_images = [
+            os.path.join(root, file)
+            for root, dirs, files in os.walk(imgs)
+            for file in files
+            if file == "stitched.png"
+        ]
+    i = 0
+    for csv in all_csvs:
+        # get the corresponding image
+        img = [image for image in all_images if csv.split()[1].split(".")[0] in image]
+        if len(img) == 0:
+            continue
+        img = img[0]
+        # get the boats
+        boats = np.asarray(
+            [line.strip().split(",") for line in open(csv) if line[0] != "x"]
+        )
+        # plot the image
+        fig, ax = plt.subplots()
+        ax.imshow(plt.imread(img))
+        # draw a box around the boat. 10x10 pixels.
+        #   Green if : detected and labelled static
+        #   Blue If  : detected and labelled moving
+        #   Orange if: detected and labelled but disagree
+        #   Red if   : detected but not labelled
+        #   Yellow if: labelled but not detected
+        correct = 0
+        incorrect = 0
+        for boat in boats:
+            x = float(boat[0])
+            y = float(boat[1])
+            ml = int(float(boat[2]))
+            manual = int(float(boat[3]))
+            if ml == manual:
+                correct += 1
+            else:
+                incorrect += 1
+            if ml == 0 and ml == manual:  # Agree Static
+                # green
+                color = "g"
+            elif ml == 1 and ml == manual:  # Agree Moving
+                # blue
+                color = "b"
+            elif ml != -1 and manual != -1 and ml != manual:  # Disagreement
+                # orange
+                color = "orange"
+            elif ml != -1 and manual == -1:  # Detected but not Labelled
+                # red
+                color = "r"
+            else:  # Labelled but not Detected
+                # yellow
+                color = "y"
+            if "skip" in kwargs and kwargs["skip"] == True and color == "g":
+                continue
+            rect = plt.Rectangle(
+                (x - 5, y - 5), 10, 10, linewidth=0.1, edgecolor=color, facecolor="none"
+            )
+            if color == "r":
+                # also draw a big circle around the boat (50x50)
+                circ = plt.Circle(
+                    (x, y), 50, linewidth=0.3, edgecolor=color, facecolor="none"
+                )
+                ax.add_patch(circ)
+                # and annotate the detection as "ML: 0"
+                ax.annotate(f"ML: {ml}", (x, y), color=color, fontsize=6)
+            if color == "y":
+                # also draw a big star around the boat (50x50)
+                star = plt.Polygon(
+                    np.array([[x - 50, y - 50], [x + 50, y - 50], [x, y + 50]]),
+                    linewidth=0.3,
+                    edgecolor=color,
+                    facecolor="none",
+                )
+                ax.add_patch(star)
+                # and annotate the label as "Label: 1"
+                ax.annotate(f"Label: {manual}", (x, y), color=color, fontsize=6)
+            if color == "orange":
+                # also draw a big square
+                square = plt.Rectangle(
+                    (x - 50, y - 50),
+                    100,
+                    100,
+                    linewidth=0.3,
+                    edgecolor=color,
+                    facecolor="none",
+                )
+                ax.add_patch(square)
+                # and annotate the detection as "ML: 0, Label: 1"
+                ax.annotate(
+                    f"ML: {ml}, Label: {manual}", (x, y), color=color, fontsize=6
+                )
+            ax.add_patch(rect)
+            if color == "orange":
+                # also annotate the boat with the classes as "ML: 0, Label: 1"
+                ax.annotate(
+                    f"ML: {ml}, Label: {manual}", (x, y), color=color, fontsize=6
+                )
+        # save the image in really high quality with no axis labels
+        plt.axis("off")
+        # add a legend below the image (outside). Make it very small and 2 rows
+        plt.legend(
+            handles=[
+                plt.Rectangle((0, 0), 1, 1, color="g"),
+                plt.Rectangle((0, 0), 1, 1, color="b"),
+                plt.Rectangle((0, 0), 1, 1, color="orange"),
+                plt.Rectangle((0, 0), 1, 1, color="r"),
+                plt.Rectangle((0, 0), 1, 1, color="y"),
+            ],
+            labels=[
+                "Detected and Labelled Static",
+                "Detected and Labelled Moving",
+                "Disagreement",
+                "Detected but not Labelled",
+                "Labelled but not Detected",
+            ],
+            loc="lower center",
+            ncol=3,
+            bbox_to_anchor=(0.5, -0.05),
+            fontsize=6,
+        )
+        # make the title the correct, incorrect, and accuracy. Put the title at the bottom
+        plt.title(
+            f"Correct: {correct}, Incorrect: {incorrect}, Accuracy: {round(correct/(correct+incorrect), 3)}"
+        )
+        plt.savefig(
+            os.path.join(outdir, csv.split()[1].split(".")[0] + ".png"),
+            dpi=1000,
+            bbox_inches="tight",
+        )
+        plt.close()
+        i += 1
+        print(f"Plotted {i}/{len(all_images)} images", end="\r")
+

@@ -1,6 +1,12 @@
 #-------------------
 #All absolute paths you need to change are located at the top of this file
 #All the other ones should be relative paths and thus do not need to be created in your folder. 
+
+# The deployment as it stands right now, is using the first steps of the testing workflow.
+# We fake to test the model with some new imagery faking a simple manual labelling, and run the detection with the model.
+# We stop the 'deployment' (testing) after the backward annotation. 
+# Future steps of the project will be to correct the deployment workflow so that it is actualy usable. 
+
 #AF 28.03.2025 
 
 
@@ -29,7 +35,7 @@
 #Yolo directory:
 yolo_dir: C:/Users/fossatia/Documents/Waterholes_project/yolov5
 # Configuration for Validation/Analysis Runs.
-path:  D:/Waterholes_project/counting_waterholes/testing
+path:  D:/Waterholes_project/counting_waterholes/deployment
 # Validation run with Best weights from your last model training or the weights of your choice.
 weights: D:\yolo_runs\exp_v4\weights\best.pt
 #To use the GPU, use the cuda:0. Might need some updating of your dependencies to match youor GPU version.
@@ -120,3 +126,4 @@ tasks:
       all_mistakes: False # Collate all mistakes into images with comparison
       subimage_confidence: False # Show confidence of detection for all subimages of a given boat (number of random boats to do this for)
       coverage_heatmap: False # generate a tif file with a heatmap of coverage of images in the test data
+

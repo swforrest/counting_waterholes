@@ -657,6 +657,91 @@ def create_padded_png(
             os.remove(os.path.join(PNGpath, filename))
 
 
+def create_padded_png_S2(
+    raw_dir, output_dir, file_name, tile_size=416, stride=104, rename=False
+):
+    """
+    Creates an image which is padded for use in training/classifying within a neural network. Note: this images pads
+    the images expecting that the size of sub-images created from this images will be 416x416 pixels.
+
+    Args:
+
+        raw_dir: Directory where raw .tif files downloaded from Planet are located
+        output_dir: The name of the directory where the padded .png files will be created.
+        file_name: The name of the .tif file that is to be padded.
+        tile_size: The size of the sub-images that will be created from this image.
+        stride: The amount of overlap that the sub-images will have.
+        rename: The name that the padded image will be saved as. If False, the image will be saved as the original name but with a .png extension.
+
+    Returns:
+
+        None
+    """
+    rawImageDirectory = os.path.join(os.getcwd(), raw_dir)
+    os.makedirs(output_dir, exist_ok=True)
+    PNGpath = output_dir
+
+    savePath = os.path.join(PNGpath, file_name.split(".")[0] + ".png")
+    if os.path.exists(savePath):
+        return
+
+    # Set the options for the gdal.Translate() call
+    opsString2 = (
+        # for planet data
+        # "-ot UInt16 -of png -b 3 -b 2 -b 1 -scale_1 0 2048 0 65535 -scale_2 0 2048 0 65535 -scale_3 0 2048 0 65535"
+        # for sentinel-2 data
+        # for 0 to 255 scaling
+        # "-ot UInt16 -of png -b 3 -b 2 -b 1 -scale_1 0 255 0 65535 -scale_2 0 255 0 65535 -scale_3 0 255 0 65535"
+        # for 80 to 255 scaling (to give higher contrast based on min and max values of the sentinel-2 bands)
+        "-ot UInt16 -of png -b 1 -b 2 -b 3 -scale_1 80 255 0 65535 -scale_2 80 255 0 65535 -scale_3 80 255 0 65535"
+    )
+    # Translate original from tif into png
+    print("Doing gdal work...")
+    gdal.Translate(
+        os.path.join(PNGpath, f"colorCorrected{file_name.split('.')[0]}.png"),
+        os.path.join(rawImageDirectory, file_name),
+        options=opsString2,
+    )
+    print("\rDone with gdal work for " + file_name)
+
+    # Open the new color corrected PNG we have just made.
+    colorImagePath = os.path.join(
+        PNGpath, f"colorCorrected{file_name.split('.')[0]}.png"
+    )
+    colourImage = PIL.Image.open(colorImagePath)
+
+    # Get new width and height in preparation of padding the image
+    width, height = colourImage.size
+
+    leftPad, rightPad, topPad, bottomPad = get_required_padding(colorImagePath, tile_size, stride)
+
+    # Pad the edges (add_margin is a function in imageCuttingSupport.py that adds a margin to an opened PIL image.)
+    im_new = add_margin(
+        colourImage,
+        leftPad,
+        rightPad,
+        topPad,
+        bottomPad,
+        (0, 0, 0),
+    )
+
+    # Save the padded image which is now ready for classification
+    if rename != False and type(rename) == str:
+        savePath = os.path.join(PNGpath, rename + ".png")
+    else:
+        savePath = os.path.join(PNGpath, file_name.split(".")[0] + ".png")
+    im_new.save(savePath, quality=100, compress_level=0)
+
+    # Close loose file descriptors
+    colourImage.close()
+    im_new.close()
+
+    # Cleanup any images that aren't the image that is used for classification
+    for filename in os.listdir(PNGpath):
+        if filename[0:5] == "color":
+            os.remove(os.path.join(PNGpath, filename))
+
+
 def create_unpadded_png(raw_dir, output_dir, file_name):
     """
     Creates an image which is NOT padded but converts raw .tif to .png files.
