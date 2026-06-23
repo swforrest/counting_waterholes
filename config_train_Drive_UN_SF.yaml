@@ -1,0 +1,122 @@
+#-------------------
+#All absolute paths you need to change are located at the top of this file
+#All the other paths should be relative and thus do not need to be modified in this configuration file or created in your folder. 
+
+
+#-------------------
+##Expected folder structure##
+
+#The only folder you manually should create or populate is the 'raw_images\' with the tif file.  
+#They should be created as you go along the functions but as a reference this is how it will look like at the end:
+
+#counting_waterholes\ 
+#   training\  
+#       images\                               # pngs and their manual labels json files
+#       output\                               # Output of the pre-training processes i.e. segmented images and labels
+#           images\
+#               train\                        
+#               val\
+#               moved_empty_images\           # removed images to stay <10% of background images in the training
+#           labels\
+#               train\
+#               val\
+#               moved_empty_images\           # removed labels to stay <10% of background images in the training
+#       raw_images\                           # Location of your tif files for the training workflow
+#       train\
+#           train\
+#               images\
+#               labels\
+#           val\
+#               images\
+#               labels\
+
+#-------------------
+##General paths## 
+
+#REPLACE ALL "your_project_path" By YOUR ABSOLUTE PATHS TO THE PROJECT DIRECTORY:
+#Recommended to change outdir for each run if using different images/params!!!
+
+# Root of the project repository:
+proj_root: .
+#Yolo directory:
+yolo_dir: ../yolov5
+# yolo_dir: '/Users/scottforrest/Library/CloudStorage/OneDrive-QueenslandUniversityofTechnology/FirstByte Waterholes WD/yolov5'
+#AF: Using the simple model weights provided by yolo itself. 
+weights: ../yolov5/yolov5s.pt
+# weights: '/Users/scottforrest/Library/CloudStorage/OneDrive-QueenslandUniversityofTechnology/FirstByte Waterholes WD/yolov5/yolov5s.pt'
+
+
+#--------------------
+##Training paths modification##
+
+#In this section, modify 'C:\Users\adria\OneDrive - AdrianoFossati\Documents\MASTER Australia\RA\Waterholes_project\WaterholeDetection_UN-Handbook' by your training path. 
+#What follows the '\training' should remain intact.  
+#Location of your tif files for the training workflow:
+raw_images: training/raw_images 
+#If using manually the extract_zip() need to define the tif directory here. 
+#Could be the same as raw_images for a uniform workflow:
+tif_dir: training/raw_images
+#Output of the pre-training processes: 
+# output_dir: training/output/WH
+output_dir: training/output/WH_wet_dry_swamp_sink
+# output_dir: training/output/waterhole 
+# output_dir: training/output/waterhole_river
+
+#Creating new paths to manipulate the output of the segmentation. 
+#The structure of the segmentation's output does not match the train one. Those are paths to reorganise it.
+#Modify these two with up to your training path only. 
+#replace 'D:\Waterholes_project\counting_waterholes\training' by your path. 
+#'\output\images\train' and '\output\labels\train' need to remain intact. 
+# segmented_images : training/output/images/train
+# segmented_labels : training/output/labels/train
+
+#Training material folder path
+training_path: training/train
+
+#Labels classes. Strongly advice not to modify them and use ours.
+#Multiple functions are deisgned to work with those label classes. 
+#If really needed to modify them, you would need to check all function of the training workflow to adapt with yours.   
+names:
+  0: Dry_WH
+  1: WH_swamp
+  2: WH_wet
+  3: WH_sink
+  4: U
+
+
+#-------------------
+##Those paths are relative and should not need to be modified.##
+python: python
+cache: False
+
+#Various values and parameters of the model manipulation. 
+#To be checked/adapted when running it. 
+workers: 4
+BATCH_SIZE: 32
+EPOCHS: 25
+img_size: 416
+img_stride: 104
+TILE_SIZE: 416
+STRIDE: 104
+
+# Training Dataset
+path: .
+#manually labeled pngs and their corresponding json files:
+pngs: images
+#Segmented labels directory
+labels: labels
+#Classifications for the images
+classifications: images/classifications
+
+# Path to training images
+# These paths are referenced directly by YOLOv5 code, so they need to be relative to the YOLOv5 directory.
+train: '../WaterholeDetection_UN-Handbook/training/train/train'
+# Path to validation images
+val: '../WaterholeDetection_UN-Handbook/training/train/val'
+
+
+# train: '/Users/scottforrest/Library/CloudStorage/OneDrive-QueenslandUniversityofTechnology/FirstByte Waterholes WD/WaterholeDetection_UN-Handbook/training/train/train'
+# # Path to validation images
+# val: '/Users/scottforrest/Library/CloudStorage/OneDrive-QueenslandUniversityofTechnology/FirstByte Waterholes WD/WaterholeDetection_UN-Handbook/training/train/val'
+
+## End of the config file of training ##
