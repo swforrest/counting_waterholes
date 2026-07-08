@@ -58,7 +58,7 @@ raw_images: training/raw_images
 tif_dir: training/raw_images
 #Output of the pre-training processes: 
 # output_dir: training/output/WH
-output_dir: training/output/WH_wet_dry_swamp_sink
+output_dir: training/output/waterhole_river
 # output_dir: training/output/waterhole 
 # output_dir: training/output/waterhole_river
 
