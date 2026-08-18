@@ -1,0 +1,267 @@
+# Waterhole surface-state segmentation — single source of truth.
+#
+# Everything that a person might reasonably want to revise without touching code
+# lives here: the class scheme, its colours and keybindings, thresholds, feature
+# selection and CV settings. Loaded by wh_config.py.
+
+config_version: 1
+
+
+# --- paths ----------------------------------------------------------------
+# All relative to the repository root. wh_config.py resolves them against the
+# repo root (found from the module location), so notebooks work whether they are
+# run from the repo root or from cookie-cutting/.
+paths:
+  tiles: cookie-cutting/images_tif_v2      # re-exported chips: UTM 53S, with n_obs
+  tiles_legacy: cookie-cutting/images_tif  # original 2024-only EPSG:4326 export
+  chips_png: cookie-cutting/images         # pre-rendered 3-panel labelling PNGs
+  labels: cookie-cutting/labels            # hand-painted masks (tracked in git)
+  derived: cookie-cutting/derived          # manifests, temporal caches, models
+  predictions: cookie-cutting/predictions  # per-tile class + probability rasters
+
+
+# --- what a tile is -------------------------------------------------------
+tiles:
+  # Band order as written by cookie-cutting_S2_download.ipynb. Position is
+  # authoritative; the band descriptions in the file are checked against this
+  # and a mismatch is an error, never a silent reorder.
+  bands: [B1, B2, B3, B4, B5, B6, B7, B8, B8A, B9, B11, B12]
+  obs_band: n_obs
+  nodata: -9999
+
+  # Asserted on read. Chips failing these are reported by the inventory rather
+  # than quietly used.
+  expected_crs: EPSG:32753
+  expected_pixel_size_m: 10.0
+  pixel_size_tolerance_m: 0.01
+
+  # Surface reflectance, already divided by 10000 in the GEE export. Values
+  # outside this range (ignoring nodata) mean the export convention changed.
+  reflectance_min: 0.0
+  reflectance_max: 1.6
+
+  # Filename convention: <prefix>_S2_<site>_<lat>_<lon>_<YYYY-MM>.tif
+  filename_prefix: 2024-06_mimal_test_S2
+
+
+# --- class scheme ---------------------------------------------------------
+# id 0 is always the ignore class: excluded from training and from every metric.
+# Revise names, colours and keys freely; changing ids or adding classes should
+# come with a bump to scheme_version so existing masks stay interpretable.
+classes:
+  scheme_version: 1
+  definitions:
+    - id: 0
+      name: unlabelled
+      colour: "#00000000"
+      key: "0"
+      ignore: true
+      description: >
+        Not labelled, or too mixed to call. Leave margin pixels here rather than
+        forcing them into a class — at 10 m most basin edges are mixed pixels.
+    - id: 1
+      name: open_water
+      colour: "#1f4ea1"
+      key: "1"
+      ignore: false
+      description: Clear-ish open water, low turbidity, no emergent cover.
+    - id: 2
+      name: turbid_water
+      colour: "#8c6d3f"
+      key: "2"
+      ignore: false
+      description: Open water with suspended sediment; high visible reflectance.
+    - id: 3
+      name: aquatic_vegetation
+      colour: "#2e8b57"
+      key: "3"
+      ignore: false
+      description: >
+        Emergent sedges, floating mats, melaleuca within the basin. Often sits
+        over standing water, which is exactly why MNDWI cannot be trusted as a
+        wetness proxy here.
+    - id: 4
+      name: mud
+      colour: "#a0522d"
+      key: "4"
+      ignore: false
+      description: Saturated soil and drawdown zone; wet but not ponded.
+    - id: 5
+      name: dry_bare
+      colour: "#d9b382"
+      key: "5"
+      ignore: false
+      description: Exposed basin floor and pugged margin; dry bare ground.
+    - id: 6
+      name: surrounding_vegetation
+      colour: "#7f9f5a"
+      key: "6"
+      ignore: false
+      description: Savanna matrix outside the basin.
+
+  # Drawn over any class, never painted. Marks pixels the composite has no
+  # observation for, so a gap can never be mistaken for a dark surface.
+  nodata_display_colour: "#ff00ff"
+
+
+# --- feature stack --------------------------------------------------------
+features:
+  # Raw reflectance bands carried into the feature table. B1 and B9 are 60 m
+  # atmospheric bands resampled to 10 m and carry no surface information worth
+  # having; excluded by default.
+  reflectance_bands: [B2, B3, B4, B5, B6, B7, B8, B8A, B11, B12]
+
+  indices:
+    - mndwi      # (G - SWIR1) / (G + SWIR1)  — Xu
+    - ndwi       # (G - NIR)   / (G + NIR)    — McFeeters
+    - ndvi       # (NIR - R)   / (NIR + R)
+    - ndti       # (R - G)     / (R + G)      — turbidity
+    - awei_sh
+    - awei_nsh
+    - red_green_ratio
+    # Added beyond the original spec: sedge-over-water separates from dry sedge
+    # far better in SWIR than in any green-based water index, which is the exact
+    # blind spot that makes MNDWI unreliable for these sites.
+    - ndmi       # (NIR - SWIR1) / (NIR + SWIR1) — canopy/soil moisture
+    - nd_rededge # (B8A - B5)    / (B8A + B5)
+
+  # Local context: mean and SD in square windows of these sizes.
+  context_windows: [3, 9]
+  context_indices: [mndwi, ndvi]
+
+  temporal:
+    indices: [mndwi, ndwi, ndvi]
+    # Northern Australia monsoon. Wet-season stats are taken over these months
+    # (of any year), dry-season over the complement.
+    wet_season_months: [11, 12, 1, 2, 3, 4]
+    dry_season_months: [5, 6, 7, 8, 9, 10]
+    # Harmonic regression terms. Start with annual only: a semi-annual term adds
+    # two more parameters, and the wet-season peak that constrains them falls in
+    # the months worst affected by cloud. Set to 2 once several years are in.
+    harmonic_orders: 1
+    # A pixel-month is excluded from every temporal statistic below this many
+    # clear observations, rather than being allowed to drag a maximum around.
+    min_obs_for_temporal: 2
+    # Threshold for "months since this pixel last held water". Deliberately
+    # conservative, and deliberately only ever used as a feature — never as a
+    # label or a footprint criterion.
+    water_threshold_mndwi: 0.0
+
+
+# --- basin footprint ------------------------------------------------------
+# One basin per site: the connected region containing the tile centre, which is
+# where the AOI was seeded from the original bounding-box centre. Other basins
+# in the same tile are excluded.
+footprint:
+  seed: tile_centre
+  # The basin is where the SEASONAL AMPLITUDE of the index signal is anomalous
+  # relative to the tile's own savanna matrix. Deliberately not a threshold on
+  # max MNDWI: a sedge-choked waterhole never crosses one, and would get no
+  # footprint at all.
+  amplitude_indices: [mndwi, ndvi, ndti]
+  # Robust z-score of amplitude against the tile's own median/MAD; a pixel is
+  # candidate basin above this.
+  amplitude_z_threshold: 2.0
+  # Dry-season NDVI anomaly: vegetated basins stay green as the matrix browns
+  # off, so this is the strongest single discriminator for the hard sites.
+  dry_ndvi_anomaly_z: 1.5
+  min_basin_pixels: 4
+  # Morphological cleanup, then a buffer, both in pixels (10 m each).
+  closing_radius_px: 1
+  buffer_px: 3
+  # Seed search radius: how far from the tile centre to look for a candidate
+  # basin pixel before declaring the site unfootprintable.
+  seed_search_radius_px: 15
+
+
+# --- pseudo-labelling -----------------------------------------------------
+# Cheap, high-confidence labels for the easy classes only, so hand-labelling
+# effort goes to aquatic vegetation, wet mud and pugged margin. Always written
+# with source: pseudo in the sidecar so they can be excluded at will.
+pseudo_labels:
+  min_obs: 4                    # only from months with a well-observed median
+  open_water:
+    mndwi_min: 0.25             # conservative: misses vegetated water, by design
+    ndvi_max: 0.10
+    erode_px: 1                 # drop mixed edge pixels
+  surrounding_vegetation:
+    outside_footprint_buffer_px: 20
+    ndvi_min: 0.45
+  max_pixels_per_class_per_tile: 2000
+
+
+# --- training -------------------------------------------------------------
+training:
+  # Grouped by site_id, always. wh_train.py has no code path for a random
+  # pixel-level split: pixels within a tile are near-perfectly autocorrelated,
+  # so the effective sample size is the number of labelled SITES, not pixels.
+  cv:
+    strategy: group_kfold_by_site
+    n_splits: 5
+    # Temporal holdout reported alongside: train on these months, test on the rest.
+    temporal_holdout_months: [8, 9, 10]
+  class_weight: balanced
+  models: [logistic_regression, random_forest, gradient_boosting]
+  include_pseudo_labels: false   # flip to true to fold them in
+  random_state: 42
+
+
+# --- prediction and aggregation ------------------------------------------
+prediction:
+  majority_filter_px: 3
+  temporal_consistency:
+    enabled: true
+    # An isolated wet month between dry months, at low observation count, is far
+    # more likely a compositing artefact than a rainfall event. Flag it; do not
+    # silently rewrite it.
+    flag_only: true
+    low_obs_threshold: 2
+  aggregation:
+    # Composition fractions are computed within the basin footprint only, so the
+    # denominator is stable through time.
+    within_footprint: true
+    min_mean_obs_for_good_flag: 3
+
+
+# --- labelling tool -------------------------------------------------------
+labelling:
+  labeller_name: scott
+  panels: [rgb, mndwi, ndvi, ndti, ndmi]   # last one is the configurable extra
+  rgb:
+    bands: [B4, B3, B2]
+    max_reflectance: 0.30
+    gamma: 0.85
+  # Display ranges. Tight and fixed so the same site looks the same month to
+  # month, which is what makes temporal comparison while labelling possible.
+  display_ranges:
+    mndwi: [-0.8, 0.6]
+    ndvi: [-0.2, 0.9]
+    ndti: [-0.4, 0.4]
+    ndmi: [-0.6, 0.6]
+    ndwi: [-0.8, 0.6]
+  brush:
+    initial_radius_px: 2
+    min_radius_px: 0
+    max_radius_px: 20
+  undo_stack_depth: 200
+  # Zoom applied when a tile opens, centred on the tile centre. The basin is a
+  # small part of a 1.5 km chip, so opening fully zoomed out wastes time.
+  initial_zoom_half_width_px: 40
+  keys:
+    next_month: "right"
+    prev_month: "left"
+    next_tile: "n"
+    prev_tile: "p"
+    skip_tile: "s"
+    save: "ctrl+s"
+    undo: "ctrl+z"
+    redo: "ctrl+y"
+    eraser: "e"
+    brush_mode: "b"
+    polygon_mode: "g"
+    toggle_png: "v"
+    toggle_labels: "h"
+    toggle_footprint: "f"
+    brush_smaller: "["
+    brush_larger: "]"
+    quit: "q"

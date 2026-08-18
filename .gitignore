@@ -36,3 +36,10 @@ cookie-cutting/full_images
 cooking-cutting/test
 cookie-cutting/AlphaEarth_tif
 cookie-cutting/AlphaEarth_png
+
+# Re-exported S2 chips (UTM 53S grid, with n_obs band) and everything derived
+# from them. cookie-cutting/labels is deliberately NOT ignored: hand-painted
+# label masks are small and are the most expensive thing in the pipeline.
+cookie-cutting/images_tif_v2
+cookie-cutting/derived
+cookie-cutting/predictions
