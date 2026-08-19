@@ -317,6 +317,444 @@ def plot_harmonic_vs_model_free(
     return figure
 
 
+def class_overlay(mask: np.ndarray, cfg: Config, alpha: float = 0.75) -> np.ndarray:
+    """Label mask as an RGBA overlay; class 0 is transparent."""
+    rgba = np.zeros(mask.shape + (4,))
+    for definition in cfg.classes:
+        if definition.ignore:
+            continue
+        selected = mask == definition.id
+        if selected.any():
+            colour = plt.matplotlib.colors.to_rgba(definition.colour)
+            rgba[selected] = (*colour[:3], alpha)
+    return rgba
+
+
+def class_legend(axis, cfg: Config, present: set[int] | None = None) -> None:
+    """Legend of class colours, restricted to the classes actually drawn."""
+    from matplotlib.patches import Patch
+
+    handles = [
+        Patch(facecolor=d.colour, edgecolor="#333333", label=d.name)
+        for d in cfg.classes
+        if not d.ignore and (present is None or d.id in present)
+    ]
+    if handles:
+        axis.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.02, 1.0),
+                    fontsize=7, frameon=True)
+
+
+def plot_pseudo_labels(
+    tile,
+    pseudo_mask: np.ndarray,
+    cfg: Config,
+    params,
+    footprint: np.ndarray | None = None,
+    manual_mask: np.ndarray | None = None,
+    figsize: tuple[float, float] = (16, 4.2),
+):
+    """Show a pseudo-label mask against the imagery and the rules that made it.
+
+    Panels: true colour with the pseudo labels overlaid; MNDWI with the
+    open-water threshold drawn as a contour; NDVI with the vegetation cutoff;
+    and, where hand labels exist for the same tile, those alongside for
+    comparison.
+
+    The contours are the point — they show *why* a pixel was claimed, so a bad
+    threshold is visible as a contour in the wrong place rather than as an
+    unexplained blob.
+    """
+    import wh_indices
+
+    mndwi = wh_indices.compute("mndwi", tile.bands)
+    ndvi = wh_indices.compute("ndvi", tile.bands)
+
+    n_panels = 4 if manual_mask is not None else 3
+    figure, axes = plt.subplots(1, n_panels, figsize=figsize, constrained_layout=True)
+
+    present = {int(v) for v in np.unique(pseudo_mask) if v}
+
+    # --- RGB with the pseudo labels on top
+    axes[0].imshow(rgb_composite(tile))
+    axes[0].imshow(class_overlay(pseudo_mask, cfg), interpolation="nearest")
+    axes[0].set_title(f"RGB + pseudo labels ({int((pseudo_mask > 0).sum())} px)", fontsize=9)
+
+    # --- MNDWI, with the open-water rule drawn
+    water_image = axes[1].imshow(
+        mndwi, cmap="RdBu", norm=TwoSlopeNorm(vmin=-0.8, vcenter=0.0, vmax=0.6),
+        interpolation="nearest",
+    )
+    plt.colorbar(water_image, ax=axes[1], fraction=0.046, pad=0.03)
+    if np.isfinite(mndwi).any() and np.nanmax(mndwi) > params.open_water_mndwi_min:
+        axes[1].contour(np.nan_to_num(mndwi, nan=-1.0),
+                        levels=[params.open_water_mndwi_min],
+                        colors="#00ff00", linewidths=1.2)
+    axes[1].set_title(f"MNDWI (green = >{params.open_water_mndwi_min} rule)", fontsize=9)
+
+    # --- NDVI, with the vegetation cutoff actually used for this tile
+    veg_image = axes[2].imshow(ndvi, cmap="YlGn", vmin=-0.1, vmax=0.9, interpolation="nearest")
+    plt.colorbar(veg_image, ax=axes[2], fraction=0.046, pad=0.03)
+    observed = np.isfinite(ndvi)
+    if observed.any():
+        cutoff = max(
+            float(np.percentile(ndvi[observed], params.vegetation_ndvi_percentile)),
+            params.vegetation_ndvi_min,
+        )
+        axes[2].contour(np.nan_to_num(ndvi, nan=-1.0), levels=[cutoff],
+                        colors="#0000ff", linewidths=0.9)
+        axes[2].set_title(f"NDVI (blue = >{cutoff:.2f} cutoff)", fontsize=9)
+    else:
+        axes[2].set_title("NDVI", fontsize=9)
+
+    # --- hand labels for the same tile, if any
+    if manual_mask is not None:
+        axes[3].imshow(rgb_composite(tile))
+        axes[3].imshow(class_overlay(manual_mask, cfg), interpolation="nearest")
+        axes[3].set_title(
+            f"hand labels ({int((manual_mask > 0).sum())} px)", fontsize=9
+        )
+        present |= {int(v) for v in np.unique(manual_mask) if v}
+
+    # The basin footprint bounds where surrounding vegetation may be claimed.
+    for axis in axes:
+        if footprint is not None and footprint.any():
+            axis.contour(footprint, levels=[0.5], colors="#00ffff", linewidths=1.0)
+        axis.set_xticks([])
+        axis.set_yticks([])
+
+    class_legend(axes[-1], cfg, present)
+    figure.suptitle(
+        f"site {tile.key.site_id}  {tile.key.year_month}  "
+        f"(gaps {100 * tile.gap_fraction:.0f}%)", fontsize=11,
+    )
+    return figure
+
+
+def plot_pseudo_agreement(
+    agreement: pd.DataFrame, figsize: tuple[float, float] = (6.5, 5.0)
+):
+    """Heatmap of hand label vs pseudo label on the same pixels.
+
+    The diagonal is agreement. Off-diagonal cells are where the automatic rule
+    claimed something a person called different — the column that matters for
+    deciding whether the pseudo-labels are safe to train on.
+    """
+    figure, axis = plt.subplots(figsize=figsize, constrained_layout=True)
+    normalised = agreement.div(agreement.sum(axis=1).replace(0, np.nan), axis=0)
+
+    image = axis.imshow(normalised.to_numpy(), cmap="Blues", vmin=0, vmax=1)
+    axis.set_xticks(range(len(agreement.columns)))
+    axis.set_xticklabels(agreement.columns, rotation=45, ha="right", fontsize=8)
+    axis.set_yticks(range(len(agreement.index)))
+    axis.set_yticklabels(agreement.index, fontsize=8)
+    axis.set_xlabel("pseudo label")
+    axis.set_ylabel("hand label")
+    axis.set_title("where both exist: does the rule agree with you?", fontsize=10)
+
+    for row in range(agreement.shape[0]):
+        for col in range(agreement.shape[1]):
+            count = agreement.iat[row, col]
+            if count:
+                axis.text(col, row, f"{count:,}", ha="center", va="center", fontsize=7,
+                          color="white" if normalised.iat[row, col] > 0.5 else "#333333")
+
+    plt.colorbar(image, ax=axis, fraction=0.046, pad=0.03, label="row fraction")
+    return figure
+
+
+# --- model diagnostics -----------------------------------------------------
+
+
+def plot_confusion(
+    evaluation,
+    normalise: str = "true",
+    figsize: tuple[float, float] = (7.5, 6.2),
+):
+    """Confusion matrix as a heatmap.
+
+    Normalised by true class (row) by default, which is the reading that matters:
+    "of the pixels that really were mud, where did they go?". Raw counts are
+    printed in each cell so the support behind each rate stays visible — a 100%
+    rate over 12 pixels is not the same claim as 100% over 12,000.
+    """
+    matrix = evaluation.confusion
+    counts = matrix.to_numpy()
+
+    if normalise == "true":
+        totals = counts.sum(axis=1, keepdims=True)
+        shown = np.divide(counts, np.where(totals == 0, np.nan, totals))
+        label = "fraction of true class"
+    elif normalise == "pred":
+        totals = counts.sum(axis=0, keepdims=True)
+        shown = np.divide(counts, np.where(totals == 0, np.nan, totals))
+        label = "fraction of predicted class"
+    else:
+        shown = counts.astype(float)
+        label = "pixels"
+
+    figure, axis = plt.subplots(figsize=figsize, constrained_layout=True)
+    image = axis.imshow(shown, cmap="Blues", vmin=0, vmax=1 if normalise else None)
+
+    names = [name.replace("true_", "").replace("pred_", "") for name in matrix.index]
+    axis.set_xticks(range(len(matrix.columns)))
+    axis.set_xticklabels(
+        [c.replace("pred_", "") for c in matrix.columns], rotation=45, ha="right", fontsize=8
+    )
+    axis.set_yticks(range(len(names)))
+    axis.set_yticklabels(names, fontsize=8)
+    axis.set_xlabel("predicted")
+    axis.set_ylabel("true")
+    axis.set_title(
+        f"{evaluation.model_name} — {evaluation.strategy}\n"
+        f"macro F1 {evaluation.macro_f1:.3f}", fontsize=10,
+    )
+
+    for row in range(counts.shape[0]):
+        for col in range(counts.shape[1]):
+            value = shown[row, col]
+            if not np.isfinite(value):
+                continue
+            axis.text(
+                col, row, f"{counts[row, col]:,}", ha="center", va="center",
+                fontsize=7, color="white" if value > 0.5 else "#333333",
+            )
+
+    plt.colorbar(image, ax=axis, fraction=0.046, pad=0.03, label=label)
+    return figure
+
+
+def plot_class_scores(evaluation, figsize: tuple[float, float] = (9, 4.2)):
+    """Per-class F1 and IoU, with support shown so rarity is visible."""
+    scores = evaluation.per_class.sort_values("f1")
+    positions = np.arange(len(scores))
+
+    figure, (score_axis, support_axis) = plt.subplots(
+        1, 2, figsize=figsize, constrained_layout=True,
+        gridspec_kw={"width_ratios": [2.2, 1]},
+    )
+
+    width = 0.38
+    score_axis.barh(positions + width / 2, scores["f1"], height=width,
+                    color="#1D6FA5", label="F1")
+    score_axis.barh(positions - width / 2, scores["iou"], height=width,
+                    color="#B5651D", label="IoU")
+    score_axis.set_yticks(positions)
+    score_axis.set_yticklabels(scores.index, fontsize=8)
+    score_axis.set_xlim(0, 1)
+    score_axis.set_xlabel("score")
+    score_axis.legend(fontsize=8)
+    score_axis.set_title(f"{evaluation.model_name} — per class", fontsize=10)
+
+    support_axis.barh(positions, scores["support"], color="#888888")
+    support_axis.set_yticks(positions)
+    support_axis.set_yticklabels([])
+    support_axis.set_xscale("log")
+    support_axis.set_xlabel("labelled pixels (log)")
+    support_axis.set_title("support", fontsize=10)
+
+    return figure
+
+
+def plot_site_scores(evaluation, figsize: tuple[float, float] = (8, 4.0)):
+    """Per-site macro F1 — where generalisation is actually failing.
+
+    Each bar is a whole waterhole held out. An average over sites hides the case
+    where the model works on six and fails on three, which is exactly what
+    matters before applying it to 187.
+    """
+    scores = evaluation.per_site.sort_values("macro_f1")
+
+    figure, axis = plt.subplots(figsize=figsize, constrained_layout=True)
+    colours = ["#B5651D" if value < 0.4 else "#1D6FA5" for value in scores["macro_f1"]]
+    bars = axis.barh(np.arange(len(scores)), scores["macro_f1"], color=colours)
+
+    axis.set_yticks(np.arange(len(scores)))
+    axis.set_yticklabels(
+        [f"{site} ({int(row.n_pixels):,} px, {int(row.n_classes)} cls)"
+         for site, row in scores.iterrows()],
+        fontsize=8,
+    )
+    axis.axvline(evaluation.macro_f1, color="#333333", linestyle="dashed", linewidth=1,
+                 label=f"overall {evaluation.macro_f1:.3f}")
+    axis.set_xlim(0, 1)
+    axis.set_xlabel("macro F1 when this site is held out")
+    axis.set_title(f"{evaluation.model_name} — per site", fontsize=10)
+    axis.legend(fontsize=8)
+
+    for bar, value in zip(bars, scores["macro_f1"]):
+        axis.text(value + 0.01, bar.get_y() + bar.get_height() / 2,
+                  f"{value:.2f}", va="center", fontsize=7)
+
+    return figure
+
+
+def plot_ablation(ablation: pd.DataFrame, figsize: tuple[float, float] = (8, 3.6)):
+    """Macro F1 by feature set, with the instantaneous-only baseline marked."""
+    ordered = ablation.sort_values("macro_f1")
+
+    figure, axis = plt.subplots(figsize=figsize, constrained_layout=True)
+    colours = [
+        "#B5651D" if name == "instantaneous_only" else "#1D6FA5"
+        for name in ordered.index
+    ]
+    axis.barh(np.arange(len(ordered)), ordered["macro_f1"], color=colours)
+    axis.set_yticks(np.arange(len(ordered)))
+    axis.set_yticklabels(
+        [f"{name}  ({int(n)} feat)" for name, n in
+         zip(ordered.index, ordered["n_features"])], fontsize=8,
+    )
+    axis.set_xlabel("macro F1 (leave-one-site-out)")
+    axis.set_xlim(0, max(0.7, ordered["macro_f1"].max() * 1.15))
+    axis.set_title("does the temporal design earn its keep?", fontsize=10)
+
+    if "instantaneous_only" in ordered.index:
+        baseline = ordered.loc["instantaneous_only", "macro_f1"]
+        axis.axvline(baseline, color="#B5651D", linestyle="dashed", linewidth=1)
+
+    for position, value in enumerate(ordered["macro_f1"]):
+        axis.text(value + 0.005, position, f"{value:.3f}", va="center", fontsize=7)
+
+    return figure
+
+
+# --- spatial inspection ----------------------------------------------------
+
+
+def plot_prediction_map(
+    tile,
+    predicted: np.ndarray,
+    cfg: Config,
+    manual_mask: np.ndarray | None = None,
+    confidence: np.ndarray | None = None,
+    footprint: np.ndarray | None = None,
+    held_out: bool = True,
+    figsize: tuple[float, float] = (17, 4.3),
+):
+    """Where the model is right and wrong, spatially.
+
+    Panels: true colour, the predicted class raster, your hand labels, and an
+    agreement map showing which labelled pixels were got right. Optionally the
+    model's confidence.
+
+    The agreement panel is the point. Aggregate metrics say a class is weak;
+    this says *where* — a basin margin, a shadowed edge, one corner of the tile —
+    which is what tells you whether it is a model problem or a label problem.
+    """
+    panels = ["rgb", "predicted"]
+    if manual_mask is not None:
+        panels += ["manual", "agreement"]
+    if confidence is not None:
+        panels.append("confidence")
+
+    figure, axes = plt.subplots(1, len(panels), figsize=figsize, constrained_layout=True)
+    axes = np.atleast_1d(axes)
+    present = {int(v) for v in np.unique(predicted) if v}
+
+    for axis, panel in zip(axes, panels):
+        if panel == "rgb":
+            axis.imshow(rgb_composite(tile))
+            axis.set_title("RGB", fontsize=9)
+
+        elif panel == "predicted":
+            axis.imshow(rgb_composite(tile))
+            axis.imshow(class_overlay(predicted, cfg, alpha=0.8), interpolation="nearest")
+            axis.set_title("predicted", fontsize=9)
+
+        elif panel == "manual":
+            axis.imshow(rgb_composite(tile))
+            axis.imshow(class_overlay(manual_mask, cfg, alpha=0.8), interpolation="nearest")
+            axis.set_title(f"hand labels ({int((manual_mask > 0).sum())} px)", fontsize=9)
+            present |= {int(v) for v in np.unique(manual_mask) if v}
+
+        elif panel == "agreement":
+            labelled = manual_mask > 0
+            correct = labelled & (predicted == manual_mask)
+            overlay = np.zeros(tile.shape + (4,))
+            overlay[labelled & ~correct] = plt.matplotlib.colors.to_rgba("#D62728")
+            overlay[correct] = plt.matplotlib.colors.to_rgba("#2CA02C")
+            axis.imshow(rgb_composite(tile))
+            axis.imshow(overlay, interpolation="nearest")
+            accuracy = correct.sum() / labelled.sum() if labelled.any() else np.nan
+            axis.set_title(
+                f"green = correct, red = wrong\n{accuracy:.0%} of {int(labelled.sum()):,} "
+                f"labelled px", fontsize=9,
+            )
+
+        elif panel == "confidence":
+            # Most pixels sit at ~1.0, so a fixed 0-1 scale renders as a flat
+            # wash and hides the only interesting part — where the model is
+            # unsure. Stretched to this tile's own low tail instead.
+            finite = confidence[np.isfinite(confidence)]
+            low = float(np.percentile(finite, 2)) if finite.size else 0.0
+            low = min(low, 0.95)
+            image = axis.imshow(confidence, cmap="cividis", vmin=low, vmax=1.0,
+                                interpolation="nearest")
+            plt.colorbar(image, ax=axis, fraction=0.046, pad=0.03)
+            median = float(np.nanmedian(confidence)) if finite.size else np.nan
+            axis.set_title(
+                f"confidence (median {median:.2f})\nstretched {low:.2f}-1.00", fontsize=9
+            )
+
+        if footprint is not None and footprint.any():
+            axis.contour(footprint, levels=[0.5], colors="#00ffff", linewidths=1.0)
+        axis.set_xticks([])
+        axis.set_yticks([])
+
+    class_legend(axes[-1], cfg, present)
+    provenance = (
+        "model has NOT seen this site" if held_out else "WARNING: model was trained on this site"
+    )
+    figure.suptitle(
+        f"site {tile.key.site_id}  {tile.key.year_month}   ({provenance})", fontsize=11
+    )
+    return figure
+
+
+def plot_error_by_class_map(
+    tile, predicted: np.ndarray, manual_mask: np.ndarray, cfg: Config,
+    figsize: tuple[float, float] = (11, 4.3),
+):
+    """For each hand-labelled class, where its pixels were misclassified to.
+
+    Answers "my mud is being called dry ground — is that everywhere, or only on
+    the basin margin?", which the confusion matrix cannot.
+    """
+    labelled_classes = [int(v) for v in np.unique(manual_mask) if v]
+    if not labelled_classes:
+        raise ValueError("this tile has no hand labels")
+
+    figure, axes = plt.subplots(
+        1, len(labelled_classes), figsize=figsize, constrained_layout=True, squeeze=False
+    )
+
+    for axis, class_id in zip(axes[0], labelled_classes):
+        selected = manual_mask == class_id
+        wrong = selected & (predicted != manual_mask)
+
+        axis.imshow(rgb_composite(tile))
+        overlay = np.zeros(tile.shape + (4,))
+        overlay[selected & ~wrong] = plt.matplotlib.colors.to_rgba("#2CA02C")
+        for other in np.unique(predicted[wrong]) if wrong.any() else []:
+            mistaken = wrong & (predicted == other)
+            colour = cfg.class_by_id(int(other)).colour
+            overlay[mistaken] = plt.matplotlib.colors.to_rgba(colour)
+        axis.imshow(overlay, interpolation="nearest")
+
+        name = cfg.class_by_id(class_id).name
+        recall = (selected & ~wrong).sum() / selected.sum()
+        axis.set_title(
+            f"true {name}\n{recall:.0%} correct of {int(selected.sum()):,} px", fontsize=9
+        )
+        axis.set_xticks([])
+        axis.set_yticks([])
+
+    figure.suptitle(
+        f"site {tile.key.site_id} {tile.key.year_month} — "
+        f"green = correct, other colours = what it was mistaken for", fontsize=10,
+    )
+    return figure
+
+
 def plot_footprint_summary(results: pd.DataFrame, figsize: tuple[float, float] = (11, 3.6)):
     """Distribution of derived footprint sizes, and how many sites failed."""
     figure, (size_axis, status_axis) = plt.subplots(

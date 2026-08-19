@@ -478,6 +478,174 @@ def run_ablation(
     return result
 
 
+# --- predicting whole tiles, for spatial inspection ------------------------
+
+
+def fit_without_site(
+    table: pd.DataFrame,
+    cfg: Config,
+    model_name: str,
+    held_out_site: str,
+    feature_names: list[str] | None = None,
+):
+    """Fit on every site except one, so that site can be predicted honestly.
+
+    Looking at predictions from a model that was trained on the same waterhole
+    tells you nothing — it will look excellent and mean nothing. Every spatial
+    check should use a model that has never seen the site it is drawing.
+    """
+    features = feature_names or wh_features.feature_columns(table)
+    training = table[table["site_id"] != held_out_site]
+
+    if training.empty:
+        raise ValueError(f"no training rows left after holding out site {held_out_site}")
+    if training["site_id"].nunique() < 2:
+        raise ValueError(
+            f"only {training['site_id'].nunique()} site(s) left after holding out "
+            f"{held_out_site}; the fit would be meaningless"
+        )
+
+    model = make_model(model_name, cfg)
+    model.fit(training[features].to_numpy(dtype=np.float64), training["class_id"].to_numpy())
+    return model
+
+
+def predict_tile(
+    model,
+    feature_names: list[str],
+    tile: wh_tiles.Tile,
+    temporal_features: dict[str, np.ndarray],
+    month_position: int,
+    params: FeatureParams,
+    with_confidence: bool = True,
+) -> tuple[np.ndarray, np.ndarray | None]:
+    """Classify every observed pixel of one tile.
+
+    Returns (class raster, confidence raster). Pixels with no clear observation
+    are left as 0 rather than guessed at, so a gap never appears as a confident
+    surface class.
+    """
+    features = wh_features.assemble_features(tile, temporal_features, month_position, params)
+
+    missing = [name for name in feature_names if name not in features]
+    if missing:
+        raise KeyError(
+            f"the model needs {len(missing)} feature(s) the tile does not provide, "
+            f"e.g. {missing[:5]}. Was the model trained under a different config?"
+        )
+
+    stacked = np.stack([features[name] for name in feature_names], axis=-1)
+    flat = stacked.reshape(-1, len(feature_names)).astype(np.float64)
+    observed = tile.valid.reshape(-1)
+
+    predicted = np.zeros(flat.shape[0], dtype=np.uint8)
+    confidence = np.full(flat.shape[0], np.nan) if with_confidence else None
+
+    if observed.any():
+        predicted[observed] = model.predict(flat[observed]).astype(np.uint8)
+        if with_confidence and hasattr(model, "predict_proba"):
+            confidence[observed] = model.predict_proba(flat[observed]).max(axis=1)
+
+    return (
+        predicted.reshape(tile.shape),
+        confidence.reshape(tile.shape) if confidence is not None else None,
+    )
+
+
+class SitePredictor:
+    """Predict any month of one site, loading that site's history once.
+
+    Temporal features need the whole 84-month stack, which is most of the cost
+    of a prediction. Constructing this once per site and calling predict() per
+    month turns an 8-second-per-month job into a one-off load plus well under a
+    second each.
+    """
+
+    def __init__(
+        self,
+        manifest: pd.DataFrame,
+        cfg: Config,
+        params: FeatureParams,
+        site_id: str,
+    ) -> None:
+        self.manifest = manifest
+        self.cfg = cfg
+        self.params = params
+        self.site_id = site_id
+        self.stack = wh_temporal.load_site_stack(
+            manifest, site_id, cfg, indices=list(params.temporal_indices)
+        )
+        self.temporal = wh_temporal.temporal_feature_stack(self.stack, cfg)
+
+    @property
+    def months(self) -> list[str]:
+        return list(self.stack.year_month)
+
+    def tile(self, year_month: str) -> tuple[wh_tiles.Tile, int]:
+        """The chip for one month, plus its position in the temporal stack."""
+        if year_month not in self.stack.year_month:
+            raise KeyError(
+                f"site {self.site_id} has no month {year_month}; available "
+                f"{self.stack.year_month[0]}..{self.stack.year_month[-1]}"
+            )
+        position = self.stack.year_month.index(year_month)
+        rows = self.manifest[
+            (self.manifest["site_id"] == self.site_id)
+            & (self.manifest["year_month"] == year_month)
+        ]
+        return wh_tiles.read_tile(rows.iloc[0]["tif_path"], self.cfg), position
+
+    def predict(
+        self, model, feature_names: list[str], year_month: str,
+        with_confidence: bool = True,
+    ) -> tuple[wh_tiles.Tile, np.ndarray, np.ndarray | None]:
+        """Returns (tile, class raster, confidence raster) for one month."""
+        tile, position = self.tile(year_month)
+        predicted, confidence = predict_tile(
+            model, feature_names, tile, self.temporal, position, self.params,
+            with_confidence=with_confidence,
+        )
+        return tile, predicted, confidence
+
+
+def prepare_site_prediction(
+    manifest: pd.DataFrame,
+    cfg: Config,
+    params: FeatureParams,
+    site_id: str,
+    year_month: str,
+):
+    """One-shot convenience wrapper around SitePredictor.
+
+    Returns (tile, temporal_features, month_position). For more than one month
+    of the same site, build a SitePredictor instead — this reloads the whole
+    84-month stack every call.
+    """
+    predictor = SitePredictor(manifest, cfg, params, site_id)
+    tile, position = predictor.tile(year_month)
+    return tile, predictor.temporal, position
+
+
+def labelled_tiles(cfg: Config, include_pseudo: bool = False) -> pd.DataFrame:
+    """Index of tiles that have hand labels, for choosing what to inspect."""
+    rows = []
+    for directory, source in _label_sources(cfg, include_pseudo):
+        for sidecar in sorted(directory.glob("*_labels.json")):
+            meta = json.loads(sidecar.read_text())
+            rows.append({
+                "site_id": meta["site_id"],
+                "year_month": meta["year_month"],
+                "n_labelled": meta["n_labelled"],
+                "n_classes": sum(
+                    1 for name, count in meta["pixel_counts"].items()
+                    if count and name != "unlabelled"
+                ),
+                "source": source,
+                "mask_path": meta["label_mask"],
+            })
+    return pd.DataFrame(rows)
+
+
 # --- persistence -----------------------------------------------------------
 
 

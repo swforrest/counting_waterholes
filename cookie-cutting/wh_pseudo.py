@@ -326,6 +326,94 @@ def generate(
     return pd.DataFrame(records)
 
 
+def written_masks(cfg: Config) -> pd.DataFrame:
+    """Index of the pseudo masks on disk, with their per-class counts."""
+    directory = pseudo_label_dir(cfg)
+    if not directory.exists():
+        return pd.DataFrame()
+
+    rows = []
+    for sidecar in sorted(directory.glob("*_labels.json")):
+        meta = json.loads(sidecar.read_text())
+        row = {
+            "site_id": meta["site_id"],
+            "year_month": meta["year_month"],
+            "n_labelled": meta["n_labelled"],
+            "mask_path": meta["label_mask"],
+            "tif_path": meta["source_tile"],
+        }
+        row.update({k: v for k, v in meta["pixel_counts"].items() if k != "unlabelled"})
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def most_informative(cfg: Config, n: int = 6, class_name: str = "open_water") -> pd.DataFrame:
+    """Tiles worth looking at: the ones where the rule actually claimed something.
+
+    Defaults to open water, because that is the rule most likely to be wrong and
+    the one whose thresholds were hardest to calibrate. A random sample would
+    mostly show tiles with nothing but matrix vegetation on them.
+    """
+    written = written_masks(cfg)
+    if written.empty or class_name not in written.columns:
+        return written
+
+    # One tile per site, so the sample spans waterholes rather than showing six
+    # months of the same one.
+    ranked = written[written[class_name] > 0].sort_values(class_name, ascending=False)
+    return ranked.groupby("site_id", as_index=False).head(1).head(n)
+
+
+def agreement_with_manual(cfg: Config) -> tuple[pd.DataFrame, dict[str, object]]:
+    """Cross-tabulate hand labels against pseudo labels on the same pixels.
+
+    This is the real test of whether the automatic rules are trustworthy. Only
+    pixels labelled by BOTH are counted, so the table is small — but where a
+    person and a threshold disagree about the same pixel, the threshold is the
+    one to doubt.
+
+    Returns (crosstab, summary).
+    """
+    manual_dir = cfg.paths["labels"]
+    pseudo_dir = pseudo_label_dir(cfg)
+
+    names = {d.id: d.name for d in cfg.classes}
+    pairs: list[tuple[int, int]] = []
+    n_tiles = 0
+
+    for pseudo_path in sorted(pseudo_dir.glob("*_labels.tif")):
+        manual_path = manual_dir / pseudo_path.name
+        if not manual_path.exists():
+            continue
+
+        manual = wh_tiles.read_mask(manual_path)
+        pseudo = wh_tiles.read_mask(pseudo_path, manual.shape)
+
+        both = (manual > 0) & (pseudo > 0)
+        if not both.any():
+            continue
+
+        n_tiles += 1
+        pairs.extend(zip(manual[both].tolist(), pseudo[both].tolist()))
+
+    if not pairs:
+        return pd.DataFrame(), {"overlapping_tiles": n_tiles, "overlapping_pixels": 0}
+
+    frame = pd.DataFrame(pairs, columns=["manual", "pseudo"])
+    crosstab = pd.crosstab(
+        frame["manual"].map(names), frame["pseudo"].map(names)
+    )
+
+    agreed = int((frame["manual"] == frame["pseudo"]).sum())
+    summary = {
+        "overlapping_tiles": n_tiles,
+        "overlapping_pixels": len(frame),
+        "agreed": agreed,
+        "agreement_rate": agreed / len(frame),
+    }
+    return crosstab, summary
+
+
 def _select(
     manifest: pd.DataFrame, sites: list[str] | None, months: list[str] | None
 ) -> pd.DataFrame:
