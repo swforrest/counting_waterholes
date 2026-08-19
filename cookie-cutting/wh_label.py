@@ -113,6 +113,19 @@ class LabelParams:
     nodata_colour: str = "#ff00ff"
     labeller_name: str = "scott"
 
+    # Saving is automatic by default: any tile with unsaved labels is written
+    # when you navigate away from it, and everything outstanding is written when
+    # the window closes. Painting is absorbing enough without having to remember
+    # a keystroke, and an empty mask is never written, so autosave cannot create
+    # spurious files.
+    autosave_on_navigate: bool = True
+    save_on_quit: bool = True
+
+    # Which month a site opens on: the best-observed month among these calendar
+    # months. Late dry season by default — the basin floor and its margin are
+    # most interpretable when the water has drawn down.
+    start_month_preference: tuple[int, ...] = (9, 10, 8, 7)
+
 
 class _UndoStack:
     """Bounded undo/redo over sparse mask edits.
@@ -228,11 +241,25 @@ class Labeller:
         for name, value in self._saved_keymaps.items():
             plt.rcParams[name] = value
 
+    def _on_close(self, event=None) -> None:
+        """Window closed from its title bar: save outstanding work, restore keys."""
+        if self.dirty and self.params.save_on_quit:
+            written = self.save_all(announce=False)
+            print(f"saved {len(written)} tile(s) on close")
+        self._restore_keymaps()
+
     def close(self) -> None:
-        """Close the labelling window and restore matplotlib's own shortcuts."""
+        """Save outstanding work, then close the window and restore shortcuts."""
         if self.dirty:
-            tiles = ", ".join(f"{site} {month}" for site, month in sorted(self.dirty))
-            print(f"warning: closing with unsaved labels on {len(self.dirty)} tile(s): {tiles}")
+            if self.params.save_on_quit:
+                written = self.save_all(announce=False)
+                print(f"saved {len(written)} tile(s) on quit")
+            else:
+                tiles = ", ".join(f"{site} {month}" for site, month in sorted(self.dirty))
+                print(
+                    f"warning: closing with unsaved labels on {len(self.dirty)} "
+                    f"tile(s): {tiles}"
+                )
         self._restore_keymaps()
         plt.close(self.figure)
         if self.png_window is not None:
@@ -264,8 +291,14 @@ class Labeller:
         return self.buffers[self.key]
 
     def _set_current_from_queue(self) -> None:
-        """Point the view at the queue's current tile."""
-        self.current = self.queue_row.to_dict()
+        """Point the view at the queued site's starting month."""
+        row = self.queue_row
+        self.current = {
+            "site_id": str(row["site_id"]),
+            "year_month": str(row["start_year_month"]),
+            "tif_path": row["start_tif_path"],
+            "month_index": int(row["start_month_index"]),
+        }
 
     def _site_months(self) -> pd.DataFrame:
         """All months of the current site, for temporal stepping.
@@ -505,40 +538,99 @@ class Labeller:
 
         path = wh_tiles.label_path_for(self.row["tif_path"], self.cfg)
         wh_tiles.write_mask(path, self.mask, self.tile)
+        self._write_sidecar(
+            self.row["tif_path"], path,
+            self.current["site_id"], self.current["year_month"], self.mask,
+        )
 
-        counts = {
-            definition.name: int((self.mask == definition.id).sum())
-            for definition in self.classes
-        }
+        self.dirty.discard(self.key)
+        self._set_status(f"saved {int((self.mask > 0).sum())} px -> {path.name}")
+        return path
+
+    def _write_sidecar(
+        self, tile_path, mask_path: Path, site_id: str, year_month: str,
+        mask: np.ndarray,
+    ) -> None:
+        """Record what produced a mask, beside it."""
         sidecar = {
-            "source_tile": str(self.row["tif_path"]),
-            "label_mask": str(path),
-            "site_id": str(self.row["site_id"]),
-            "year_month": str(self.row["year_month"]),
+            "source_tile": str(tile_path),
+            "label_mask": str(mask_path),
+            "site_id": str(site_id),
+            "year_month": str(year_month),
             "class_scheme_version": self.cfg["classes"]["scheme_version"],
             "config_hash": self.cfg.hash,
             "labeller": self.params.labeller_name,
             "source": "manual",
             "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "pixel_counts": counts,
-            "n_labelled": int((self.mask > 0).sum()),
+            "pixel_counts": {
+                definition.name: int((mask == definition.id).sum())
+                for definition in self.classes
+            },
+            "n_labelled": int((mask > 0).sum()),
         }
-        wh_tiles.sidecar_path_for(self.row["tif_path"], self.cfg).write_text(
+        wh_tiles.sidecar_path_for(tile_path, self.cfg).write_text(
             json.dumps(sidecar, indent=1)
         )
 
-        self.dirty.discard(self.key)
-        self._set_status(f"saved {sidecar['n_labelled']} px -> {path.name}")
+    def save_all(self, announce: bool = True) -> list[Path]:
+        """Write every tile with unsaved labels, not just the one on screen."""
+        written = []
+        for site_id, year_month in sorted(self.dirty):
+            written.append(self._save_buffer(site_id, year_month))
+
+        written = [path for path in written if path is not None]
+        if announce:
+            self._set_status(
+                f"saved {len(written)} tile(s)" if written else "nothing to save"
+            )
+        return written
+
+    def _save_buffer(self, site_id: str, year_month: str) -> Path | None:
+        """Save one buffer by key, which may not be the tile on screen.
+
+        Writing a mask needs the source tile's grid, so a buffer for a tile that
+        is not loaded is written against a fresh read of that tile rather than
+        against whatever happens to be on screen.
+        """
+        key = (site_id, year_month)
+        mask = self.buffers.get(key)
+        if mask is None or not mask.any():
+            self.dirty.discard(key)
+            return None
+
+        if key == self.key:
+            return self.save()
+
+        rows = self.all_months[
+            (self.all_months["site_id"] == site_id)
+            & (self.all_months["year_month"] == year_month)
+        ]
+        if rows.empty:
+            print(f"warning: cannot locate the chip for {site_id} {year_month}; not saved")
+            return None
+
+        tile_path = rows.iloc[0]["tif_path"]
+        reference = wh_tiles.read_tile(tile_path, self.cfg)
+        path = wh_tiles.label_path_for(tile_path, self.cfg)
+        wh_tiles.write_mask(path, mask, reference)
+        self._write_sidecar(tile_path, path, site_id, year_month, mask)
+        self.dirty.discard(key)
         return path
 
     # --- navigation -------------------------------------------------------
 
+    def _leave_current(self) -> None:
+        """Autosave the tile being navigated away from, if it has unsaved work."""
+        if self.params.autosave_on_navigate and self.key in self.dirty:
+            self.save()
+
     def _step_month(self, delta: int) -> None:
         """Browse the current site's months, keeping every label buffer.
 
-        This moves the view only. The queue is untouched, so 'next tile' still
-        goes to the tile you were sent to label, not to wherever you browsed.
+        This moves the view only. The queue holds waterholes, not months, so
+        browsing never advances your place in it.
         """
+        self._leave_current()
         months = self._site_months().reset_index(drop=True)
         matches = months.index[months["year_month"] == self.current["year_month"]]
         if len(matches) == 0:
@@ -559,39 +651,41 @@ class Labeller:
         }
         self._load_current()
 
-    def _step_tile(self, delta: int) -> None:
-        """Move to the next or previous tile in the work queue."""
+    def _step_site(self, delta: int) -> None:
+        """Move to the next or previous waterhole in the queue.
+
+        The queue holds one entry per site, because that is the unit of work:
+        you pick a waterhole, look through its history, label what is
+        informative, and move on. Months are browsed within a site, not queued.
+        """
         target = self.position + delta
         if not 0 <= target < len(self.queue):
-            self._set_status("end of the work queue")
+            self._set_status("end of the queue — no further waterholes")
             return
+
+        self._leave_current()
         self.position = target
         self._set_current_from_queue()
         self._load_current()
 
-    def _step_site(self, delta: int) -> None:
-        """Jump to the first queued tile of the next or previous site."""
-        sites = list(dict.fromkeys(self.queue["site_id"]))
-        current_site = self.queue_row["site_id"]
-        location = sites.index(current_site) + delta
-
-        if not 0 <= location < len(sites):
-            self._set_status("no further sites in the queue")
+    def _return_to_start_month(self) -> None:
+        """Snap back to the month this site opened on."""
+        if self.current["year_month"] == str(self.queue_row["start_year_month"]):
+            self._set_status("already on this site's starting month")
             return
-
-        target_site = sites[location]
-        positions = self.queue.index[self.queue["site_id"] == target_site]
-        self.position = int(positions[0])
+        self._leave_current()
         self._set_current_from_queue()
         self._load_current()
 
-    def _return_to_queue_tile(self) -> None:
-        """Snap the view back to the queue's tile after browsing months."""
-        if self.current["year_month"] == self.queue_row["year_month"]:
-            self._set_status("already on the queued month")
-            return
-        self._set_current_from_queue()
-        self._load_current()
+    def _site_saved_months(self) -> int:
+        """How many months of the current site already have a saved mask."""
+        site_id = self.current["site_id"]
+        on_disk = sum(
+            1
+            for path in self.cfg.paths["labels"].glob(f"*_S2_{site_id}_*_labels.tif")
+        ) if self.cfg.paths["labels"].exists() else 0
+        unsaved = sum(1 for site, _ in self.dirty if site == site_id)
+        return on_disk + unsaved
 
     def _toggle_png(self) -> None:
         """Open the pre-rendered chip in its own window.
@@ -626,7 +720,8 @@ class Labeller:
         canvas.mpl_connect("button_release_event", self._on_release)
         canvas.mpl_connect("motion_notify_event", self._on_motion)
         canvas.mpl_connect("key_press_event", self._on_key)
-        canvas.mpl_connect("close_event", self._restore_keymaps)
+        # Closing from the window's title bar must save too, not just via 'q'.
+        canvas.mpl_connect("close_event", self._on_close)
 
     def _toolbar_active(self) -> bool:
         """True while a navigation tool (pan or zoom) is engaged.
@@ -735,22 +830,20 @@ class Labeller:
                 self._set_status("nothing to redo")
         elif key in ("ctrl+s", "w"):
             self.save()
+        elif key in ("ctrl+shift+s", "W"):
+            self.save_all()
         elif key == "right":
             self._step_month(1)
         elif key == "left":
             self._step_month(-1)
-        elif key == "n":
-            self._step_tile(1)
-        elif key == "p":
-            self._step_tile(-1)
-        elif key == "N":
+        elif key in ("n", "N"):
             self._step_site(1)
-        elif key == "P":
+        elif key in ("p", "P"):
             self._step_site(-1)
         elif key == "s":
-            self._step_tile(1)
+            self._step_site(1)
         elif key == "c":
-            self._return_to_queue_tile()
+            self._return_to_start_month()
         elif key == "h":
             self.show_labels = not self.show_labels
             self._refresh_labels()
@@ -785,19 +878,15 @@ class Labeller:
         marker = "*" if self.key in self.dirty else " "
         unsaved = len(self.dirty)
 
-        # Make it obvious when the view has been browsed away from the tile the
-        # queue actually sent you to, so a save is never a surprise.
-        browsing = (
-            ""
-            if self.current["year_month"] == self.queue_row["year_month"]
-            else f"  [browsing — queued month is {self.queue_row['year_month']}, 'c' returns]"
-        )
+        saved_here = self._site_saved_months() if self.tile is not None else 0
+        autosave = "autosave on" if self.params.autosave_on_navigate else "MANUAL SAVE"
 
         self.status.set_text(
-            f"[tile {self.position + 1}/{len(self.queue)}]{marker} site "
-            f"{self.current['site_id']} {self.current['year_month']}{browsing}\n"
+            f"[waterhole {self.position + 1}/{len(self.queue)}]{marker} site "
+            f"{self.current['site_id']}  {self.current['year_month']}  "
+            f"({saved_here} month(s) labelled here)\n"
             f"class [{definition.key}] {definition.name} | {self.mode} r={self.brush_radius} "
-            f"| {labelled} px on this tile | {unsaved} unsaved buffer(s)\n{message}"
+            f"| {labelled} px on this month | {unsaved} unsaved | {autosave}\n{message}"
         )
         if self.tile is not None:
             self.figure.canvas.draw_idle()
@@ -806,49 +895,65 @@ class Labeller:
 def build_queue(
     manifest: pd.DataFrame,
     sites: list[str] | None = None,
-    months: list[str] | None = None,
     max_gap_fraction: float = 0.2,
     min_mean_obs: float = 2.0,
-    months_per_site: int | None = 6,
+    start_month_preference: tuple[int, ...] = (9, 10, 8, 7),
 ) -> pd.DataFrame:
-    """Select tiles worth labelling, in a sensible order.
+    """One row per waterhole: the unit of labelling work.
 
-    Poorly observed chips are excluded by default: labelling a median built from
-    one cloudy scene teaches the classifier noise.
+    The queue is sites, not site-months, because that is how the work actually
+    goes — you pick a waterhole, look through its history, label the months that
+    are informative, and move on. Months are browsed inside a site rather than
+    queued, so `n` always means "next waterhole".
 
-    `months_per_site` thins each site to that many evenly spaced months across
-    its record, which spreads the selection over both seasons and years. This
-    matters for more than effort: with grouped-by-site cross-validation the
-    effective sample size is the number of labelled SITES, so breadth across
-    sites beats depth within one. It also keeps 'next tile' meaningfully
-    different from 'next month' — queueing all 84 months of a site makes the two
-    identical. Pass None to queue every qualifying month.
+    It also matches how the results are validated: with grouped-by-site
+    cross-validation the effective sample size is the number of labelled SITES,
+    not pixels or months, so breadth across sites is what buys statistical power.
+
+    Each site opens on its best-observed month among `start_month_preference`
+    (late dry season by default), chosen from months passing the quality filters.
     """
-    queue = manifest.copy()
+    candidates = manifest.copy()
     if sites:
-        queue = queue[queue["site_id"].isin(sites)]
-    if months:
-        queue = queue[queue["year_month"].isin(months)]
+        candidates = candidates[candidates["site_id"].isin(sites)]
 
-    queue = queue[queue["gap_fraction"] <= max_gap_fraction]
-    queue = queue[queue["mean_n_obs"] >= min_mean_obs]
-    queue = queue.sort_values(["site_id", "month_index"])
+    good = candidates[
+        (candidates["gap_fraction"] <= max_gap_fraction)
+        & (candidates["mean_n_obs"] >= min_mean_obs)
+    ]
 
-    if months_per_site is not None and not queue.empty:
-        pieces = [
-            group.iloc[_even_spread(len(group), months_per_site)]
-            for _, group in queue.groupby("site_id", sort=False)
-        ]
-        queue = pd.concat(pieces)
+    rows = []
+    for site_id, group in good.groupby("site_id", sort=True):
+        start = _pick_start_month(group, start_month_preference)
+        rows.append({
+            "site_id": site_id,
+            "start_year_month": start["year_month"],
+            "start_tif_path": start["tif_path"],
+            "start_month_index": int(start["month_index"]),
+            "n_good_months": len(group),
+            "mean_n_obs": float(group["mean_n_obs"].mean()),
+        })
 
-    return queue.reset_index(drop=True)
+    if not rows:
+        return pd.DataFrame(
+            columns=["site_id", "start_year_month", "start_tif_path",
+                     "start_month_index", "n_good_months", "mean_n_obs"]
+        )
+
+    return pd.DataFrame(rows).sort_values("site_id").reset_index(drop=True)
 
 
-def _even_spread(available: int, wanted: int) -> np.ndarray:
-    """Indices of `wanted` items spread evenly across `available` of them."""
-    if available <= wanted:
-        return np.arange(available)
-    return np.unique(np.linspace(0, available - 1, wanted).round().astype(int))
+def _pick_start_month(group: pd.DataFrame, preference: tuple[int, ...]) -> pd.Series:
+    """Best-observed month among the preferred calendar months.
+
+    Falls back to the best-observed month of any season if a site has none in the
+    preferred window — better to open somewhere useful than to skip the site.
+    """
+    preferred = group[group["month"].isin(preference)]
+    pool = preferred if not preferred.empty else group
+    return pool.sort_values(
+        ["mean_n_obs", "gap_fraction"], ascending=[False, True]
+    ).iloc[0]
 
 
 def launch(
@@ -879,15 +984,14 @@ KEY_HELP = """
     Z    or cmd+y    redo
 
   NAVIGATION
-    left / right     previous / next MONTH of this site  (browse only —
-                     keeps every label buffer, does not move the queue)
-    c                return to the queued month after browsing
-    p / n            previous / next TILE in the work queue
-    P / N            previous / next SITE in the work queue
-    s                skip to the next tile
+    left / right     previous / next MONTH of this waterhole
+    c                return to this waterhole's starting month
+    p / n            previous / next WATERHOLE
+    s                skip to the next waterhole
 
   ACTIONS
-    w    or cmd+s    save mask + sidecar
+    w    or cmd+s    save this month
+    W                save EVERY month with unsaved labels
     h                hide/show labels
     f                hide/show basin footprint
     v                open/close the pre-rendered PNG (separate window)
@@ -896,4 +1000,9 @@ KEY_HELP = """
   On macOS cmd and ctrl are interchangeable for every binding above.
   Matplotlib's own shortcuts are disabled inside this window (they collide
   with p, s, f, h, g, v and the arrow keys) and restored when it closes.
+
+  SAVING IS AUTOMATIC: a month with unsaved labels is written whenever you
+  navigate away from it, and everything outstanding is written when the window
+  closes. An empty mask is never written. Set autosave_on_navigate=False or
+  save_on_quit=False in LabelParams if you would rather save by hand.
 """

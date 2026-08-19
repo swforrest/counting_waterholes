@@ -36,7 +36,7 @@ cookie-cutting/full_images
 cooking-cutting/test
 cookie-cutting/AlphaEarth_tif
 cookie-cutting/AlphaEarth_png
-cookie-cutting/labels
+cookie-cutting/labels 
 alphaearth_images
 
 # Re-exported S2 chips (UTM 53S grid, with n_obs band) and everything derived

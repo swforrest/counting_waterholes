@@ -9,6 +9,8 @@ worth seeing how large it gets where a basin fills quickly.
 
 from __future__ import annotations
 
+import warnings
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -253,7 +255,11 @@ def plot_feature_maps(
         axis.set_axis_on()
         data = features[name]
         if data.ndim == 3:
-            data = np.nanmedian(data, axis=0)
+            # Pixels unobserved in every month are expected (the reprojection
+            # border, persistent cloud); they plot as blank rather than warn.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                data = np.nanmedian(data, axis=0)
             title = f"{name}\n(median over months)"
         else:
             title = name

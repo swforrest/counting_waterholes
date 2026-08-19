@@ -51,8 +51,12 @@ class FootprintParams:
     visible block, and so a run records exactly what produced it.
     """
 
-    seasonal_range_indices: tuple[str, ...] = ("mndwi", "ndvi", "ndti")
-    seasonal_range_weights: tuple[float, ...] = (1.0, 1.0, 1.0)
+    # Indices whose seasonal range feeds the basin score, mapped to their weight.
+    # One dict rather than parallel lists of names and weights, so dropping an
+    # index cannot leave the two out of step.
+    seasonal_range_weights: dict[str, float] = field(
+        default_factory=lambda: {"mndwi": 1.0, "ndvi": 1.0, "ndti": 1.0}
+    )
     dry_ndvi_anomaly_weight: float = 1.5
     score_threshold: float = 2.0
     min_basin_pixels: int = 4
@@ -62,10 +66,14 @@ class FootprintParams:
     min_valid_months: int = 24
     max_basin_fraction: float = 0.25
 
+    @property
+    def seasonal_range_indices(self) -> tuple[str, ...]:
+        """Indices contributing a seasonal range, in dict order."""
+        return tuple(self.seasonal_range_weights)
+
     def as_dict(self) -> dict[str, object]:
         return {
-            "seasonal_range_indices": list(self.seasonal_range_indices),
-            "seasonal_range_weights": list(self.seasonal_range_weights),
+            "seasonal_range_weights": dict(self.seasonal_range_weights),
             "dry_ndvi_anomaly_weight": self.dry_ndvi_anomaly_weight,
             "score_threshold": self.score_threshold,
             "min_basin_pixels": self.min_basin_pixels,
@@ -141,15 +149,13 @@ def basin_score(
     weighted_sum = None
     total_weight = 0.0
 
-    if len(params.seasonal_range_weights) != len(params.seasonal_range_indices):
+    if not params.seasonal_range_weights and params.dry_ndvi_anomaly_weight <= 0:
         raise ValueError(
-            f"{len(params.seasonal_range_weights)} weights for "
-            f"{len(params.seasonal_range_indices)} indices"
+            "the basin score has no contributing layers: set at least one entry "
+            "in seasonal_range_weights, or a positive dry_ndvi_anomaly_weight"
         )
 
-    for index_name, weight in zip(
-        params.seasonal_range_indices, params.seasonal_range_weights
-    ):
+    for index_name, weight in params.seasonal_range_weights.items():
         key = f"{index_name}_seasonal_range"
         if key not in features:
             raise KeyError(
@@ -172,9 +178,12 @@ def basin_score(
             )
         layer = robust_z(features["ndvi_dry_median"], valid)
         layers["ndvi_dry_anomaly"] = layer
-        weighted_sum = weighted_sum + np.where(np.isfinite(layer), layer, 0.0) * (
-            params.dry_ndvi_anomaly_weight
+        contribution = (
+            np.where(np.isfinite(layer), layer, 0.0) * params.dry_ndvi_anomaly_weight
         )
+        # weighted_sum is still None if seasonal_range_weights was left empty and
+        # the dry anomaly is the only contributing layer.
+        weighted_sum = contribution if weighted_sum is None else weighted_sum + contribution
         total_weight += params.dry_ndvi_anomaly_weight
 
     score = weighted_sum / total_weight
@@ -303,6 +312,67 @@ def derive_footprint(
     footprint.n_pixels = int(mask.sum())
     footprint.area_m2 = float(mask.sum() * pixel_area)
     return footprint
+
+
+# --- picking pixels to inspect --------------------------------------------
+#
+# Both helpers fall back rather than raising when a footprint is empty. A site
+# whose footprint FAILED is exactly the site you most want to plot pixels from,
+# to see why it failed — so refusing to pick one would be backwards.
+
+
+def strongest_pixel(footprint: Footprint) -> tuple[int, int, str]:
+    """The most basin-like pixel: highest score inside the footprint if there is
+    one, otherwise the highest anywhere on the tile.
+
+    Returns (row, col, note) where note says which rule applied.
+    """
+    if footprint.mask.any():
+        scores = np.where(footprint.mask, footprint.score, np.nan)
+        note = "strongest pixel inside the footprint"
+    else:
+        scores = footprint.score
+        note = "no footprint — strongest pixel anywhere on the tile"
+
+    if not np.isfinite(scores).any():
+        raise ValueError(
+            f"site {footprint.site_id}: no finite basin score anywhere; the tile "
+            f"is probably unobserved throughout"
+        )
+
+    row, col = np.unravel_index(np.nanargmax(scores), scores.shape)
+    return int(row), int(col), note
+
+
+def background_pixel(
+    footprint: Footprint,
+    observed_months: np.ndarray,
+    min_distance_px: int = 25,
+    min_months: int = 70,
+) -> tuple[int, int, str]:
+    """A well-observed savanna-matrix pixel, for contrast against a basin pixel.
+
+    Prefers a well-observed pixel far from the footprint. With no footprint to
+    move away from, falls back to the lowest-scoring well-observed pixel, which
+    is the least basin-like thing on the tile.
+    """
+    well_observed = observed_months >= min_months
+    if not well_observed.any():
+        well_observed = observed_months >= np.nanpercentile(observed_months, 75)
+
+    if footprint.mask.any():
+        distance = ndimage.distance_transform_edt(~footprint.mask)
+        candidates = np.where(well_observed & (distance > min_distance_px), distance, np.nan)
+        if np.isfinite(candidates).any():
+            row, col = np.unravel_index(np.nanargmax(candidates), candidates.shape)
+            return int(row), int(col), f"matrix pixel >{min_distance_px} px from the footprint"
+
+    scores = np.where(well_observed, footprint.score, np.nan)
+    if not np.isfinite(scores).any():
+        raise ValueError(f"site {footprint.site_id}: no well-observed pixel to compare against")
+
+    row, col = np.unravel_index(np.nanargmin(scores), scores.shape)
+    return int(row), int(col), "lowest-scoring well-observed pixel"
 
 
 # --- persistence -----------------------------------------------------------
