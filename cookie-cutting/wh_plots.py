@@ -590,6 +590,10 @@ def plot_site_scores(evaluation, figsize: tuple[float, float] = (8, 4.0)):
 
 def plot_ablation(ablation: pd.DataFrame, figsize: tuple[float, float] = (8, 3.6)):
     """Macro F1 by feature set, with the instantaneous-only baseline marked."""
+    # Sets that were not separately scored (identical columns to another set)
+    # would otherwise plot as duplicate bars implying independent evidence.
+    if "identical_to" in ablation.columns:
+        ablation = ablation[ablation["identical_to"] == ""]
     ordered = ablation.sort_values("macro_f1")
 
     figure, axis = plt.subplots(figsize=figsize, constrained_layout=True)

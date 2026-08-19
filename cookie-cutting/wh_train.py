@@ -457,24 +457,77 @@ def run_ablation(
     model_name: str = "gradient_boosting",
     verbose: bool = False,
 ) -> pd.DataFrame:
-    """Cross-validate each feature set and compare. Returns a tidy table."""
+    """Cross-validate each feature set and compare. Returns a tidy table.
+
+    Feature sets that turn out to contain exactly the same columns are scored
+    once and marked, rather than cross-validated repeatedly and reported as
+    separate results. This happens whenever a block is empty — with
+    `harmonic_enabled: false`, for instance, 'all_features', 'no_harmonic' and
+    'model_free_temporal' are the same 57 columns, and running all three would
+    triple the work to produce three identical numbers that look like a bug.
+    """
     blocks = feature_blocks(table, params)
+    empty = [name for name, columns in blocks.items() if not columns]
+    if empty:
+        print(f"  empty feature block(s): {', '.join(empty)}")
+
+    scored: dict[tuple[str, ...], str] = {}
     rows = []
+
     for label, features in ablation_sets(blocks).items():
         if not features:
+            print(f"  {label:22s} skipped — no features")
             continue
+
+        signature = tuple(sorted(features))
+        duplicate_of = scored.get(signature)
+
+        if duplicate_of is not None:
+            rows.append({
+                "feature_set": label,
+                "n_features": len(features),
+                "macro_f1": np.nan,
+                "weighted_f1": np.nan,
+                "identical_to": duplicate_of,
+            })
+            print(f"  {label:22s} {len(features):>4d} features  "
+                  f"identical to '{duplicate_of}', not re-run")
+            continue
+
+        scored[signature] = label
         evaluation = cross_validate(table, cfg, model_name, features, verbose=verbose)
         rows.append({
             "feature_set": label,
             "n_features": len(features),
             "macro_f1": evaluation.macro_f1,
             "weighted_f1": evaluation.weighted_f1,
+            "identical_to": "",
         })
-        print(f"  {label:22s} {len(features):>4d} features  macro F1 {evaluation.macro_f1:.3f}")
+        print(f"  {label:22s} {len(features):>4d} features  "
+              f"macro F1 {evaluation.macro_f1:.3f}")
 
     result = pd.DataFrame(rows).set_index("feature_set")
-    baseline = result.loc["instantaneous_only", "macro_f1"] if "instantaneous_only" in result.index else np.nan
+
+    # Carry the score onto the rows that were not re-run, so the table reads
+    # sensibly while still saying which numbers came from the same fit.
+    for label, row in result.iterrows():
+        if row["identical_to"]:
+            result.loc[label, ["macro_f1", "weighted_f1"]] = result.loc[
+                row["identical_to"], ["macro_f1", "weighted_f1"]
+            ].to_numpy()
+
+    baseline = (
+        result.loc["instantaneous_only", "macro_f1"]
+        if "instantaneous_only" in result.index
+        else np.nan
+    )
     result["gain_over_instantaneous"] = result["macro_f1"] - baseline
+
+    if len(scored) < 2:
+        print("\n  Only one distinct feature set was scored, so this ablation is not "
+              "informative.\n  Set features.temporal.harmonic_enabled: true in the config "
+              "and rebuild the\n  training table to compare against the harmonic block.")
+
     return result
 
 

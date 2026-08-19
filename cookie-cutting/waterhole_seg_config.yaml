@@ -160,13 +160,26 @@ features:
     #   no_harmonic           61 features   0.489
     #   model_free_temporal   57 features   0.497   <- best
     #
-    # Two conclusions. Temporal self-normalisation is worth a lot: +0.14 macro F1
-    # over instantaneous features alone, a 39% relative gain, which is the design's
-    # central claim holding up. But the harmonic block actively HURTS — dropping
-    # its 32 columns gains 0.056, and dropping the trend term as well gains a
-    # further 0.008. Waterholes fill sharply and drain slowly; a sinusoid fits
-    # that badly, and 36 poorly-fitting columns against an effective sample size
-    # of 9 sites is a lot of room to overfit.
+    # The harmonic block actively HURTS: dropping its 32 columns gains 0.056, and
+    # dropping the trend term as well gains a further 0.008. Waterholes fill
+    # sharply and drain slowly; a sinusoid fits that badly, and 36 poorly-fitting
+    # columns against an effective sample size of 9 sites is a lot of room to
+    # overfit.
+    #
+    # HOW MUCH THE TEMPORAL BLOCK IS WORTH DEPENDS ON THE MODEL, and the first
+    # reading of this overstated it. Same splits, logistic regression:
+    #
+    #                          gradient boosting    logistic regression
+    #   instantaneous_only          0.358                 0.512
+    #   with temporal               0.497                 0.540
+    #   gain                       +0.140                +0.028
+    #
+    # Logistic regression on instantaneous features ALONE (0.512) beats gradient
+    # boosting with everything (0.497). So most of the apparent +0.14 was the
+    # temporal features compensating for the tree model overfitting 9 sites, not
+    # new information. The temporal block still helps — +0.028 on the model that
+    # actually generalises best — but it is a modest gain, not a transformative
+    # one, and that verdict should be revisited once more sites are labelled.
     #
     # Note this turns the harmonic off as a CLASSIFIER INPUT only. trend_per_year
     # remains worth computing and reporting for the multi-year degradation
