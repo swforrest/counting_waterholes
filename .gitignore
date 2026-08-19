@@ -37,6 +37,7 @@ cooking-cutting/test
 cookie-cutting/AlphaEarth_tif
 cookie-cutting/AlphaEarth_png
 cookie-cutting/labels 
+cookie-cutting/labels_pseudo
 alphaearth_images
 
 # Re-exported S2 chips (UTM 53S grid, with n_obs band) and everything derived
@@ -45,6 +46,10 @@ alphaearth_images
 cookie-cutting/images_tif_v2
 cookie-cutting/derived
 cookie-cutting/predictions
+
+# Machine-generated labels: regenerable from pseudo_labelling.ipynb, and there
+# are hundreds of them. cookie-cutting/labels (hand-painted) is tracked.
+cookie-cutting/labels_pseudo
 
 # The '*Temp*' rule above matches case-insensitively on macOS, which silently
 # swallows wh_temporal.py and its tests. Keep them.

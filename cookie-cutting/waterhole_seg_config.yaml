@@ -130,7 +130,11 @@ features:
   context_indices: [mndwi, ndvi]
 
   temporal:
-    indices: [mndwi, ndwi, ndvi]
+    # NDWI dropped: it is nearly collinear with MNDWI and adds 14 temporal
+    # columns for almost no information. NDTI carries turbidity (the mud vs
+    # turbid-water distinction) and NDMI responds to water UNDER a canopy, which
+    # is the whole reason aquatic vegetation is the hard class here.
+    indices: [mndwi, ndvi, ndti, ndmi]
     # Northern Australia monsoon. Wet-season stats are taken over these months
     # (of any year), dry-season over the complement.
     wet_season_months: [11, 12, 1, 2, 3, 4]
@@ -148,12 +152,27 @@ features:
     # the model-free wet_max - dry_min. Waterholes fill sharply and drain slowly,
     # which is an asymmetric sawtooth, not a sinusoid.
     #
-    # Training reports scores with and without this block, so the columns have to
-    # earn their place. Note that trend_per_year is the one harmonic output with
-    # no model-free substitute: it is what makes multi-year degradation
-    # estimable, and is kept separately by keep_trend_when_disabled.
-    harmonic_enabled: true
-    keep_trend_when_disabled: true
+    # MEASURED, and the answer was no. Leave-one-site-out over 9 labelled sites,
+    # gradient boosting, macro F1:
+    #
+    #   instantaneous_only    28 features   0.358
+    #   all_features          93 features   0.433
+    #   no_harmonic           61 features   0.489
+    #   model_free_temporal   57 features   0.497   <- best
+    #
+    # Two conclusions. Temporal self-normalisation is worth a lot: +0.14 macro F1
+    # over instantaneous features alone, a 39% relative gain, which is the design's
+    # central claim holding up. But the harmonic block actively HURTS — dropping
+    # its 32 columns gains 0.056, and dropping the trend term as well gains a
+    # further 0.008. Waterholes fill sharply and drain slowly; a sinusoid fits
+    # that badly, and 36 poorly-fitting columns against an effective sample size
+    # of 9 sites is a lot of room to overfit.
+    #
+    # Note this turns the harmonic off as a CLASSIFIER INPUT only. trend_per_year
+    # remains worth computing and reporting for the multi-year degradation
+    # question — it just does not help decide what a pixel is this month.
+    harmonic_enabled: false
+    keep_trend_when_disabled: false
     # A pixel-month is excluded from every temporal statistic below this many
     # clear observations.
     #
@@ -203,15 +222,43 @@ footprint:
 # effort goes to aquatic vegetation, wet mud and pugged margin. Always written
 # with source: pseudo in the sidecar so they can be excluded at will.
 pseudo_labels:
-  min_obs: 4                    # only from months with a well-observed median
+  # Recalibrated against the data. The original min_obs of 4 excluded exactly
+  # the wet-season months where water exists — January and February average ~2
+  # clear scenes — and yielded almost nothing. Sampling 120 wet-season tiles
+  # across 12 sites:
+  #
+  #   mndwi>   n_obs>=   pixels   tiles   sites
+  #    0.25       4          30       5       3    <- original settings
+  #    0.25       2         107      14       4
+  #    0.15       2         170      17       6    <- chosen
+  #    0.00       1         227      21       6
+  #
+  # Note what this does and does not buy. Open water is genuinely rare at 10 m
+  # in these waterholes, so the pixel count stays small whatever the threshold.
+  # What it buys is SITE coverage: open_water goes from 2 hand-labelled sites to
+  # 6, and site count is what grouped-by-site cross-validation actually counts.
+  min_obs: 2
   open_water:
-    mndwi_min: 0.25             # conservative: misses vegetated water, by design
+    mndwi_min: 0.15             # still far above typical land MNDWI (-0.4 to -0.6)
     ndvi_max: 0.10
-    erode_px: 1                 # drop mixed edge pixels
+    # Erosion is OFF. It was meant to drop mixed waterline pixels, but 39% of
+    # the water patches here are only 1-2 pixels, so a single erosion pass
+    # deleted 35% of the water and two sites entirely (7 sites -> 5).
+    # The MNDWI threshold already does that job: a half-water pixel sits near 0,
+    # well below 0.15.
+    erode_px: 0
   surrounding_vegetation:
     outside_footprint_buffer_px: 20
-    ndvi_min: 0.45
-  max_pixels_per_class_per_tile: 2000
+    # Dry-season savanna NDVI runs ~0.30-0.45, so a fixed 0.45 would silently
+    # yield nothing outside the wet season. Applied as a percentile of the
+    # tile's own distribution instead, with this as a floor.
+    ndvi_min: 0.35
+    ndvi_percentile: 60
+  # Per class, per tile. Surrounding vegetation is most of a 1.5 km chip, so
+  # uncapped it yields ~5,000 pixels per tile — 469,000 across the labelled
+  # sites, which would bury the 31,838 hand-labelled pixels the model actually
+  # needs to learn from. The pseudo-labels are here for site coverage, not bulk.
+  max_pixels_per_class_per_tile: 300
 
 
 # --- training -------------------------------------------------------------
@@ -220,7 +267,15 @@ training:
   # pixel-level split: pixels within a tile are near-perfectly autocorrelated,
   # so the effective sample size is the number of labelled SITES, not pixels.
   cv:
-    strategy: group_kfold_by_site
+    # leave_one_site_out | group_kfold_by_site.
+    #
+    # LOSO with 9 labelled sites: 5-fold would hold out ~2 sites at a time, and
+    # classes present at only 2 sites (open_water, turbid_water) would vanish
+    # from training entirely in some folds. LOSO is cheap at this scale and
+    # makes per-site failure legible. wh_train switches to group_kfold above
+    # max_sites_for_loso.
+    strategy: leave_one_site_out
+    max_sites_for_loso: 12
     n_splits: 5
     # Temporal holdout reported alongside: train on these months, test on the rest.
     temporal_holdout_months: [8, 9, 10]
