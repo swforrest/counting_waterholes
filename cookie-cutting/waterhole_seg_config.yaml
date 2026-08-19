@@ -139,9 +139,33 @@ features:
     # two more parameters, and the wet-season peak that constrains them falls in
     # the months worst affected by cloud. Set to 2 once several years are in.
     harmonic_orders: 1
+
+    # Ablation switch for the whole harmonic block.
+    #
+    # The harmonic contributes 9 of the 14 temporal features per index (27 of 43
+    # in total) but is the weakest performer measured so far: on site 025 the
+    # harmonic amplitude separated basin from matrix at 2.5x, against 3.2x for
+    # the model-free wet_max - dry_min. Waterholes fill sharply and drain slowly,
+    # which is an asymmetric sawtooth, not a sinusoid.
+    #
+    # Training reports scores with and without this block, so the columns have to
+    # earn their place. Note that trend_per_year is the one harmonic output with
+    # no model-free substitute: it is what makes multi-year degradation
+    # estimable, and is kept separately by keep_trend_when_disabled.
+    harmonic_enabled: true
+    keep_trend_when_disabled: true
     # A pixel-month is excluded from every temporal statistic below this many
-    # clear observations, rather than being allowed to drag a maximum around.
-    min_obs_for_temporal: 2
+    # clear observations.
+    #
+    # Set to 1, not 2, on the evidence of the manifest: January and February
+    # average 1.99 and 2.03 clear scenes per pixel, against 6.3 in August, and
+    # 13.5% of all chips rest on fewer than 2 scenes on average. A hard cut at 2
+    # would therefore discard roughly half the wet season — precisely the months
+    # that set each pixel's wet-season maximum, which is the reference every
+    # self-normalised feature is measured against. Thin months are instead
+    # down-weighted by sqrt(n_obs) in observation_weights(), which degrades
+    # gracefully rather than deleting the signal.
+    min_obs_for_temporal: 1
     # Threshold for "months since this pixel last held water". Deliberately
     # conservative, and deliberately only ever used as a feature — never as a
     # label or a footprint criterion.

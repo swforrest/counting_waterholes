@@ -80,13 +80,16 @@ def read_tile(path: str | Path, cfg: Config) -> Tile:
 
     warnings: list[str] = []
 
-    with rasterio.open(path) as dataset:
-        descriptions = list(dataset.descriptions)
-        raw = dataset.read().astype(np.float64)
-        file_nodata = dataset.nodata
-        crs = dataset.crs
-        transform = dataset.transform
-        shape = (dataset.height, dataset.width)
+    try:
+        with rasterio.open(path) as dataset:
+            descriptions = list(dataset.descriptions)
+            raw = dataset.read().astype(np.float64)
+            file_nodata = dataset.nodata
+            crs = dataset.crs
+            transform = dataset.transform
+            shape = (dataset.height, dataset.width)
+    except (rasterio.errors.RasterioIOError, OSError) as error:
+        raise OSError(_unreadable_message(path, error)) from error
 
     n_bands = raw.shape[0]
     has_obs = n_bands == len(band_names) + 1
@@ -150,6 +153,31 @@ def read_tile(path: str | Path, cfg: Config) -> Tile:
         shape=shape,
         warnings=warnings,
     )
+
+
+def _unreadable_message(path: Path, error: Exception) -> str:
+    """Explain an unreadable chip, naming the cause this project actually hits.
+
+    The tiles live on a OneDrive share with Files On-Demand, which dehydrates
+    files to placeholders and then fails to rehydrate them when offline or under
+    load. That surfaces as errno 60 / 'not recognized as a supported file
+    format' on a file whose size looks perfectly normal, which is a badly
+    misleading pair of messages to debug from.
+    """
+    exists = path.exists()
+    size = path.stat().st_size if exists else 0
+
+    if exists and size > 0:
+        return (
+            f"{path}\n"
+            f"  The file exists ({size:,} bytes) but could not be opened: {error}\n"
+            f"  This is almost always OneDrive Files On-Demand: the chip is a\n"
+            f"  placeholder that cannot be rehydrated right now. Fix it by\n"
+            f"  right-clicking the cookie-cutting folder in Finder and choosing\n"
+            f"  'Always Keep on This Device', or move the tiles off OneDrive.\n"
+            f"  Retrying will not help until the file is hydrated."
+        )
+    return f"{path}\n  Chip missing or empty (exists={exists}, size={size}): {error}"
 
 
 def _check_reflectance_range(
