@@ -897,6 +897,7 @@ def build_queue(
     sites: list[str] | None = None,
     max_gap_fraction: float = 0.2,
     min_mean_obs: float = 2.0,
+    start_month: str = "first",
     start_month_preference: tuple[int, ...] = (9, 10, 8, 7),
 ) -> pd.DataFrame:
     """One row per waterhole: the unit of labelling work.
@@ -910,9 +911,23 @@ def build_queue(
     cross-validation the effective sample size is the number of labelled SITES,
     not pixels or months, so breadth across sites is what buys statistical power.
 
-    Each site opens on its best-observed month among `start_month_preference`
-    (late dry season by default), chosen from months passing the quality filters.
+    `start_month` picks which month each site opens on:
+
+      "first"          the earliest month of the record — start at the beginning
+                       and work forward, which keeps a site's history in order.
+      "best_observed"  the best-observed month among start_month_preference
+                       (late dry season by default), where the basin floor and
+                       pugged margin are most interpretable.
+
+    Either way the choice is made among months passing the quality filters, so a
+    site never opens on a chip that is mostly cloud. Every month remains
+    browsable with the arrow keys regardless.
     """
+    if start_month not in ("first", "best_observed"):
+        raise ValueError(
+            f"start_month must be 'first' or 'best_observed', got {start_month!r}"
+        )
+
     candidates = manifest.copy()
     if sites:
         candidates = candidates[candidates["site_id"].isin(sites)]
@@ -924,7 +939,7 @@ def build_queue(
 
     rows = []
     for site_id, group in good.groupby("site_id", sort=True):
-        start = _pick_start_month(group, start_month_preference)
+        start = _pick_start_month(group, start_month, start_month_preference)
         rows.append({
             "site_id": site_id,
             "start_year_month": start["year_month"],
@@ -943,12 +958,16 @@ def build_queue(
     return pd.DataFrame(rows).sort_values("site_id").reset_index(drop=True)
 
 
-def _pick_start_month(group: pd.DataFrame, preference: tuple[int, ...]) -> pd.Series:
-    """Best-observed month among the preferred calendar months.
+def _pick_start_month(
+    group: pd.DataFrame, strategy: str, preference: tuple[int, ...]
+) -> pd.Series:
+    """The month a site opens on. See build_queue for the strategies."""
+    if strategy == "first":
+        return group.sort_values("month_index").iloc[0]
 
-    Falls back to the best-observed month of any season if a site has none in the
-    preferred window — better to open somewhere useful than to skip the site.
-    """
+    # Best-observed month in the preferred season, falling back to any season if
+    # a site has no qualifying month there — better to open somewhere useful than
+    # to skip the site entirely.
     preferred = group[group["month"].isin(preference)]
     pool = preferred if not preferred.empty else group
     return pool.sort_values(

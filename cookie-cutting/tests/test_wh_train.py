@@ -188,6 +188,7 @@ def test_ablation_sets_are_strictly_nested():
         "temporal_model_free": ["c"],
         "temporal_trend": ["d"],
         "temporal_harmonic": ["e", "f"],
+        "alphaearth": [],
     }
     sets = wh_train.ablation_sets(blocks)
 
@@ -197,12 +198,56 @@ def test_ablation_sets_are_strictly_nested():
     assert set(sets["all_features"]) == {"a", "b", "c", "d", "e", "f"}
 
 
+def test_every_ablation_set_contains_exactly_what_its_name_says():
+    """A set called 'instantaneous_only' must not quietly include embeddings."""
+    blocks = {
+        "instantaneous": ["a", "b"],
+        "temporal_model_free": ["c"],
+        "temporal_trend": ["d"],
+        "temporal_harmonic": ["e"],
+        "alphaearth": ["ae_A00", "ae_A01"],
+    }
+    sets = wh_train.ablation_sets(blocks)
+    embeddings = set(blocks["alphaearth"])
+
+    assert set(sets["instantaneous_only"]) == {"a", "b"}
+    assert not set(sets["instantaneous_only"]) & embeddings
+    assert not set(sets["spectral_only"]) & embeddings
+    assert not set(sets["no_harmonic"]) & embeddings
+    assert not set(sets["model_free_temporal"]) & embeddings
+
+    assert set(sets["embeddings_only"]) == embeddings
+    assert set(sets["instantaneous_plus_embeddings"]) == {"a", "b"} | embeddings
+    assert embeddings < set(sets["all_features"])
+
+
+def test_embedding_sets_are_absent_when_there_are_no_embeddings():
+    blocks = {
+        "instantaneous": ["a"], "temporal_model_free": ["c"],
+        "temporal_trend": [], "temporal_harmonic": [], "alphaearth": [],
+    }
+    sets = wh_train.ablation_sets(blocks)
+    assert "embeddings_only" not in sets
+    assert "instantaneous_plus_embeddings" not in sets
+
+
+def test_spectral_only_is_all_features_minus_embeddings():
+    blocks = {
+        "instantaneous": ["a"], "temporal_model_free": ["c"],
+        "temporal_trend": ["d"], "temporal_harmonic": ["e"],
+        "alphaearth": ["ae_A00"],
+    }
+    sets = wh_train.ablation_sets(blocks)
+    assert set(sets["all_features"]) - set(sets["spectral_only"]) == {"ae_A00"}
+
+
 def test_no_harmonic_keeps_the_trend_term():
     blocks = {
         "instantaneous": ["a"],
         "temporal_model_free": ["c"],
         "temporal_trend": ["mndwi_harm_trend_per_year"],
         "temporal_harmonic": ["mndwi_harm_amplitude"],
+        "alphaearth": [],
     }
     sets = wh_train.ablation_sets(blocks)
     assert "mndwi_harm_trend_per_year" in sets["no_harmonic"]

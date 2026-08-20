@@ -110,6 +110,13 @@ def plot_footprint_diagnostics(
 
     # Outline rather than fill, so the surface underneath stays readable.
     for axis in (axes[0, 0], axes[0, 1]):
+        # The site's own labelled extent: everything outside belongs to a
+        # neighbouring waterhole or to nothing, and is excluded from the footprint.
+        if getattr(footprint, "box_mask", None) is not None and footprint.box_mask.any():
+            axis.contour(
+                footprint.box_mask, levels=[0.5], colors="#ffff00",
+                linewidths=1.0, linestyles="dotted",
+            )
         if footprint.mask.any():
             axis.contour(footprint.mask, levels=[0.5], colors="#ff00ff", linewidths=1.2)
         if footprint.core_mask.any():
@@ -237,8 +244,19 @@ def plot_feature_maps(
     missing = [name for name in names if name not in features]
     if missing:
         print(f"  not present, skipped: {missing}")
+
     if not available:
-        raise KeyError("none of the requested features are present")
+        hint = ""
+        if any("_harm_" in name for name in missing):
+            hint = (
+                "\nEvery requested feature is a harmonic one, and "
+                "features.temporal.harmonic_enabled is false in the config, so none "
+                "were computed. Set it true and rebuild to plot these."
+            )
+        raise KeyError(
+            f"none of the requested features are present. Asked for "
+            f"{len(names)}, none of which exist.{hint}"
+        )
 
     n_rows = int(np.ceil(len(available) / n_columns))
     figure, axes = plt.subplots(
@@ -285,7 +303,15 @@ def plot_harmonic_vs_model_free(
     basin separates further along one axis than the other, that is the axis
     worth keeping.
     """
-    amplitude = features[f"{index_name}_harm_amplitude"]
+    amplitude_key = f"{index_name}_harm_amplitude"
+    if amplitude_key not in features:
+        raise KeyError(
+            f"{amplitude_key} was not computed, so there is no harmonic to compare "
+            f"against. features.temporal.harmonic_enabled is false in the config — "
+            f"set it true and rebuild the temporal features to use this plot."
+        )
+
+    amplitude = features[amplitude_key]
     seasonal_range = features[f"{index_name}_seasonal_range"]
 
     figure, axis = plt.subplots(figsize=figsize, constrained_layout=True)
@@ -617,6 +643,69 @@ def plot_ablation(ablation: pd.DataFrame, figsize: tuple[float, float] = (8, 3.6
 
     for position, value in enumerate(ordered["macro_f1"]):
         axis.text(value + 0.005, position, f"{value:.3f}", va="center", fontsize=7)
+
+    return figure
+
+
+def plot_band_importance(
+    importance: pd.DataFrame,
+    n_bands: int = 25,
+    reference: pd.DataFrame | None = None,
+    figsize: tuple[float, float] = (9, 7),
+):
+    """Ranked embedding-band importance, with the across-site spread shown.
+
+    The error bars are the point. A band that looks essential in one fold and
+    useless in the rest is not a finding, and a bare ranking of means would
+    present it as one. A bar whose spread crosses zero has not earned its place.
+
+    `reference` is the full importance table; when given, the best few
+    non-embedding features are drawn alongside so "A17 matters" is calibrated
+    against how much anything matters.
+    """
+    import wh_features
+
+    bands = importance.head(n_bands).iloc[::-1]
+    positions = np.arange(len(bands))
+
+    figure, axis = plt.subplots(figsize=figsize, constrained_layout=True)
+    colours = [
+        "#B5651D" if row.mean_importance - row.std_across_folds <= 0 else "#1D6FA5"
+        for row in bands.itertuples()
+    ]
+    axis.barh(
+        positions, bands["mean_importance"], xerr=bands["std_across_sites"],
+        color=colours, error_kw={"ecolor": "#666666", "elinewidth": 0.8},
+    )
+
+    axis.set_yticks(positions)
+    axis.set_yticklabels(
+        [f"{name}  ({int(row.n_folds_positive)}/{int(row.n_folds)})"
+         for name, row in zip(bands.index, bands.itertuples())],
+        fontsize=8,
+    )
+    axis.axvline(0.0, color="#333333", linewidth=0.8)
+    axis.set_xlabel("drop in macro F1 when permuted (held-out sites)")
+    axis.set_title(
+        "AlphaEarth band importance\n"
+        "orange = spread crosses zero; (n/N) = folds where it helped",
+        fontsize=10,
+    )
+
+    if reference is not None:
+        others = reference[
+            ~reference.index.str.startswith(wh_features.ALPHAEARTH_PREFIX)
+        ].head(5)
+        if len(others):
+            label = ", ".join(
+                f"{name} {row.mean_importance:.3f}"
+                for name, row in zip(others.index, others.itertuples())
+            )
+            axis.text(
+                0.98, 0.02, f"best non-embedding features:\n{label}",
+                transform=axis.transAxes, fontsize=7, ha="right", va="bottom",
+                bbox={"facecolor": "#FFFFFF", "alpha": 0.85, "edgecolor": "#CCCCCC"},
+            )
 
     return figure
 

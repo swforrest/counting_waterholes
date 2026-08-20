@@ -66,6 +66,14 @@ class FootprintParams:
     min_valid_months: int = 24
     max_basin_fraction: float = 0.25
 
+    # Reduce the footprint to one connected region, keeping the largest.
+    #
+    # Without this a site can end up as a main basin plus a scatter of stray
+    # pixels that survived the score threshold nearby, which polygonises into
+    # several features and makes "the waterhole's area" ambiguous. The fragments
+    # are rarely the waterhole; they are speckle in the anomaly score.
+    single_component: bool = True
+
     @property
     def seasonal_range_indices(self) -> tuple[str, ...]:
         """Indices contributing a seasonal range, in dict order."""
@@ -82,6 +90,7 @@ class FootprintParams:
             "seed_search_radius_px": self.seed_search_radius_px,
             "min_valid_months": self.min_valid_months,
             "max_basin_fraction": self.max_basin_fraction,
+            "single_component": self.single_component,
         }
 
 
@@ -97,10 +106,12 @@ class Footprint:
     n_pixels: int = 0
     area_m2: float = 0.0
     succeeded: bool = True
-    reason: str = ""
+    reason: str = ""  # why it FAILED; empty on success
+    notes: str = ""  # anything worth saying about a footprint that did succeed
     transform: object = None
     crs: object = None
     params: FootprintParams | None = None
+    box_mask: np.ndarray | None = None  # this site's extent, when one was used
 
     @property
     def fraction_of_tile(self) -> float:
@@ -203,17 +214,29 @@ def _disk(radius: int) -> np.ndarray:
 
 
 def _select_central_component(
-    candidate: np.ndarray, params: FootprintParams
+    candidate: np.ndarray,
+    params: FootprintParams,
+    box_mask: np.ndarray | None = None,
 ) -> tuple[np.ndarray, str]:
-    """Keep only the basin at the tile centre, where the AOI was seeded.
+    """Keep only this site's basin, discarding neighbouring waterholes.
 
-    Tiles routinely contain more than one basin — site 025 has three. The AOI
-    was buffered from a labelled waterhole centre, so the central component is
-    the site; the others belong to different sites or to nothing.
+    Tiles routinely contain more than one basin — 93 of 187 contain more than one
+    waterhole, and site 025 has three. Two ways to pick the right one:
+
+    With a `box_mask` (this site's labelled extent, buffered), the choice is made
+    on evidence: keep components that intersect the box. That is strictly better
+    than guessing from distance, and it is why `seed_search_radius_px` exists only
+    as the fallback.
+
+    Without one, fall back to the component at or nearest the tile centre, since
+    the AOI was buffered from the labelled waterhole centre.
     """
     labelled, n_components = ndimage.label(candidate)
     if n_components == 0:
         return np.zeros_like(candidate), "no pixels passed the score threshold"
+
+    if box_mask is not None:
+        return _select_by_box(labelled, box_mask, params)
 
     height, width = candidate.shape
     centre = (height // 2, width // 2)
@@ -247,12 +270,71 @@ def _select_central_component(
     return selected, ""
 
 
+def _largest_component(mask: np.ndarray) -> tuple[np.ndarray, int, int]:
+    """Keep only the largest connected region.
+
+    Returns (mask, n_regions_dropped, pixels_dropped) so the caller can say what
+    was discarded rather than silently shrinking the footprint.
+    """
+    if not mask.any():
+        return mask, 0, 0
+
+    labelled, n_components = ndimage.label(mask)
+    if n_components <= 1:
+        return mask, 0, 0
+
+    sizes = np.bincount(labelled.ravel())
+    sizes[0] = 0  # background
+    keep = int(sizes.argmax())
+
+    largest = labelled == keep
+    return largest, n_components - 1, int(mask.sum() - largest.sum())
+
+
+def _select_by_box(
+    labelled: np.ndarray, box_mask: np.ndarray, params: FootprintParams
+) -> tuple[np.ndarray, str]:
+    """Keep the components that fall inside this site's labelled extent.
+
+    Several components may legitimately belong to one waterhole — a basin broken
+    into fragments by a bar of vegetation, say — so every component intersecting
+    the box is kept rather than only the largest. Components belonging to a
+    neighbouring waterhole are excluded because they sit outside the box.
+    """
+    inside = np.unique(labelled[box_mask & (labelled > 0)])
+    if inside.size == 0:
+        return (
+            np.zeros_like(labelled, dtype=bool),
+            "no candidate pixels fall inside this site's bounding box",
+        )
+
+    selected = np.isin(labelled, inside) & box_mask
+    if selected.sum() < params.min_basin_pixels:
+        return (
+            np.zeros_like(labelled, dtype=bool),
+            f"in-box component is {int(selected.sum())} px, below the "
+            f"{params.min_basin_pixels} px minimum",
+        )
+
+    return selected, ""
+
+
 def derive_footprint(
     stack: SiteStack,
     features: dict[str, np.ndarray],
     params: FootprintParams,
+    box_mask: np.ndarray | None = None,
 ) -> Footprint:
     """Derive the basin footprint for one site.
+
+    `box_mask` is this site's labelled extent from wh_bbox, buffered. When given,
+    it decides which connected component belongs to this waterhole rather than
+    the tile-centre heuristic, and bounds the final footprint — so a neighbouring
+    waterhole in the same tile cannot leak into this site's composition fractions.
+
+    Note it constrains *selection* only. The anomaly scores are still computed
+    against the whole tile, because the buffered box is a median 10% of a chip
+    and there is nowhere near enough matrix inside it to estimate a baseline.
 
     Returns a Footprint with succeeded=False and a reason when no plausible
     basin is found, rather than an empty mask that would silently become a
@@ -272,7 +354,12 @@ def derive_footprint(
             candidate, structure=_disk(params.closing_radius_px)
         )
 
-    core, reason = _select_central_component(candidate, params)
+    if box_mask is not None and box_mask.shape != candidate.shape:
+        raise ValueError(
+            f"box mask shape {box_mask.shape} does not match the tile {candidate.shape}"
+        )
+
+    core, reason = _select_central_component(candidate, params, box_mask)
 
     footprint = Footprint(
         site_id=stack.site_id,
@@ -294,6 +381,21 @@ def derive_footprint(
     if params.buffer_px > 0:
         mask = ndimage.binary_dilation(core, structure=_disk(params.buffer_px))
     mask &= valid
+    if box_mask is not None:
+        # The dilation must not push the footprint back out past this site's own
+        # extent and into a neighbouring waterhole.
+        mask &= box_mask
+
+    # Applied last, after dilation and both maskings — each of which can split a
+    # region or leave fragments behind — so the saved footprint is exactly one
+    # polygon and "the waterhole's area" is unambiguous.
+    if params.single_component:
+        mask, n_dropped, dropped_px = _largest_component(mask)
+        if n_dropped:
+            footprint.notes = (
+                f"kept the largest of {n_dropped + 1} regions "
+                f"({dropped_px} px discarded as fragments)"
+            )
 
     fraction = float(mask.mean())
     if fraction > params.max_basin_fraction:
@@ -438,6 +540,7 @@ def _to_geojson(footprint: Footprint) -> dict[str, object]:
                     "area_m2": round(footprint.area_m2, 1),
                     "source_crs": str(footprint.crs),
                     "succeeded": footprint.succeeded,
+                    "notes": footprint.notes,
                     **(footprint.params.as_dict() if footprint.params else {}),
                 },
             }
@@ -461,8 +564,13 @@ def run_site(
     cfg: Config,
     params: FootprintParams,
     indices: list[str] | None = None,
+    use_box: bool = True,
 ) -> tuple[Footprint, SiteStack, dict[str, np.ndarray]]:
     """Load a site, compute its temporal features, and derive its footprint.
+
+    Uses the site's bounding-box mask when one has been built, falling back to
+    the tile-centre heuristic when it has not — so this keeps working before
+    wh_bbox has been run, and improves once it has.
 
     Returns the stack and features too, so the notebook can plot the layers that
     produced the result without recomputing them.
@@ -472,5 +580,21 @@ def run_site(
 
     stack = wh_temporal.load_site_stack(manifest, site_id, cfg, indices=indices)
     features = wh_temporal.temporal_feature_stack(stack, cfg)
-    footprint = derive_footprint(stack, features, params)
+
+    box_mask = None
+    if use_box:
+        import wh_bbox
+
+        try:
+            box_mask = wh_bbox.load_mask(cfg, site_id)
+        except FileNotFoundError:
+            box_mask = None
+        if box_mask is not None and box_mask.shape != stack.shape:
+            raise ValueError(
+                f"site {site_id}: box mask {box_mask.shape} does not match the "
+                f"tile grid {stack.shape}; rebuild the box masks"
+            )
+
+    footprint = derive_footprint(stack, features, params, box_mask=box_mask)
+    footprint.box_mask = box_mask
     return footprint, stack, features

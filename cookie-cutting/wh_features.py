@@ -19,9 +19,11 @@ the mean of the pixels that *were* observed, not an average dragged toward zero.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import rasterio
 from scipy import ndimage
 
 import wh_indices
@@ -47,17 +49,40 @@ class FeatureParams:
     context_windows: tuple[int, ...] = (3, 9)
     context_indices: tuple[str, ...] = ("mndwi", "ndvi")
     temporal_indices: tuple[str, ...] = ("mndwi", "ndvi", "ndti", "ndmi")
-    include_n_obs: bool = True
+
+    # n_obs is NOT a training feature by default. It is a property of the
+    # observing system, not of the ground: wet-season months have both fewer
+    # clear scenes and more water, so a classifier can learn "few observations
+    # therefore wet" instead of reading the surface. Permutation importance found
+    # it the second most influential feature of 121, which is what that shortcut
+    # looks like from the outside. It would also transfer badly to a year with
+    # different cloud cover.
+    #
+    # It remains in use elsewhere, where it belongs: weighting the temporal
+    # statistics (wh_temporal.observation_weights), gating pseudo-labels, and
+    # filtering the labelling queue.
+    include_n_obs: bool = False
+
+    # AlphaEarth annual embeddings: 64 static learned dimensions per pixel.
+    use_alphaearth: bool = False
+    alphaearth_year: int = 2025
+    # None means all 64. A subset selected by band importance goes here.
+    alphaearth_bands: tuple[str, ...] | None = None
 
     @classmethod
     def from_config(cls, cfg: Config) -> "FeatureParams":
         settings = cfg["features"]
+        bands = settings.get("alphaearth_bands", "all")
         return cls(
             reflectance_bands=tuple(settings["reflectance_bands"]),
             indices=tuple(settings["indices"]),
             context_windows=tuple(settings["context_windows"]),
             context_indices=tuple(settings["context_indices"]),
             temporal_indices=tuple(settings["temporal"]["indices"]),
+            include_n_obs=bool(settings.get("include_n_obs", False)),
+            use_alphaearth=bool(settings.get("use_alphaearth", False)),
+            alphaearth_year=int(settings.get("alphaearth_year", 2025)),
+            alphaearth_bands=None if bands in (None, "all") else tuple(bands),
         )
 
     def as_dict(self) -> dict[str, object]:
@@ -68,6 +93,11 @@ class FeatureParams:
             "context_indices": list(self.context_indices),
             "temporal_indices": list(self.temporal_indices),
             "include_n_obs": self.include_n_obs,
+            "use_alphaearth": self.use_alphaearth,
+            "alphaearth_year": self.alphaearth_year,
+            "alphaearth_bands": (
+                list(self.alphaearth_bands) if self.alphaearth_bands else "all"
+            ),
         }
 
 
@@ -153,11 +183,75 @@ def instantaneous_features(tile: Tile, params: FeatureParams) -> dict[str, np.nd
     return features
 
 
+ALPHAEARTH_PREFIX = "ae_"
+ALL_ALPHAEARTH_BANDS = tuple(f"A{i:02d}" for i in range(64))
+
+
+def alphaearth_path(cfg: Config, site_id: str, year: int) -> Path:
+    """Where a site's embedding chip lives."""
+    prefix = cfg["tiles"]["filename_prefix"]
+    matches = sorted(cfg.paths["alphaearth"].glob(f"{prefix}_{site_id}_*_{year}.tif"))
+    if not matches:
+        raise FileNotFoundError(
+            f"no AlphaEarth chip for site {site_id} year {year} in "
+            f"{cfg.paths['alphaearth']}"
+        )
+    return matches[0]
+
+
+def load_alphaearth(
+    cfg: Config,
+    site_id: str,
+    params: FeatureParams,
+    expected_shape: tuple[int, int] | None = None,
+) -> dict[str, np.ndarray]:
+    """Read a site's 64-band embedding as {ae_A00: array, ...}.
+
+    Static across time — one annual image applies to every month — so this is
+    loaded once per site alongside the temporal features and broadcast, exactly
+    as the per-pixel temporal features are.
+
+    The shape is asserted rather than resampled. The chips were downloaded onto
+    the Sentinel-2 grid deliberately, because interpolating a learned embedding
+    produces a vector corresponding to no real surface; silently resampling here
+    would throw that away.
+    """
+    path = alphaearth_path(cfg, site_id, params.alphaearth_year)
+    nodata = float(cfg["tiles"]["nodata"])
+
+    with rasterio.open(path) as dataset:
+        names = list(dataset.descriptions)
+        if not all(names) or len(names) != len(ALL_ALPHAEARTH_BANDS):
+            names = list(ALL_ALPHAEARTH_BANDS)
+        wanted = params.alphaearth_bands or ALL_ALPHAEARTH_BANDS
+
+        missing = [band for band in wanted if band not in names]
+        if missing:
+            raise KeyError(f"{path}: embedding bands not present: {missing}")
+
+        if expected_shape is not None and dataset.shape != expected_shape:
+            raise ValueError(
+                f"{path}: embedding shape {dataset.shape} does not match the tile "
+                f"{expected_shape}. The chips are meant to be grid-locked to the "
+                f"Sentinel-2 export; re-download rather than resampling."
+            )
+
+        features = {}
+        for band in wanted:
+            values = dataset.read(names.index(band) + 1).astype(np.float64)
+            features[f"{ALPHAEARTH_PREFIX}{band}"] = np.where(
+                np.isclose(values, nodata) | ~np.isfinite(values), np.nan, values
+            )
+
+    return features
+
+
 def assemble_features(
     tile: Tile,
     temporal_features: dict[str, np.ndarray],
     month_position: int,
     params: FeatureParams,
+    alphaearth: dict[str, np.ndarray] | None = None,
 ) -> dict[str, np.ndarray]:
     """Instantaneous features merged with this month's slice of the temporal ones.
 
@@ -181,6 +275,10 @@ def assemble_features(
             features[name] = values[month_position]
         else:
             raise ValueError(f"temporal feature {name!r} has unexpected shape {values.shape}")
+
+    # Embeddings are static: one annual image broadcasts across every month.
+    if alphaearth:
+        features.update(alphaearth)
 
     shapes = {values.shape for values in features.values()}
     if len(shapes) != 1:
@@ -237,6 +335,14 @@ def instantaneous_feature_names(params: FeatureParams) -> list[str]:
     if params.include_n_obs:
         names.append("n_obs")
     return names
+
+
+def alphaearth_feature_names(params: FeatureParams) -> list[str]:
+    """Names of the embedding columns this params object would produce."""
+    if not params.use_alphaearth:
+        return []
+    bands = params.alphaearth_bands or ALL_ALPHAEARTH_BANDS
+    return [f"{ALPHAEARTH_PREFIX}{band}" for band in bands]
 
 
 def feature_columns(table: pd.DataFrame) -> list[str]:

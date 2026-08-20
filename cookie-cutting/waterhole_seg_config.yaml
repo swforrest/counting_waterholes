@@ -16,6 +16,7 @@ paths:
   tiles_legacy: cookie-cutting/images_tif  # original 2024-only EPSG:4326 export
   chips_png: cookie-cutting/images         # pre-rendered 3-panel labelling PNGs
   labels: cookie-cutting/labels            # hand-painted masks (tracked in git)
+  alphaearth: cookie-cutting/AlphaEarth_tif  # annual 64-band embeddings, S2 grid
   derived: cookie-cutting/derived          # manifests, temporal caches, models
   predictions: cookie-cutting/predictions  # per-tile class + probability rasters
 
@@ -42,6 +43,35 @@ tiles:
 
   # Filename convention: <prefix>_S2_<site>_<lat>_<lon>_<YYYY-MM>.tif
   filename_prefix: 2024-06_mimal_test_S2
+
+
+# --- waterhole bounding boxes ---------------------------------------------
+# The labelme JSON that seeded the AOIs also carries each waterhole's rectangular
+# extent. The AOIs were built by buffering each box CENTRE by 750 m, so a 1.5 km
+# chip frequently catches neighbouring waterholes: 93 of 187 tiles contain more
+# than one, up to 5. Composition fractions over a whole tile therefore mix several
+# waterholes together. The box bounds each site to its own basin.
+#
+# Row order in the JSON IS the site id — verified against all 187 filenames with
+# zero mismatches.
+bounding_boxes:
+  labelme_json: cookie-cutting/2024-06_mimal_test_S2.json
+  reference_tif: cookie-cutting/2024-06_mimal_test_S2.tif
+  reference_png: cookie-cutting/2024-06_mimal_test_S2.png
+
+  # LabelMe stores corners in PNG pixel coordinates, which include the padding
+  # added when the mosaic was tiled for YOLO. These recover the offset.
+  tile_size: 416
+  stride: 104
+
+  # Added on EVERY side, so a 292 m box becomes 492 m across. Allows for the
+  # waterhole being larger in the wet season than when it was drawn.
+  #
+  # At 100 m the buffered box covers a median 10% of a tile (p10 4%, p90 40%) and
+  # 7 of 187 boxes overflow the tile and are clipped to it. Deliberately modest:
+  # the mask must leave enough savanna matrix for the footprint z-scores, the
+  # surrounding-vegetation pseudo-rule and the 9x9 context windows to work.
+  buffer_m: 100
 
 
 # --- class scheme ---------------------------------------------------------
@@ -124,6 +154,32 @@ features:
     # blind spot that makes MNDWI unreliable for these sites.
     - ndmi       # (NIR - SWIR1) / (NIR + SWIR1) — canopy/soil moisture
     - nd_rededge # (B8A - B5)    / (B8A + B5)
+
+  # Whether the per-pixel clear-observation count is a TRAINING feature.
+  #
+  # Off. n_obs describes the observing system, not the ground. Wet-season months
+  # have both fewer clear scenes and more water, so a classifier can learn "few
+  # observations therefore wet" rather than reading the surface — and that would
+  # transfer badly to a year with different cloud cover. Permutation importance
+  # ranked it 2nd of 121 features, which is what that shortcut looks like.
+  #
+  # n_obs is still used where it belongs: weighting temporal statistics, gating
+  # pseudo-labels, and filtering the labelling queue.
+  include_n_obs: false
+
+  # --- AlphaEarth annual embeddings ---------------------------------------
+  # 64 learned dimensions per pixel summarising a year of multi-sensor
+  # observation, downloaded onto exactly the Sentinel-2 grid so no resampling is
+  # needed — interpolating a learned embedding produces a vector that
+  # corresponds to no real surface, unlike interpolating reflectance.
+  #
+  # Static: one year (2025) applies to every month. Treat with caution — these
+  # add 64 columns against an effective sample size of 16 labelled SITES, so
+  # they will look strong in-fold and need the leave-one-site-out number to be
+  # believed.
+  use_alphaearth: false          # flip to true to include them
+  alphaearth_year: 2025
+  alphaearth_bands: all          # 'all', or a list like [A00, A17, A42]
 
   # Local context: mean and SD in square windows of these sizes.
   context_windows: [3, 9]
@@ -282,13 +338,17 @@ training:
   cv:
     # leave_one_site_out | group_kfold_by_site.
     #
-    # LOSO with 9 labelled sites: 5-fold would hold out ~2 sites at a time, and
-    # classes present at only 2 sites (open_water, turbid_water) would vanish
-    # from training entirely in some folds. LOSO is cheap at this scale and
-    # makes per-site failure legible. wh_train switches to group_kfold above
-    # max_sites_for_loso.
+    # LOSO gives one fold per site: per-site failure stays legible, and no class
+    # vanishes from training because two sites happened to land in one fold.
+    #
+    # max_sites_for_loso was 12 when there were 9 labelled sites. At 16 that
+    # silently switched to 5-fold GroupKFold, which balances folds by PIXEL count
+    # rather than site count and produced badly uneven folds — one fold was site
+    # 025 alone, another held six sites. Raised to 25: LOSO costs one fit per
+    # site, which is a few minutes at this scale and worth it for the per-site
+    # detail. Above 25 the k-fold fallback takes over.
     strategy: leave_one_site_out
-    max_sites_for_loso: 12
+    max_sites_for_loso: 25
     n_splits: 5
     # Temporal holdout reported alongside: train on these months, test on the rest.
     temporal_holdout_months: [8, 9, 10]

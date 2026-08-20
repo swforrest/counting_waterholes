@@ -93,6 +93,13 @@ def build_training_table(
         temporal = wh_temporal.temporal_feature_stack(stack, cfg)
         month_positions = {label: index for index, label in enumerate(stack.year_month)}
 
+        # Static across months, so read once per site rather than per label mask.
+        alphaearth = None
+        if params.use_alphaearth:
+            alphaearth = wh_features.load_alphaearth(
+                cfg, site_id, params, expected_shape=stack.shape
+            )
+
         for mask_path, source in wanted[site_id]:
             key = wh_naming.parse_stem(mask_path.stem.replace("_labels", ""))
             position = month_positions.get(key.year_month)
@@ -119,7 +126,9 @@ def build_training_table(
             if not selection.any():
                 continue
 
-            features = wh_features.assemble_features(tile, temporal, position, params)
+            features = wh_features.assemble_features(
+                tile, temporal, position, params, alphaearth=alphaearth
+            )
             tables.append(
                 wh_features.extract_pixels(
                     features, selection, site_id, key.year_month, mask, source
@@ -422,7 +431,10 @@ def feature_blocks(table: pd.DataFrame, params: FeatureParams) -> dict[str, list
     instantaneous = [
         name for name in wh_features.instantaneous_feature_names(params) if name in available
     ]
-    temporal = sorted(available - set(instantaneous))
+    embeddings = sorted(
+        name for name in available if name.startswith(wh_features.ALPHAEARTH_PREFIX)
+    )
+    temporal = sorted(available - set(instantaneous) - set(embeddings))
     groups = wh_temporal.split_feature_names(temporal)
 
     return {
@@ -430,6 +442,7 @@ def feature_blocks(table: pd.DataFrame, params: FeatureParams) -> dict[str, list
         "temporal_model_free": groups["model_free"],
         "temporal_trend": groups["trend"],
         "temporal_harmonic": groups["harmonic"],
+        "alphaearth": embeddings,
     }
 
 
@@ -442,12 +455,31 @@ def ablation_sets(blocks: dict[str, list[str]]) -> dict[str, list[str]]:
     else, the temporal machinery is not earning its keep.
     """
     everything = sum(blocks.values(), [])
-    return {
+    embeddings = blocks.get("alphaearth", [])
+    spectral = (
+        blocks["instantaneous"] + blocks["temporal_model_free"] + blocks["temporal_trend"]
+        + blocks["temporal_harmonic"]
+    )
+
+    # Every name here describes exactly the columns it contains. An earlier
+    # version quietly folded the embeddings into "instantaneous_only", which made
+    # a 92-column set look like a 28-column one and the comparison meaningless.
+    sets = {
         "all_features": everything,
-        "no_harmonic": blocks["instantaneous"] + blocks["temporal_model_free"] + blocks["temporal_trend"],
+        "spectral_only": spectral,
+        "no_harmonic": blocks["instantaneous"] + blocks["temporal_model_free"]
+                       + blocks["temporal_trend"],
         "model_free_temporal": blocks["instantaneous"] + blocks["temporal_model_free"],
         "instantaneous_only": blocks["instantaneous"],
     }
+
+    if embeddings:
+        # What the embeddings add on top of the spectral features, and how far
+        # they get without them.
+        sets["embeddings_only"] = embeddings
+        sets["instantaneous_plus_embeddings"] = blocks["instantaneous"] + embeddings
+
+    return sets
 
 
 def run_ablation(
@@ -697,6 +729,91 @@ def labelled_tiles(cfg: Config, include_pseudo: bool = False) -> pd.DataFrame:
                 "mask_path": meta["label_mask"],
             })
     return pd.DataFrame(rows)
+
+
+# --- feature importance ----------------------------------------------------
+
+
+def permutation_importance_by_site(
+    table: pd.DataFrame,
+    cfg: Config,
+    model_name: str = "logistic_regression",
+    feature_names: list[str] | None = None,
+    n_repeats: int = 5,
+    verbose: bool = True,
+) -> pd.DataFrame:
+    """Permutation importance measured on each held-out site, then pooled.
+
+    Importance is computed on the site the model has NOT seen, so it ranks
+    features by how much they help generalise to a new waterhole — which is the
+    question — rather than how much they help fit the sites already labelled.
+
+    The across-fold spread matters as much as the mean: a feature that looks
+    essential in one fold and useless in the rest is not a finding, and averaging
+    alone would hide that. `std_across_folds` and `n_folds_positive` are reported
+    for exactly that reason.
+
+    Columns are named for FOLDS, not sites, because they are only the same thing
+    under leave-one-site-out. Above `max_sites_for_loso` the splitter falls back
+    to k-fold and a fold holds several sites.
+    """
+    from sklearn.inspection import permutation_importance
+
+    features = feature_names or wh_features.feature_columns(table)
+    values = table[features].to_numpy(dtype=np.float64)
+    target = table["class_id"].to_numpy()
+
+    per_fold = []
+    for train_index, test_index, held_out in site_splits(table, cfg):
+        if np.unique(target[train_index]).size < 2 or len(test_index) < 20:
+            continue
+
+        model = make_model(model_name, cfg)
+        model.fit(values[train_index], target[train_index])
+
+        result = permutation_importance(
+            model, values[test_index], target[test_index],
+            scoring="f1_macro", n_repeats=n_repeats,
+            random_state=int(cfg["training"].get("random_state", 42)),
+            n_jobs=-1,
+        )
+        per_fold.append(pd.Series(result.importances_mean, index=features, name=held_out))
+
+        if verbose:
+            top = per_fold[-1].nlargest(3)
+            print(f"  held out {held_out}: top {', '.join(f'{k} {v:.3f}' for k, v in top.items())}")
+
+    if not per_fold:
+        raise ValueError("no usable folds for permutation importance")
+
+    folds = pd.concat(per_fold, axis=1)
+    return pd.DataFrame({
+        "mean_importance": folds.mean(axis=1),
+        "std_across_folds": folds.std(axis=1),
+        "n_folds_positive": (folds > 0).sum(axis=1),
+        "n_folds": folds.shape[1],
+    }).sort_values("mean_importance", ascending=False)
+
+
+def band_importance(importance: pd.DataFrame) -> pd.DataFrame:
+    """Restrict an importance table to the AlphaEarth bands, named A00..A63."""
+    embeddings = importance[
+        importance.index.str.startswith(wh_features.ALPHAEARTH_PREFIX)
+    ].copy()
+    embeddings.index = embeddings.index.str.removeprefix(wh_features.ALPHAEARTH_PREFIX)
+    return embeddings
+
+
+def select_top_bands(importance: pd.DataFrame, n: int = 10) -> list[str]:
+    """The n best-ranked embedding bands.
+
+    A caution that belongs with the result rather than after it: choosing bands
+    on the same folds that then report the score is circular, and the reported
+    score will be optimistic. To quote a number for a selected subset, either
+    nest the selection inside each fold or re-score on sites held out of the
+    selection entirely.
+    """
+    return band_importance(importance).head(n).index.tolist()
 
 
 # --- persistence -----------------------------------------------------------

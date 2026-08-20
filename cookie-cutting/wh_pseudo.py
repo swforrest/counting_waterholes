@@ -122,13 +122,20 @@ def surrounding_vegetation_mask(
     tile: wh_tiles.Tile,
     footprint: np.ndarray | None,
     params: PseudoParams,
+    neighbour_mask: np.ndarray | None = None,
 ) -> tuple[np.ndarray, str]:
-    """Savanna matrix: greener than most of the tile, well away from the basin.
+    """Savanna matrix: greener than most of the tile, well away from any basin.
 
     Returns (mask, reason). Without a footprint there is no defensible way to say
     "outside the basin", so nothing is generated and the reason says why — a
     guess here would put basin pixels into the majority class and quietly teach
     the classifier the opposite of what we want.
+
+    `neighbour_mask` is the union of OTHER waterholes' extents in the same tile,
+    from wh_bbox. 93 of 187 tiles contain a second waterhole, and the footprint
+    only covers this site's basin — so without this, a neighbouring waterhole
+    would be claimed as savanna matrix, which is precisely the mistake the class
+    exists to avoid.
 
     The NDVI cut is a percentile of the tile's own distribution rather than a
     fixed value, because dry-season savanna NDVI runs ~0.30-0.45 and any fixed
@@ -159,6 +166,14 @@ def surrounding_vegetation_mask(
     )
 
     mask = far_from_basin & observed & (ndvi > cutoff) & _enough_observations(tile, params)
+
+    if neighbour_mask is not None:
+        if neighbour_mask.shape != tile.shape:
+            raise ValueError(
+                f"neighbour mask {neighbour_mask.shape} does not match tile {tile.shape}"
+            )
+        mask &= ~neighbour_mask
+
     return np.nan_to_num(mask, nan=False).astype(bool), ""
 
 
@@ -200,6 +215,7 @@ def evaluate_tile(
     params: PseudoParams,
     footprint: np.ndarray | None,
     rng: np.random.Generator | None = None,
+    neighbours: np.ndarray | None = None,
 ) -> dict[str, object]:
     """Count what would be generated for one tile, without writing anything.
 
@@ -215,7 +231,9 @@ def evaluate_tile(
     water = _subsample(
         open_water_mask(tile, params), params.max_pixels_per_class_per_tile, rng
     )
-    vegetation, reason = surrounding_vegetation_mask(tile, footprint, params)
+    vegetation, reason = surrounding_vegetation_mask(
+        tile, footprint, params, neighbour_mask=neighbours
+    )
     vegetation = _subsample(vegetation, params.max_pixels_per_class_per_tile, rng)
     vegetation &= ~water
 
@@ -240,6 +258,7 @@ def survey(
     """Yield table across many tiles, without writing. See evaluate_tile."""
     selected = _select(manifest, sites, months)
     footprints = _load_footprints(selected["site_id"].unique(), cfg)
+    neighbours = _load_neighbour_masks(selected["site_id"].unique(), manifest, cfg)
     rng = np.random.default_rng(params.random_state)
 
     records = []
@@ -252,7 +271,8 @@ def survey(
         for _, row in group.iterrows():
             try:
                 records.append(
-                    evaluate_tile(row["tif_path"], cfg, params, footprints.get(site_id), rng)
+                    evaluate_tile(row["tif_path"], cfg, params, footprints.get(site_id),
+                                  rng, neighbours.get(site_id))
                 )
             except OSError as error:
                 print(f"  skipped {row['tif_path']}: {str(error).splitlines()[0]}")
@@ -281,6 +301,7 @@ def generate(
 
     selected = _select(manifest, sites, months)
     footprints = _load_footprints(selected["site_id"].unique(), cfg)
+    neighbours = _load_neighbour_masks(selected["site_id"].unique(), manifest, cfg)
     rng = np.random.default_rng(params.random_state)
 
     records = []
@@ -296,7 +317,8 @@ def generate(
             open_water_mask(tile, params), params.max_pixels_per_class_per_tile, rng
         )
         vegetation, reason = surrounding_vegetation_mask(
-            tile, footprints.get(row["site_id"]), params
+            tile, footprints.get(row["site_id"]), params,
+            neighbour_mask=neighbours.get(row["site_id"]),
         )
         vegetation = _subsample(vegetation, params.max_pixels_per_class_per_tile, rng)
 
@@ -433,6 +455,37 @@ def _load_footprints(site_ids, cfg: Config) -> dict[str, np.ndarray]:
         except FileNotFoundError:
             continue
     return footprints
+
+
+def _load_neighbour_masks(
+    site_ids, manifest: pd.DataFrame, cfg: Config
+) -> dict[str, np.ndarray]:
+    """Per-site union of the OTHER waterholes' extents in that site's tile.
+
+    Built once per site — every month of a site shares one grid. Returns an empty
+    mapping when the box table has not been built, so pseudo-labelling still runs
+    (just without neighbour exclusion) rather than failing.
+    """
+    import wh_bbox
+
+    try:
+        boxes = wh_bbox.load_boxes(cfg)
+    except FileNotFoundError:
+        print("  no bounding-box table; neighbouring waterholes will not be excluded")
+        return {}
+
+    params = wh_bbox.BoxParams.from_config(cfg)
+    masks = {}
+    for site_id in site_ids:
+        rows = manifest[manifest["site_id"] == site_id]
+        if rows.empty:
+            continue
+        try:
+            tile = wh_tiles.read_tile(rows.iloc[0]["tif_path"], cfg)
+        except OSError:
+            continue
+        masks[site_id] = wh_bbox.neighbour_mask(site_id, tile, boxes, params)
+    return masks
 
 
 def _write_sidecar(
