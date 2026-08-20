@@ -246,6 +246,88 @@ def load_alphaearth(
     return features
 
 
+def alphaearth_composite(
+    alphaearth: dict[str, np.ndarray],
+    bands: tuple[str, str, str] = ("A60", "A24", "A63"),
+    mode: str = "bands",
+    percentiles: tuple[float, float] = (2.0, 98.0),
+) -> np.ndarray:
+    """Render the 64-band embedding as one false-colour image, (H, W, 3) in [0, 1].
+
+    Two modes:
+
+      "bands" — three named bands to R, G, B. Defaults to the three that ranked
+        highest on permutation importance. Directly interpretable: a colour
+        difference is a difference in those three specific dimensions.
+
+      "pca"  — the first three principal components of all 64 bands. Uses more of
+        the information, at the cost of axes that mean nothing in themselves.
+
+    Each channel is percentile-stretched independently, so colours are comparable
+    within a tile but not between tiles. That matters less than it sounds here:
+    the embedding is annual and static, so a site's composite is identical in
+    every month, and stepping through time in the labeller will not make it
+    flicker.
+    """
+    if mode not in ("bands", "pca"):
+        raise ValueError(f"mode must be 'bands' or 'pca', got {mode!r}")
+
+    if mode == "bands":
+        missing = [b for b in bands if f"{ALPHAEARTH_PREFIX}{b}" not in alphaearth]
+        if missing:
+            raise KeyError(
+                f"embedding bands {missing} not loaded; available "
+                f"{sorted(alphaearth)[:4]}..."
+            )
+        channels = [alphaearth[f"{ALPHAEARTH_PREFIX}{b}"] for b in bands]
+    else:
+        channels = _embedding_principal_components(alphaearth)
+
+    stretched = [_stretch(channel, percentiles) for channel in channels]
+    return np.dstack(stretched)
+
+
+def _embedding_principal_components(
+    alphaearth: dict[str, np.ndarray], n_components: int = 3
+) -> list[np.ndarray]:
+    """First n principal components of the embedding stack, as 2-D arrays.
+
+    Fitted on this tile alone, so the components are not comparable between
+    sites — good for looking at one waterhole, not for stacking.
+    """
+    from sklearn.decomposition import PCA
+
+    names = sorted(alphaearth)
+    stack = np.stack([alphaearth[name] for name in names], axis=-1)
+    height, width, n_bands = stack.shape
+
+    flat = stack.reshape(-1, n_bands)
+    observed = np.isfinite(flat).all(axis=1)
+    if observed.sum() < n_components:
+        raise ValueError("too few observed pixels to fit a PCA on this tile")
+
+    components = PCA(n_components=n_components).fit_transform(flat[observed])
+
+    out = []
+    for index in range(n_components):
+        channel = np.full(flat.shape[0], np.nan)
+        channel[observed] = components[:, index]
+        out.append(channel.reshape(height, width))
+    return out
+
+
+def _stretch(values: np.ndarray, percentiles: tuple[float, float]) -> np.ndarray:
+    """Scale to [0, 1] between two percentiles; NaN stays NaN."""
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return np.zeros_like(values)
+
+    low, high = np.percentile(finite, percentiles)
+    if high <= low:
+        return np.where(np.isfinite(values), 0.5, np.nan)
+    return np.clip((values - low) / (high - low), 0.0, 1.0)
+
+
 def assemble_features(
     tile: Tile,
     temporal_features: dict[str, np.ndarray],

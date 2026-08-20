@@ -135,8 +135,32 @@ PARAMS = wh_features.FeatureParams(
 def test_instantaneous_features_cover_every_requested_input():
     features = wh_features.instantaneous_features(_FakeTile(), PARAMS)
     for expected in ("refl_B3", "refl_B4", "refl_B8", "mndwi", "ndvi",
-                     "mndwi_mean3", "mndwi_sd3", "n_obs"):
+                     "mndwi_mean3", "mndwi_sd3"):
         assert expected in features, expected
+
+
+def test_n_obs_is_excluded_by_default():
+    """n_obs describes the observing system, not the ground; off unless asked for.
+
+    Wet months have both fewer clear scenes and more water, so including it lets
+    a classifier learn "few observations therefore wet" instead of reading the
+    surface.
+    """
+    assert not wh_features.FeatureParams().include_n_obs
+    features = wh_features.instantaneous_features(_FakeTile(), PARAMS)
+    assert "n_obs" not in features
+    assert "n_obs" not in wh_features.instantaneous_feature_names(PARAMS)
+
+
+def test_n_obs_is_included_when_explicitly_asked_for():
+    params = wh_features.FeatureParams(
+        reflectance_bands=("B3",), indices=("mndwi",),
+        context_windows=(3,), context_indices=("mndwi",),
+        temporal_indices=("mndwi",), include_n_obs=True,
+    )
+    features = wh_features.instantaneous_features(_FakeTile(), params)
+    assert "n_obs" in features
+    assert "n_obs" in wh_features.instantaneous_feature_names(params)
 
 
 def test_missing_band_raises():
@@ -198,3 +222,64 @@ def test_feature_columns_excludes_identifiers():
         "class_id": [3], "source": ["manual"], "mndwi": [0.1], "ndvi": [0.5],
     })
     assert sorted(wh_features.feature_columns(table)) == ["mndwi", "ndvi"]
+
+
+# --- AlphaEarth composite -------------------------------------------------
+
+
+def _fake_embedding(shape=(8, 8), n_bands=64):
+    rng = np.random.default_rng(3)
+    return {
+        f"{wh_features.ALPHAEARTH_PREFIX}A{i:02d}": rng.normal(0, 0.1, size=shape)
+        for i in range(n_bands)
+    }
+
+
+def test_band_composite_is_three_channels_in_unit_range():
+    image = wh_features.alphaearth_composite(_fake_embedding())
+    assert image.shape == (8, 8, 3)
+    assert np.nanmin(image) >= 0.0 and np.nanmax(image) <= 1.0
+
+
+def test_band_composite_uses_the_bands_it_was_given():
+    embedding = _fake_embedding()
+    a = wh_features.alphaearth_composite(embedding, bands=("A00", "A01", "A02"))
+    b = wh_features.alphaearth_composite(embedding, bands=("A10", "A11", "A12"))
+    assert not np.allclose(a, b)
+
+
+def test_band_order_maps_to_rgb():
+    embedding = _fake_embedding()
+    forward = wh_features.alphaearth_composite(embedding, bands=("A00", "A01", "A02"))
+    reversed_ = wh_features.alphaearth_composite(embedding, bands=("A02", "A01", "A00"))
+    assert np.allclose(forward[..., 0], reversed_[..., 2])
+
+
+def test_pca_composite_is_three_channels():
+    image = wh_features.alphaearth_composite(_fake_embedding(), mode="pca")
+    assert image.shape == (8, 8, 3)
+    assert np.nanmin(image) >= 0.0 and np.nanmax(image) <= 1.0
+
+
+def test_unknown_band_raises():
+    with pytest.raises(KeyError, match="not loaded"):
+        wh_features.alphaearth_composite(_fake_embedding(), bands=("A00", "ZZZ", "A02"))
+
+
+def test_unknown_mode_raises():
+    with pytest.raises(ValueError, match="bands.*pca"):
+        wh_features.alphaearth_composite(_fake_embedding(), mode="umap")
+
+
+def test_composite_is_deterministic():
+    embedding = _fake_embedding()
+    assert np.array_equal(
+        wh_features.alphaearth_composite(embedding),
+        wh_features.alphaearth_composite(embedding),
+    )
+
+
+def test_stretch_handles_a_constant_channel():
+    """A band with no variation must not divide by zero."""
+    flat = np.full((5, 5), 0.3)
+    assert np.allclose(wh_features._stretch(flat, (2.0, 98.0)), 0.5)

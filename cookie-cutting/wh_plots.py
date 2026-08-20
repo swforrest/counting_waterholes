@@ -674,7 +674,7 @@ def plot_band_importance(
         for row in bands.itertuples()
     ]
     axis.barh(
-        positions, bands["mean_importance"], xerr=bands["std_across_sites"],
+        positions, bands["mean_importance"], xerr=bands["std_across_folds"],
         color=colours, error_kw={"ecolor": "#666666", "elinewidth": 0.8},
     )
 
@@ -721,6 +721,7 @@ def plot_prediction_map(
     confidence: np.ndarray | None = None,
     footprint: np.ndarray | None = None,
     held_out: bool = True,
+    alphaearth: np.ndarray | None = None,
     figsize: tuple[float, float] = (17, 4.3),
 ):
     """Where the model is right and wrong, spatially.
@@ -733,11 +734,16 @@ def plot_prediction_map(
     this says *where* — a basin margin, a shadowed edge, one corner of the tile —
     which is what tells you whether it is a model problem or a label problem.
     """
-    panels = ["rgb", "predicted"]
+    panels = ["rgb"]
+    if alphaearth is not None:
+        panels.append("alphaearth")
+    panels.append("predicted")
     if manual_mask is not None:
         panels += ["manual", "agreement"]
     if confidence is not None:
         panels.append("confidence")
+
+    figsize = (max(figsize[0], 3.4 * len(panels)), figsize[1])
 
     figure, axes = plt.subplots(1, len(panels), figsize=figsize, constrained_layout=True)
     axes = np.atleast_1d(axes)
@@ -747,6 +753,12 @@ def plot_prediction_map(
         if panel == "rgb":
             axis.imshow(rgb_composite(tile))
             axis.set_title("RGB", fontsize=9)
+
+        elif panel == "alphaearth":
+            # Static per site, so this panel is the same in every month — it is
+            # structural context, not a reading of this month's surface.
+            axis.imshow(alphaearth, interpolation="nearest")
+            axis.set_title("AlphaEarth", fontsize=9)
 
         elif panel == "predicted":
             axis.imshow(rgb_composite(tile))

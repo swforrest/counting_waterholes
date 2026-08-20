@@ -40,6 +40,7 @@ import wh_tiles
 from wh_config import Config
 
 RGB_PANEL = "rgb"
+ALPHAEARTH_PANEL = "alphaearth"
 
 # Matplotlib binds a lot of single letters by default, and almost every one of
 # them collides with a labelling key: 'p' toggles pan, 's' and 'ctrl+s' open the
@@ -90,7 +91,19 @@ class LabelParams:
     and prediction have to agree with it.
     """
 
-    panels: tuple[str, ...] = (RGB_PANEL, "mndwi", "ndvi", "ndti", "ndmi")
+    panels: tuple[str, ...] = (
+        RGB_PANEL, ALPHAEARTH_PANEL, "mndwi", "ndvi", "ndti", "ndmi",
+    )
+    # Panels are laid out on a grid rather than one long row: with six panels a
+    # single row leaves each one too small to paint into on a normal screen.
+    panel_rows: int = 2
+
+    # Which embedding dimensions the AlphaEarth panel shows.
+    #   "bands" -> the three named below, straight to R, G, B
+    #   "pca"   -> the first three principal components of all 64
+    alphaearth_mode: str = "bands"
+    alphaearth_bands: tuple[str, str, str] = ("A60", "A24", "A63")
+    alphaearth_year: int = 2025
     rgb_bands: tuple[str, str, str] = ("B4", "B3", "B2")
     rgb_max_reflectance: float = 0.30
     rgb_gamma: float = 0.85
@@ -218,6 +231,8 @@ class Labeller:
 
         self.tile = None
         self.index_cache: dict[str, np.ndarray] = {}
+        self._alphaearth = None
+        self._alphaearth_site = None
         self._painting = False
 
         self._set_current_from_queue()
@@ -323,8 +338,16 @@ class Labeller:
 
         self.index_cache = {}
         for panel in self.params.panels:
-            if panel != RGB_PANEL:
+            if panel not in (RGB_PANEL, ALPHAEARTH_PANEL):
                 self.index_cache[panel] = wh_indices.compute(panel, self.tile.bands)
+
+        # Static per site, so only reloaded when the site changes — stepping
+        # through months leaves it untouched.
+        if ALPHAEARTH_PANEL in self.params.panels:
+            site = self.current["site_id"]
+            if self._alphaearth_site != site:
+                self._alphaearth = self._load_alphaearth(site)
+                self._alphaearth_site = site
 
         message = ""
         if self.key not in self.buffers:
@@ -338,6 +361,25 @@ class Labeller:
         if message:
             self._set_status(message)
 
+    def _load_alphaearth(self, site_id: str):
+        """The site's embedding composite, or None if it has not been downloaded."""
+        import wh_features
+
+        params = wh_features.FeatureParams(
+            use_alphaearth=True, alphaearth_year=self.params.alphaearth_year
+        )
+        try:
+            bands = wh_features.load_alphaearth(
+                self.cfg, site_id, params, expected_shape=self.tile.shape
+            )
+        except (FileNotFoundError, ValueError) as error:
+            print(f"  no AlphaEarth panel for site {site_id}: {error}")
+            return None
+
+        return wh_features.alphaearth_composite(
+            bands, bands=self.params.alphaearth_bands, mode=self.params.alphaearth_mode
+        )
+
     def _load_existing_mask(self) -> tuple[np.ndarray, str]:
         """Reopen an existing mask for editing, so sessions are resumable."""
         path = wh_tiles.label_path_for(self.row["tif_path"], self.cfg)
@@ -350,13 +392,23 @@ class Labeller:
 
     def _build_figure(self) -> None:
         n_panels = len(self.params.panels)
-        self.figure, self.axes = plt.subplots(
-            1, n_panels, figsize=(3.4 * n_panels, 4.4), constrained_layout=True
-        )
-        if n_panels == 1:
-            self.axes = np.array([self.axes])
+        rows = max(1, min(self.params.panel_rows, n_panels))
+        columns = int(np.ceil(n_panels / rows))
 
-        # Shared axes keep pan and zoom locked across every panel.
+        self.figure, grid = plt.subplots(
+            rows, columns,
+            figsize=(3.6 * columns, 3.8 * rows),
+            constrained_layout=True,
+        )
+        grid = np.atleast_1d(grid).ravel()
+
+        # Spare cells when the panels do not fill the grid exactly.
+        for spare in grid[n_panels:]:
+            spare.set_axis_off()
+        self.axes = grid[:n_panels]
+
+        # Shared axes keep pan and zoom locked across every panel, including
+        # across rows.
         for axis in self.axes[1:]:
             axis.sharex(self.axes[0])
             axis.sharey(self.axes[0])
@@ -397,6 +449,19 @@ class Labeller:
             if panel == RGB_PANEL:
                 base = axis.imshow(self._rgb(), interpolation="nearest")
                 axis.set_title("RGB", fontsize=9)
+            elif panel == ALPHAEARTH_PANEL:
+                if self._alphaearth is None:
+                    base = axis.imshow(
+                        np.zeros(self.tile.shape), cmap="gray", interpolation="nearest"
+                    )
+                    axis.set_title("AlphaEarth (not downloaded)", fontsize=9)
+                else:
+                    base = axis.imshow(self._alphaearth, interpolation="nearest")
+                    label = (
+                        "PCA 1-3" if self.params.alphaearth_mode == "pca"
+                        else "/".join(self.params.alphaearth_bands)
+                    )
+                    axis.set_title(f"AlphaEarth {label}", fontsize=9)
             else:
                 data = self.index_cache[panel]
                 low, high = self.params.display_ranges.get(panel, (-1.0, 1.0))

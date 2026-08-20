@@ -603,6 +603,7 @@ def predict_tile(
     month_position: int,
     params: FeatureParams,
     with_confidence: bool = True,
+    alphaearth: dict[str, np.ndarray] | None = None,
 ) -> tuple[np.ndarray, np.ndarray | None]:
     """Classify every observed pixel of one tile.
 
@@ -610,13 +611,21 @@ def predict_tile(
     are left as 0 rather than guessed at, so a gap never appears as a confident
     surface class.
     """
-    features = wh_features.assemble_features(tile, temporal_features, month_position, params)
+    features = wh_features.assemble_features(
+        tile, temporal_features, month_position, params, alphaearth=alphaearth
+    )
 
     missing = [name for name in feature_names if name not in features]
     if missing:
         raise KeyError(
             f"the model needs {len(missing)} feature(s) the tile does not provide, "
-            f"e.g. {missing[:5]}. Was the model trained under a different config?"
+            f"e.g. {missing[:5]}. "
+            + (
+                "The model was trained with AlphaEarth embeddings but "
+                "params.use_alphaearth is False here — set it True."
+                if any(n.startswith(wh_features.ALPHAEARTH_PREFIX) for n in missing)
+                else "Was the model trained under a different config?"
+            )
         )
 
     stacked = np.stack([features[name] for name in feature_names], axis=-1)
@@ -662,6 +671,15 @@ class SitePredictor:
         )
         self.temporal = wh_temporal.temporal_feature_stack(self.stack, cfg)
 
+        # Static across months, so loaded once with the rest of the site. Without
+        # this a model trained with embeddings cannot predict anything, because
+        # the tile would be missing 64 of its features.
+        self.alphaearth = None
+        if params.use_alphaearth:
+            self.alphaearth = wh_features.load_alphaearth(
+                cfg, site_id, params, expected_shape=self.stack.shape
+            )
+
     @property
     def months(self) -> list[str]:
         return list(self.stack.year_month)
@@ -688,7 +706,7 @@ class SitePredictor:
         tile, position = self.tile(year_month)
         predicted, confidence = predict_tile(
             model, feature_names, tile, self.temporal, position, self.params,
-            with_confidence=with_confidence,
+            with_confidence=with_confidence, alphaearth=self.alphaearth,
         )
         return tile, predicted, confidence
 
