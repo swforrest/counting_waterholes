@@ -387,20 +387,24 @@ def extract_pixels(
     if rows.size == 0:
         return pd.DataFrame(columns=list(ID_COLUMNS) + sorted(features))
 
-    table = pd.DataFrame({
+    # Every column is assembled first and the frame built once. Adding them one
+    # at a time is an insert per feature per tile — with ~120 features over
+    # hundreds of labelled tiles that fragments the frame badly enough for pandas
+    # to warn about it, thousands of times.
+    columns: dict[str, object] = {
         "site_id": site_id,
         "year_month": year_month,
         "row": rows,
         "col": cols,
         "source": source,
-    })
+    }
     if class_ids is not None:
-        table["class_id"] = class_ids[rows, cols].astype(np.int16)
+        columns["class_id"] = class_ids[rows, cols].astype(np.int16)
 
     for name in sorted(features):
-        table[name] = features[name][rows, cols]
+        columns[name] = features[name][rows, cols]
 
-    return table
+    return pd.DataFrame(columns)
 
 
 def instantaneous_feature_names(params: FeatureParams) -> list[str]:

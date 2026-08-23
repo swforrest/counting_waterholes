@@ -52,6 +52,61 @@ from wh_features import FeatureParams
 MIN_GROUPS = 3
 
 
+@dataclass
+class TrainParams:
+    """Everything tunable about a training run.
+
+    Held here, and constructed explicitly in model_training.ipynb, for the same
+    reason FeatureParams / FootprintParams / LabelParams are: the values you
+    actually reach for while working should be visible beside the thing they
+    affect, not in a YAML file two directories away.
+
+    waterhole_seg_config.yaml keeps only what has to AGREE across the whole
+    pipeline — the class scheme and the paths — because a model trained under one
+    class scheme and applied under another produces confident nonsense.
+    """
+
+    # "leave_one_site_out" — one fold per site; most informative, and the only
+    #   setting under which the per-site table has one row per waterhole. Costs
+    #   one model fit per site.
+    # "group_kfold_by_site" — n_splits folds however many sites there are. Fast,
+    #   but folds are balanced by PIXEL count, so one can hold a single large site
+    #   and another several small ones.
+    cv_strategy: str = "group_kfold_by_site"
+    n_splits: int = 5
+
+    # Guard on the DEFAULT only: if cv_strategy is leave_one_site_out and there
+    # are more sites than this, fall back to k-fold and say so. An explicitly
+    # passed strategy is always honoured.
+    max_sites_for_loso: int = 15
+
+    # Reported alongside the grouped CV and optimistically biased: a held-out
+    # month's temporal features were computed from that pixel's whole history,
+    # training months included.
+    temporal_holdout_months: tuple[int, ...] = (8, 9, 10)
+
+    # Surrounding vegetation and dry bare ground vastly outnumber the rest.
+    class_weight: str = "balanced"
+
+    models: tuple[str, ...] = (
+        "logistic_regression", "random_forest", "gradient_boosting",
+    )
+    include_pseudo_labels: bool = False
+    random_state: int = 42
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "cv_strategy": self.cv_strategy,
+            "n_splits": self.n_splits,
+            "max_sites_for_loso": self.max_sites_for_loso,
+            "temporal_holdout_months": list(self.temporal_holdout_months),
+            "class_weight": self.class_weight,
+            "models": list(self.models),
+            "include_pseudo_labels": self.include_pseudo_labels,
+            "random_state": self.random_state,
+        }
+
+
 # --- training table --------------------------------------------------------
 
 
@@ -166,7 +221,7 @@ def load_table(cfg: Config, name: str = "training_table.csv") -> pd.DataFrame:
 
 def site_splits(
     table: pd.DataFrame,
-    cfg: Config | None = None,
+    train_params: "TrainParams | None" = None,
     strategy: str | None = None,
     n_splits: int | None = None,
 ) -> Iterator[tuple[np.ndarray, np.ndarray, str]]:
@@ -186,11 +241,28 @@ def site_splits(
             f"one or two sites measures memorisation, not generalisation."
         )
 
-    settings = (cfg["training"]["cv"] if cfg else {}) or {}
-    strategy = strategy or settings.get("strategy", "leave_one_site_out")
-    max_for_loso = int(settings.get("max_sites_for_loso", 12))
+    train_params = train_params or TrainParams()
+    max_for_loso = train_params.max_sites_for_loso
 
-    if strategy == "leave_one_site_out" and unique.size > max_for_loso:
+    # An explicit strategy is honoured as given. The size cap exists to stop the
+    # CONFIG DEFAULT quietly costing one fit per site as labelling grows, not to
+    # overrule a caller who asked for something.
+    explicit = strategy is not None
+    strategy = strategy or train_params.cv_strategy
+
+    if (
+        not explicit
+        and strategy == "leave_one_site_out"
+        and unique.size > max_for_loso
+    ):
+        # Announced, not silent. This fallback has quietly changed the meaning of
+        # reported scores before: k-fold balances folds by PIXEL count, so one
+        # fold can hold a single big site and another six small ones.
+        print(
+            f"  {unique.size} sites exceeds max_sites_for_loso={max_for_loso}; "
+            f"using group_kfold_by_site instead of leave_one_site_out "
+            f"(pass strategy='leave_one_site_out' to force it)"
+        )
         strategy = "group_kfold_by_site"
 
     indices = np.arange(len(table))
@@ -200,7 +272,7 @@ def site_splits(
         for train_index, test_index in splitter.split(indices, groups=groups):
             yield train_index, test_index, str(groups[test_index][0])
     elif strategy == "group_kfold_by_site":
-        folds = min(int(n_splits or settings.get("n_splits", 5)), unique.size)
+        folds = min(int(n_splits or train_params.n_splits), unique.size)
         splitter = GroupKFold(n_splits=folds)
         for fold, (train_index, test_index) in enumerate(
             splitter.split(indices, groups=groups)
@@ -237,15 +309,16 @@ def temporal_holdout_split(
 # --- models ----------------------------------------------------------------
 
 
-def make_model(name: str, cfg: Config) -> Pipeline:
+def make_model(name: str, train_params: "TrainParams | None" = None) -> Pipeline:
     """One of the three baselines, in increasing order of capacity.
 
     Logistic regression is a diagnostic, not a contender: if it does badly while
     the trees do well, the classes are not linearly separable in this feature
     space, which is worth knowing before adding more features.
     """
-    seed = int(cfg["training"].get("random_state", 42))
-    weight = cfg["training"].get("class_weight", "balanced")
+    train_params = train_params or TrainParams()
+    seed = train_params.random_state
+    weight = train_params.class_weight
 
     if name == "logistic_regression":
         return Pipeline([
@@ -379,8 +452,15 @@ def cross_validate(
     feature_names: list[str] | None = None,
     strategy: str | None = None,
     verbose: bool = True,
+    n_splits: int | None = None,
+    train_params: "TrainParams | None" = None,
 ) -> Evaluation:
-    """Grouped cross-validation. Every fold holds out whole sites."""
+    """Grouped cross-validation. Every fold holds out whole sites.
+
+    `strategy` overrides the config: "leave_one_site_out" for one fold per site
+    (most informative, one fit per site) or "group_kfold_by_site" for a fixed
+    number of folds (much faster once there are many sites).
+    """
     features = feature_names or wh_features.feature_columns(table)
     values = table[features].to_numpy(dtype=np.float64)
     target = table["class_id"].to_numpy()
@@ -389,12 +469,18 @@ def cross_validate(
     truth_parts, predicted_parts, site_parts = [], [], []
     n_train = 0
 
-    for train_index, test_index, held_out in site_splits(table, cfg, strategy):
+    train_params = train_params or TrainParams()
+    splits = list(site_splits(table, train_params, strategy, n_splits))
+    if verbose:
+        print(f"  {model_name}: {len(splits)} fold(s) over "
+              f"{table['site_id'].nunique()} sites, {len(features)} features")
+
+    for train_index, test_index, held_out in splits:
         if np.unique(target[train_index]).size < 2:
             print(f"  {held_out}: only one class in training, fold skipped")
             continue
 
-        model = make_model(model_name, cfg)
+        model = make_model(model_name, train_params)
         model.fit(values[train_index], target[train_index])
         predicted = model.predict(values[test_index])
 
@@ -416,7 +502,7 @@ def cross_validate(
     evaluation = evaluate_predictions(
         np.concatenate(truth_parts), np.concatenate(predicted_parts),
         np.concatenate(site_parts), cfg, model_name,
-        strategy or cfg["training"]["cv"]["strategy"],
+        strategy or train_params.cv_strategy,
     )
     evaluation.n_train = n_train
     return evaluation
@@ -488,6 +574,9 @@ def run_ablation(
     params: FeatureParams,
     model_name: str = "gradient_boosting",
     verbose: bool = False,
+    strategy: str | None = None,
+    n_splits: int | None = None,
+    train_params: "TrainParams | None" = None,
 ) -> pd.DataFrame:
     """Cross-validate each feature set and compare. Returns a tidy table.
 
@@ -527,7 +616,10 @@ def run_ablation(
             continue
 
         scored[signature] = label
-        evaluation = cross_validate(table, cfg, model_name, features, verbose=verbose)
+        evaluation = cross_validate(
+            table, cfg, model_name, features, strategy=strategy,
+            verbose=verbose, n_splits=n_splits, train_params=train_params,
+        )
         rows.append({
             "feature_set": label,
             "n_features": len(features),
@@ -572,6 +664,7 @@ def fit_without_site(
     model_name: str,
     held_out_site: str,
     feature_names: list[str] | None = None,
+    train_params: "TrainParams | None" = None,
 ):
     """Fit on every site except one, so that site can be predicted honestly.
 
@@ -590,7 +683,7 @@ def fit_without_site(
             f"{held_out_site}; the fit would be meaningless"
         )
 
-    model = make_model(model_name, cfg)
+    model = make_model(model_name, train_params)
     model.fit(training[features].to_numpy(dtype=np.float64), training["class_id"].to_numpy())
     return model
 
@@ -759,6 +852,9 @@ def permutation_importance_by_site(
     feature_names: list[str] | None = None,
     n_repeats: int = 5,
     verbose: bool = True,
+    strategy: str | None = None,
+    n_splits: int | None = None,
+    train_params: "TrainParams | None" = None,
 ) -> pd.DataFrame:
     """Permutation importance measured on each held-out site, then pooled.
 
@@ -782,17 +878,20 @@ def permutation_importance_by_site(
     target = table["class_id"].to_numpy()
 
     per_fold = []
-    for train_index, test_index, held_out in site_splits(table, cfg):
+    train_params = train_params or TrainParams()
+    for train_index, test_index, held_out in site_splits(
+        table, train_params, strategy, n_splits
+    ):
         if np.unique(target[train_index]).size < 2 or len(test_index) < 20:
             continue
 
-        model = make_model(model_name, cfg)
+        model = make_model(model_name, train_params)
         model.fit(values[train_index], target[train_index])
 
         result = permutation_importance(
             model, values[test_index], target[test_index],
             scoring="f1_macro", n_repeats=n_repeats,
-            random_state=int(cfg["training"].get("random_state", 42)),
+            random_state=train_params.random_state,
             n_jobs=-1,
         )
         per_fold.append(pd.Series(result.importances_mean, index=features, name=held_out))
@@ -845,6 +944,7 @@ def save_model(
     evaluation: Evaluation,
     table: pd.DataFrame,
     name: str = "classifier",
+    train_params: "TrainParams | None" = None,
 ) -> tuple[Path, Path]:
     """Persist the fitted model beside everything needed to interpret it.
 
@@ -867,6 +967,7 @@ def save_model(
         "class_scheme_version": cfg["classes"]["scheme_version"],
         "classes": {d.id: d.name for d in cfg.classes},
         "feature_params": params.as_dict(),
+        "train_params": (train_params or TrainParams()).as_dict(),
         "cv_strategy": evaluation.strategy,
         "cv_macro_f1": evaluation.macro_f1,
         "cv_weighted_f1": evaluation.weighted_f1,

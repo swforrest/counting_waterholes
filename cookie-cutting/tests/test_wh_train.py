@@ -30,18 +30,11 @@ def _table(n_sites: int, rows_per_site: int = 20) -> pd.DataFrame:
     })
 
 
-class _Cfg:
-    """Minimal config stand-in exposing only what site_splits reads."""
-
-    def __init__(self, strategy="leave_one_site_out", max_for_loso=12, n_splits=5):
-        self.raw = {"training": {"cv": {
-            "strategy": strategy,
-            "max_sites_for_loso": max_for_loso,
-            "n_splits": n_splits,
-        }}}
-
-    def __getitem__(self, key):
-        return self.raw[key]
+def _Cfg(strategy="leave_one_site_out", max_for_loso=12, n_splits=5):
+    """Training params for the splitter tests, named for the old stand-in."""
+    return wh_train.TrainParams(
+        cv_strategy=strategy, max_sites_for_loso=max_for_loso, n_splits=n_splits,
+    )
 
 
 # --- the guarantee that matters -------------------------------------------
@@ -252,3 +245,39 @@ def test_no_harmonic_keeps_the_trend_term():
     sets = wh_train.ablation_sets(blocks)
     assert "mndwi_harm_trend_per_year" in sets["no_harmonic"]
     assert "mndwi_harm_amplitude" not in sets["no_harmonic"]
+
+
+# --- strategy override ----------------------------------------------------
+
+
+def test_explicit_loso_is_not_overruled_by_the_size_cap():
+    """The cap guards the config default; it must not overrule a direct request."""
+    table = _table(30)
+    splits = list(wh_train.site_splits(
+        table, _Cfg(max_for_loso=15), strategy="leave_one_site_out"
+    ))
+    assert len(splits) == 30
+
+
+def test_config_default_still_falls_back_above_the_cap():
+    table = _table(30)
+    splits = list(wh_train.site_splits(table, _Cfg(max_for_loso=15, n_splits=5)))
+    assert len(splits) == 5
+
+
+def test_n_splits_can_be_overridden_per_call():
+    table = _table(30)
+    for wanted in (3, 4, 6):
+        splits = list(wh_train.site_splits(
+            table, _Cfg(n_splits=5), strategy="group_kfold_by_site", n_splits=wanted
+        ))
+        assert len(splits) == wanted
+
+
+def test_explicit_kfold_below_the_cap_is_honoured():
+    """Asking for k-fold with few sites must not silently give LOSO."""
+    table = _table(6)
+    splits = list(wh_train.site_splits(
+        table, _Cfg(), strategy="group_kfold_by_site", n_splits=3
+    ))
+    assert len(splits) == 3

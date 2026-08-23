@@ -331,31 +331,14 @@ pseudo_labels:
 
 
 # --- training -------------------------------------------------------------
-training:
-  # Grouped by site_id, always. wh_train.py has no code path for a random
-  # pixel-level split: pixels within a tile are near-perfectly autocorrelated,
-  # so the effective sample size is the number of labelled SITES, not pixels.
-  cv:
-    # leave_one_site_out | group_kfold_by_site.
-    #
-    # LOSO gives one fold per site: per-site failure stays legible, and no class
-    # vanishes from training because two sites happened to land in one fold.
-    #
-    # max_sites_for_loso was 12 when there were 9 labelled sites. At 16 that
-    # silently switched to 5-fold GroupKFold, which balances folds by PIXEL count
-    # rather than site count and produced badly uneven folds — one fold was site
-    # 025 alone, another held six sites. Raised to 25: LOSO costs one fit per
-    # site, which is a few minutes at this scale and worth it for the per-site
-    # detail. Above 25 the k-fold fallback takes over.
-    strategy: leave_one_site_out
-    max_sites_for_loso: 25
-    n_splits: 5
-    # Temporal holdout reported alongside: train on these months, test on the rest.
-    temporal_holdout_months: [8, 9, 10]
-  class_weight: balanced
-  models: [logistic_regression, random_forest, gradient_boosting]
-  include_pseudo_labels: false   # flip to true to fold them in
-  random_state: 42
+# MOVED. Training parameters now live in wh_train.TrainParams and are constructed
+# explicitly in model_training.ipynb, where they are visible beside the thing they
+# affect. Cross-validation strategy, fold count, class weighting, the model list
+# and the random seed are all set there.
+#
+# Only what must AGREE across the whole pipeline stays in this file: the class
+# scheme and the paths. A model trained under one class scheme and applied under
+# another produces confident nonsense, so those cannot be per-notebook.
 
 
 # --- prediction and aggregation ------------------------------------------
