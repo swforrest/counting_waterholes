@@ -91,8 +91,10 @@ class LabelParams:
     and prediction have to agree with it.
     """
 
+    # Order is reading order across the grid: with panel_rows=2 the first three
+    # fill the top row, the rest the bottom.
     panels: tuple[str, ...] = (
-        RGB_PANEL, ALPHAEARTH_PANEL, "mndwi", "ndvi", "ndti", "ndmi",
+        RGB_PANEL, "mndwi", ALPHAEARTH_PANEL, "ndvi", "ndti", "ndmi",
     )
     # Panels are laid out on a grid rather than one long row: with six panels a
     # single row leaves each one too small to paint into on a normal screen.

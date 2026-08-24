@@ -25,6 +25,7 @@ footprint notebook can hold them where they are visible and editable.
 from __future__ import annotations
 
 import json
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -34,6 +35,7 @@ from rasterio import features as rio_features
 from rasterio.warp import transform_geom
 from scipy import ndimage
 
+import wh_features
 import wh_temporal
 from wh_config import Config
 from wh_temporal import SiteStack
@@ -58,6 +60,19 @@ class FootprintParams:
         default_factory=lambda: {"mndwi": 1.0, "ndvi": 1.0, "ndti": 1.0}
     )
     dry_ndvi_anomaly_weight: float = 1.5
+
+    # --- AlphaEarth embeddings ---------------------------------------------
+    # The embeddings are ANNUAL and static, so they cannot contribute a seasonal
+    # range like the other layers. What they contribute instead is a SPATIAL
+    # anomaly: how unlike the surrounding savanna a pixel's embedding vector is.
+    # See embedding_anomaly() for the construction.
+    use_alphaearth: bool = False
+    alphaearth_year: int = 2025
+    # None uses all 64 bands. A subset is legitimate, but note that bands ranked
+    # important for pixel CLASSIFICATION are not necessarily the ones that
+    # delineate a basin — those are different questions.
+    alphaearth_bands: tuple[str, ...] | None = None
+    alphaearth_weight: float = 1.5
     score_threshold: float = 2.0
     min_basin_pixels: int = 4
     closing_radius_px: int = 1
@@ -91,6 +106,12 @@ class FootprintParams:
             "min_valid_months": self.min_valid_months,
             "max_basin_fraction": self.max_basin_fraction,
             "single_component": self.single_component,
+            "use_alphaearth": self.use_alphaearth,
+            "alphaearth_year": self.alphaearth_year,
+            "alphaearth_bands": (
+                list(self.alphaearth_bands) if self.alphaearth_bands else "all"
+            ),
+            "alphaearth_weight": self.alphaearth_weight,
         }
 
 
@@ -146,10 +167,77 @@ def robust_z(values: np.ndarray, valid: np.ndarray | None = None) -> np.ndarray:
     return np.where(finite, (values - centre) / spread, np.nan)
 
 
+def embedding_anomaly(
+    alphaearth: dict[str, np.ndarray],
+    valid: np.ndarray | None = None,
+    bands: tuple[str, ...] | None = None,
+) -> np.ndarray:
+    """How unlike the surrounding savanna each pixel's embedding vector is.
+
+    The other score layers measure how much a pixel CHANGES through the year.
+    The embeddings are annual and static, so they cannot say that — but they can
+    say how far a pixel sits from the landscape around it, which is a different
+    and complementary piece of evidence. A basin that never floods visibly still
+    looks unlike savanna to a model trained on a year of multi-sensor data.
+
+    Construction, per tile:
+
+      1. each band is centred on its own median and scaled by its own MAD, so a
+         high-variance dimension cannot dominate purely by being large;
+      2. the per-pixel distance is the ROOT MEAN square across bands, not the
+         sum — that keeps the magnitude comparable whether 3 bands are selected
+         or all 64, so changing the subset does not silently rescale the layer's
+         weight in the combined score;
+      3. the result is robust-z'd like every other layer, against the tile's own
+         median and MAD.
+
+    Median and MAD are taken over the whole tile, which is mostly matrix — the
+    basin is the outlier being looked for, and letting it into its own baseline
+    would hide it.
+    """
+    names = sorted(bands and [f"{wh_features.ALPHAEARTH_PREFIX}{b}" for b in bands]
+                   or alphaearth)
+    missing = [name for name in names if name not in alphaearth]
+    if missing:
+        raise KeyError(f"embedding bands not loaded: {missing}")
+
+    scaled = []
+    for name in names:
+        values = alphaearth[name].astype(np.float64)
+        finite = np.isfinite(values)
+        if valid is not None:
+            finite &= valid
+        if not finite.any():
+            continue
+
+        sample = values[finite]
+        centre = np.median(sample)
+        spread = MAD_TO_SIGMA * np.median(np.abs(sample - centre))
+        if spread <= 0:
+            continue
+        scaled.append(np.where(finite, (values - centre) / spread, np.nan))
+
+    if not scaled:
+        raise ValueError("no embedding band on this tile had any usable spread")
+
+    stack = np.stack(scaled, axis=0)
+
+    # Pixels excluded by `valid` — too few observed months for their seasonal
+    # statistics to mean anything — are NaN in every band, so there is nothing to
+    # average and numpy warns. NaN is the right answer for them and robust_z
+    # keeps it, so the warning is expected rather than a symptom.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        distance = np.sqrt(np.nanmean(stack**2, axis=0))
+
+    return robust_z(distance, valid)
+
+
 def basin_score(
     features: dict[str, np.ndarray],
     params: FootprintParams,
     valid: np.ndarray | None = None,
+    alphaearth: dict[str, np.ndarray] | None = None,
 ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
     """Combine seasonal-range and dry-greenness anomalies into one score.
 
@@ -160,10 +248,16 @@ def basin_score(
     weighted_sum = None
     total_weight = 0.0
 
-    if not params.seasonal_range_weights and params.dry_ndvi_anomaly_weight <= 0:
+    has_embeddings = alphaearth is not None and params.alphaearth_weight > 0
+    if (
+        not params.seasonal_range_weights
+        and params.dry_ndvi_anomaly_weight <= 0
+        and not has_embeddings
+    ):
         raise ValueError(
             "the basin score has no contributing layers: set at least one entry "
-            "in seasonal_range_weights, or a positive dry_ndvi_anomaly_weight"
+            "in seasonal_range_weights, a positive dry_ndvi_anomaly_weight, or "
+            "enable the AlphaEarth layer"
         )
 
     for index_name, weight in params.seasonal_range_weights.items():
@@ -196,6 +290,15 @@ def basin_score(
         # the dry anomaly is the only contributing layer.
         weighted_sum = contribution if weighted_sum is None else weighted_sum + contribution
         total_weight += params.dry_ndvi_anomaly_weight
+
+    if has_embeddings:
+        layer = embedding_anomaly(alphaearth, valid, params.alphaearth_bands)
+        layers["alphaearth_anomaly"] = layer
+        contribution = (
+            np.where(np.isfinite(layer), layer, 0.0) * params.alphaearth_weight
+        )
+        weighted_sum = contribution if weighted_sum is None else weighted_sum + contribution
+        total_weight += params.alphaearth_weight
 
     score = weighted_sum / total_weight
     any_finite = np.any(
@@ -324,6 +427,7 @@ def derive_footprint(
     features: dict[str, np.ndarray],
     params: FootprintParams,
     box_mask: np.ndarray | None = None,
+    alphaearth: dict[str, np.ndarray] | None = None,
 ) -> Footprint:
     """Derive the basin footprint for one site.
 
@@ -345,7 +449,7 @@ def derive_footprint(
     valid_months = np.isfinite(stack.stacks["mndwi"]).sum(axis=0)
     valid = valid_months >= params.min_valid_months
 
-    score, layers = basin_score(features, params, valid=valid)
+    score, layers = basin_score(features, params, valid=valid, alphaearth=alphaearth)
 
     candidate = np.isfinite(score) & (score >= params.score_threshold) & valid
 
@@ -595,6 +699,21 @@ def run_site(
                 f"tile grid {stack.shape}; rebuild the box masks"
             )
 
-    footprint = derive_footprint(stack, features, params, box_mask=box_mask)
+    alphaearth = None
+    if params.use_alphaearth:
+        import wh_features
+
+        feature_params = wh_features.FeatureParams(
+            use_alphaearth=True,
+            alphaearth_year=params.alphaearth_year,
+            alphaearth_bands=params.alphaearth_bands,
+        )
+        alphaearth = wh_features.load_alphaearth(
+            cfg, site_id, feature_params, expected_shape=stack.shape
+        )
+
+    footprint = derive_footprint(
+        stack, features, params, box_mask=box_mask, alphaearth=alphaearth
+    )
     footprint.box_mask = box_mask
     return footprint, stack, features

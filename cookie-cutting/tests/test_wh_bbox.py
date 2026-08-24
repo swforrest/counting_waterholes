@@ -260,3 +260,131 @@ def test_diagonal_touching_regions_count_as_separate():
 
     assert n_dropped == 1
     assert kept.sum() == 9
+
+
+# --- AlphaEarth embedding anomaly -----------------------------------------
+
+
+def _embedding_with_patch(shape=(30, 30), n_bands=8, offset=6.0):
+    """Uniform-ish embedding with one region shifted away from the rest."""
+    import wh_features
+
+    rng = np.random.default_rng(7)
+    embedding = {}
+    for i in range(n_bands):
+        band = rng.normal(0.0, 1.0, size=shape)
+        band[10:16, 10:16] += offset          # the "basin"
+        embedding[f"{wh_features.ALPHAEARTH_PREFIX}A{i:02d}"] = band
+    return embedding
+
+
+def test_anomaly_is_high_where_the_embedding_differs():
+    import wh_footprint
+
+    layer = wh_footprint.embedding_anomaly(_embedding_with_patch())
+
+    patch = layer[10:16, 10:16]
+    background = np.concatenate([layer[:8].ravel(), layer[20:].ravel()])
+    assert np.nanmedian(patch) > np.nanmedian(background) + 3
+
+
+def test_anomaly_is_flat_when_nothing_differs():
+    import wh_footprint
+
+    layer = wh_footprint.embedding_anomaly(_embedding_with_patch(offset=0.0))
+    finite = layer[np.isfinite(layer)]
+    # No structure to find, so nothing should reach the usual score threshold.
+    assert np.nanpercentile(finite, 99) < 6
+
+
+def test_rms_keeps_the_magnitude_comparable_across_band_counts():
+    """Selecting a subset must not silently rescale the layer's weight."""
+    import wh_features
+    import wh_footprint
+
+    embedding = _embedding_with_patch(n_bands=16)
+    all_bands = wh_footprint.embedding_anomaly(embedding)
+    three = wh_footprint.embedding_anomaly(
+        embedding, bands=("A00", "A01", "A02")
+    )
+
+    peak_all = np.nanmedian(all_bands[10:16, 10:16])
+    peak_three = np.nanmedian(three[10:16, 10:16])
+    assert 0.4 < peak_three / peak_all < 2.5
+
+
+def test_band_subset_uses_only_those_bands():
+    import wh_features
+    import wh_footprint
+
+    embedding = _embedding_with_patch(n_bands=8)
+    # Give one band its anomaly somewhere else entirely; including it must move
+    # the result.
+    rng = np.random.default_rng(11)
+    odd = rng.normal(0.0, 1.0, size=(30, 30))
+    odd[22:28, 22:28] += 8.0
+    embedding[f"{wh_features.ALPHAEARTH_PREFIX}A00"] = odd
+
+    with_it = wh_footprint.embedding_anomaly(embedding, bands=("A00", "A01"))
+    without = wh_footprint.embedding_anomaly(embedding, bands=("A01",))
+
+    assert not np.allclose(with_it, without, equal_nan=True)
+    # The odd band's own anomaly shows only when it is included.
+    assert np.nanmedian(with_it[22:28, 22:28]) > np.nanmedian(without[22:28, 22:28])
+
+
+def test_a_band_with_no_spread_is_skipped_not_counted_as_zero():
+    """A constant band carries no information; averaging a zero in would dilute."""
+    import wh_features
+    import wh_footprint
+
+    embedding = _embedding_with_patch(n_bands=4)
+    informative = wh_footprint.embedding_anomaly(embedding, bands=("A01", "A02"))
+
+    embedding[f"{wh_features.ALPHAEARTH_PREFIX}A00"] = np.full((30, 30), 0.5)
+    with_flat = wh_footprint.embedding_anomaly(
+        embedding, bands=("A00", "A01", "A02")
+    )
+
+    assert np.allclose(informative, with_flat, equal_nan=True)
+
+
+def test_unknown_band_raises():
+    import wh_footprint
+
+    with pytest.raises(KeyError, match="not loaded"):
+        wh_footprint.embedding_anomaly(_embedding_with_patch(), bands=("A00", "ZZZ"))
+
+
+def test_valid_mask_restricts_the_baseline():
+    import wh_footprint
+
+    embedding = _embedding_with_patch()
+    valid = np.ones((30, 30), dtype=bool)
+    valid[:5] = False
+
+    layer = wh_footprint.embedding_anomaly(embedding, valid=valid)
+    assert np.all(np.isnan(layer[:5]))
+    assert np.isfinite(layer[10:16, 10:16]).all()
+
+
+def test_a_constant_embedding_raises_rather_than_dividing_by_zero():
+    import wh_features
+    import wh_footprint
+
+    flat = {
+        f"{wh_features.ALPHAEARTH_PREFIX}A{i:02d}": np.full((10, 10), 0.5)
+        for i in range(4)
+    }
+    with pytest.raises(ValueError, match="usable spread"):
+        wh_footprint.embedding_anomaly(flat)
+
+
+def test_score_refuses_when_every_layer_is_switched_off():
+    import wh_footprint
+
+    params = wh_footprint.FootprintParams(
+        seasonal_range_weights={}, dry_ndvi_anomaly_weight=0.0, use_alphaearth=False
+    )
+    with pytest.raises(ValueError, match="no contributing layers"):
+        wh_footprint.basin_score({}, params)
