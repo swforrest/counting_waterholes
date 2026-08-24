@@ -10,6 +10,7 @@ from datetime import datetime
 from . import image_cutting_support as ics
 from .config import cfg
 from .waterhole_classes import load_class_registry
+from . import iou as iou_utils
 from tqdm import tqdm
 import torch
 import stat
@@ -122,7 +123,7 @@ def process_tif_waterhole(
 
     Args:
         file: The tiff file to process
-        distance_cutoffs: Dictionary of distance cutoffs for each waterhole type
+        distance_cutoffs: Dictionary of per-class IoU thresholds (0-1), keyed by class id
 
     Returns:
         Array of classified waterholes
@@ -148,7 +149,9 @@ def process_tif_waterhole(
         
         # Apply type-specific clustering
         if len(type_waterholes) > 0:
-            clustered_waterholes = cluster_AF(type_waterholes, distance_cutoffs[waterhole_type])
+            clustered_waterholes = cluster_AF(
+                type_waterholes, distance_cutoffs[waterhole_type], metric="iou"
+            )
             processed_waterholes = process_clusters_AF(clustered_waterholes)
             
             # Convert pixel coordinates to lat/long
@@ -380,7 +383,7 @@ def classify_directory_AF(directory, config, classify_days=None):
 
     Args:
         directory: The directory to classify
-        config: config dict containing 'names:' and 'class_distance_cutoff_px:'
+        config: config dict containing 'names:' and 'class_iou_threshold:'
             (e.g. from parse_config() on a test/deploy config)
         classify_days: list of days to classify in format "DD/MM/YYYY"
 
@@ -1042,25 +1045,46 @@ def cluster(classifications: np.ndarray, cutoff: float) -> np.ndarray:
     return points_with_cluster
 
 
-def cluster_AF(classifications: np.ndarray, cutoff: float) -> np.ndarray:
+def cluster_AF(
+    classifications: np.ndarray, cutoff: float, metric: str = "distance"
+) -> np.ndarray:
     """
-    Cluster the given classifications using the given cutoff.
+    Cluster the given classifications, merging duplicate detections of the same
+    object (e.g. the same waterhole seen in several overlapping tiles).
 
     Args:
         classifications: The classifications to cluster, in the form x, y, confidence, class, width, height
-        cutoff: The cutoff to use for clustering
+        cutoff: The cutoff to use for clustering. Its meaning depends on `metric`:
+            - metric="distance": maximum centre-to-centre distance in pixels.
+            - metric="iou": minimum IoU (0-1) for two boxes to be merged.
+        metric: "iou" to reconcile boxes by Intersection over Union (accounts for
+            box size and shape), or "distance" for the legacy centre-distance
+            behaviour. Defaults to "distance" so the boat pipeline is unaffected.
 
     Returns:
         The classifications with an additional column for the cluster number
         Columns: x, y, confidence, class, width, height, cluster
     """
+    if metric not in ("distance", "iou"):
+        raise ValueError(f"cluster_AF: metric must be 'distance' or 'iou', got {metric!r}")
+
     if classifications.shape[0] < 2:
         # add cluster = 1 to point
         if classifications.shape[0] == 1:
             classifications = np.array([np.append(classifications[0], 1)])
         return classifications
-    points = classifications[:, [0, 1]].astype(np.float64)
-    distances = scipy.spatial.distance.pdist(points, metric="euclidean")
+
+    if metric == "iou":
+        # Work in (1 - IoU) space so that a higher IoU means a smaller distance.
+        # An IoU threshold of t therefore becomes a linkage cutoff of 1 - t.
+        distances = iou_utils.iou_condensed_distance(
+            iou_utils.extract_boxes(classifications)
+        )
+        cutoff = 1.0 - cutoff
+    else:
+        points = classifications[:, [0, 1]].astype(np.float64)
+        distances = scipy.spatial.distance.pdist(points, metric="euclidean")
+
     clustering = scipy.cluster.hierarchy.linkage(distances, "average")
     clusters = scipy.cluster.hierarchy.fcluster(
         clustering, cutoff, criterion="distance"

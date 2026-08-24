@@ -31,6 +31,7 @@ from .classifier import cluster_AF, read_classifications_AF, process_clusters_AF
 from .config import cfg
 from . import image_cutting_support as ics
 from . import heatmap as hm
+from . import iou as iou_utils
 from .waterhole_classes import load_class_registry
 from PIL import Image, ImageDraw
 import matplotlib.pyplot as plt
@@ -287,7 +288,7 @@ def backwards_annotation_AF(run_folder, config):
 
     Comment:
     AF: Modified to handle any number of waterhole classes, as defined by the
-    config's 'names:' / 'class_distance_cutoff_px:' blocks.
+    config's 'names:' / 'class_iou_threshold:' blocks.
     """
     config = parse_config(config)  # To solve the error: 'str' object has no attribute 'get'
     registry = load_class_registry(config)
@@ -317,7 +318,9 @@ def backwards_annotation_AF(run_folder, config):
             ML_clusters_by_class = {}
             for class_id in registry.ids:
                 class_classifications = ML_classifications[ML_classifications[:, 3] == float(class_id)]
-                class_clusters = cluster_AF(class_classifications, registry.id_to_threshold[class_id])
+                class_clusters = cluster_AF(
+                    class_classifications, registry.id_to_threshold[class_id], metric="iou"
+                )
                 ML_clusters_by_class[class_id] = process_clusters_AF(class_clusters)
 
             # Get image metadata (width and height)
@@ -530,14 +533,18 @@ def process_image_AF(
         cutoff = registry.id_to_threshold[class_id]
 
         class_ml = ML_classifications[ML_classifications[:, 3] == float(class_id)]
-        ML_clusters_by_class[class_id] = process_clusters_AF(cluster_AF(class_ml, cutoff))
+        ML_clusters_by_class[class_id] = process_clusters_AF(
+            cluster_AF(class_ml, cutoff, metric="iou")
+        )
 
         class_manual = (
             manual_annotations[manual_annotations[:, 3] == float(class_id)]
             if len(manual_annotations) > 0
             else np.empty((0, 7))
         )
-        manual_clusters_by_class[class_id] = process_clusters_AF(cluster_AF(class_manual, cutoff))
+        manual_clusters_by_class[class_id] = process_clusters_AF(
+            cluster_AF(class_manual, cutoff, metric="iou")
+        )
 
         # Save each class's ML clusters separately
         outfile = os.path.join(detections, "clusters", f"{registry.id_to_name[class_id].lower()}_clusters.csv")
@@ -555,81 +562,76 @@ def process_image_AF(
     ) if any(len(manual_clusters_by_class[cid]) > 0 for cid in registry.ids) else np.empty((0, 6))
 
     # Compare ML and manual clusters
-    COMPARE_DISTANCE_CUTOFF_PIX = config["COMPARE_DISTANCE_CUTOFF_PIX"]
-    comparison = compare(ML_clusters, manual_clusters, COMPARE_DISTANCE_CUTOFF_PIX)
+    COMPARE_IOU_THRESHOLD = config["COMPARE_IOU_THRESHOLD"]
+    comparison = compare(ML_clusters, manual_clusters, COMPARE_IOU_THRESHOLD)
     return comparison
 
 
 
-def compare(ml: np.ndarray, manual: np.ndarray, cutoff):
+def compare(ml: np.ndarray, manual: np.ndarray, iou_threshold):
     """
-    given two lists of clusters, compare them (cluster them and note the results)
-    e.g if ml has the point (52, 101), and manual has (51.8, 101.2), they should be clustered together
-    , and this boat should be noted as being in both sets
+    Match detections against ground-truth labels by Intersection over Union.
+
+    Uses greedy one-to-one matching (COCO style): every candidate pair with an
+    IoU of at least `iou_threshold` is considered, highest IoU first, and each
+    box on either side is consumed at most once. That gives a clean
+    true-positive / false-positive / false-negative split, so the counts feeding
+    the confusion matrix are trustworthy.
+
+    Replaces the previous centre-distance clustering, which ignored box size and
+    shape and could lump several detections and several labels into one blob.
 
     Args:
 
-        ml: list of clusters in form [x, y, confidence, class, width, height, filename]
-        manual: list of clusters in form [x, y, confidence, class, width, height, filename]
+        ml: list of clusters in form [x, y, confidence, class, width, height]
+        manual: list of clusters in form [x, y, confidence, class, width, height]
+        iou_threshold: minimum IoU (0-1) for a detection to count as matching a label
 
     Returns:
 
-        list of clusters in form [x, y, ml_class, manual_class]
-
-    Comment: 
-    AF: Should be able to work without modification and handle more label classes. 
+        list of clusters in form [x, y, ml_class, manual_class], where a class of
+        -1 means "absent from that set" (unmatched detection -> manual_class -1,
+        missed label -> ml_class -1).
     """
-    all_clusters, all_points = combine_detections_and_labels(ml, manual)
-    if len(all_points) < 2:
-        # if its 1, still need to pretend cluster
-        if len(all_points) == 1:
-            list(all_points[0]).append(0)
-            clusters = [0]
-            points_with_cluster = np.c_[
-                all_points, np.asarray(all_clusters)[:, 2:], clusters
-            ]
-        else:
-            return []
-    else:
-        # cluster
-        distances = scipy.spatial.distance.pdist(all_points, metric="euclidean")
-        clustering = scipy.cluster.hierarchy.linkage(distances, "average")
-        clusters = scipy.cluster.hierarchy.fcluster(
-            clustering, cutoff, criterion="distance"
-        )
-        points_with_cluster = np.c_[
-            all_points, np.asarray(all_clusters)[:, 2:], clusters
-        ]
-    # for each cluster, note if it is in ml, manual, or both
+    ml = np.asarray(ml)
+    manual = np.asarray(manual)
+    n_ml = len(ml) if ml.size else 0
+    n_manual = len(manual) if manual.size else 0
+    if n_ml == 0 and n_manual == 0:
+        return []
+
+    pairs = iou_utils.greedy_match(
+        iou_utils.extract_boxes(ml), iou_utils.extract_boxes(manual), iou_threshold
+    )
+    matched_ml = {i for i, _ in pairs}
+    matched_manual = {j for _, j in pairs}
+
     results = []
-    for cluster in np.unique(clusters):
-        res = [0.0, 0.0, -1, -1]  # x, y, ml class, manual class 
-        #AF: The -1 value is used as a default to indicate "no class assigned". This should work but could modify to use a different default value. 
-        #However, since -1 is already separate from WH class values (0-4), it should work correctly as is.
-        points = points_with_cluster[points_with_cluster[:, -1] == str(cluster)]
-        if len(points) == 0:
-            print("No points in cluster")
-            continue
-        # 6th is the source, 3 is the class
-        ml_cls = []
-        manual_cls = []
-        x = 0
-        y = 0
-        for point in points:
-            x += float(point[0])
-            y += float(point[1])
-            if point[6] == "ml":
-                ml_cls.append(int(float(point[3])))
-            elif point[6] == "manual":
-                manual_cls.append(int(float(point[3])))
-        res[0] = round(x / len(points), 3)
-        res[1] = round(y / len(points), 3)
-        # class should be most common class
-        if len(ml_cls) > 0:
-            res[2] = max(set(ml_cls), key=ml_cls.count)
-        if len(manual_cls) > 0:
-            res[3] = max(set(manual_cls), key=manual_cls.count)
-        results.append(res)
+    # Matched pairs: a true positive for the confusion matrix (the two classes
+    # may still disagree, which is exactly what the matrix is there to show).
+    for i, j in pairs:
+        x = (float(ml[i][0]) + float(manual[j][0])) / 2
+        y = (float(ml[i][1]) + float(manual[j][1])) / 2
+        results.append(
+            [round(x, 3), round(y, 3), int(float(ml[i][3])), int(float(manual[j][3]))]
+        )
+    # Detections with no label -> false positives
+    for i in range(n_ml):
+        if i not in matched_ml:
+            results.append(
+                [round(float(ml[i][0]), 3), round(float(ml[i][1]), 3), int(float(ml[i][3])), -1]
+            )
+    # Labels with no detection -> false negatives
+    for j in range(n_manual):
+        if j not in matched_manual:
+            results.append(
+                [
+                    round(float(manual[j][0]), 3),
+                    round(float(manual[j][1]), 3),
+                    -1,
+                    int(float(manual[j][3])),
+                ]
+            )
     return results
 
 
