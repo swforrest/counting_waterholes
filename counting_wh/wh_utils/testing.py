@@ -31,12 +31,13 @@ from .classifier import cluster_AF, read_classifications_AF, process_clusters_AF
 from .config import cfg
 from . import image_cutting_support as ics
 from . import heatmap as hm
+from .waterhole_classes import load_class_registry
 from PIL import Image, ImageDraw
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 import json
 import subprocess
-from counting_whs.wh_utils.stitch_PNGs import stitch_AF
+from .stitch_PNGs import stitch_AF
 
 
 #Manualy change them in accordance to the desired value. Are not called in some functions so to be easier they are here...
@@ -148,6 +149,7 @@ def segment(run_folder, config):
     config = parse_config(config) #AF: to solve the error: 'str' object has no attribute 'get'
     tile_size = config.get("img_size", 416)
     stride = config.get("img_stride", 104)
+    name_to_id = load_class_registry(config, require_thresholds=False).name_to_id
     pngs = os.path.normpath(os.path.join(config["path"], config["pngs"]))
     im_save_folder = os.path.normpath(os.path.join(config["path"], config["segmented_images"]))
     label_save_folder = os.path.normpath(os.path.join(config["path"], config["labels"]))
@@ -176,6 +178,7 @@ def segment(run_folder, config):
                     remove_empty=0,
                     im_outdir=im_save_folder,
                     labels_outdir=label_save_folder,
+                    name_to_id=name_to_id,
                 )
             else:
                 print(f"Could not find image file for {filename}")
@@ -281,11 +284,13 @@ def backwards_annotation_AF(run_folder, config):
 
     Returns:
         None
-    
+
     Comment:
-    AF: Modified to handle 5 classes of waterhole labels (0=Dry_WH, 1=WH_swamp, 2=WH_wet, 3=WH_sink, 4=U)
+    AF: Modified to handle any number of waterhole classes, as defined by the
+    config's 'names:' / 'class_distance_cutoff_px:' blocks.
     """
     config = parse_config(config)  # To solve the error: 'str' object has no attribute 'get'
+    registry = load_class_registry(config)
     run_folder = os.path.normpath(run_folder)
     detection_dir = os.path.join(config["path"], config["classifications"])
     print(f"Detection directory {detection_dir}")
@@ -308,35 +313,13 @@ def backwards_annotation_AF(run_folder, config):
                 class_folder=root, confidence_threshold=config["CONFIDENCE_THRESHOLD"]
             )  # Read all
             
-            # Separate classifications by class
-            ML_classifications_dry_wh = ML_classifications[ML_classifications[:, 3] == 0.0]
-            ML_classifications_wh_swamp = ML_classifications[ML_classifications[:, 3] == 1.0]
-            ML_classifications_wh_wet = ML_classifications[ML_classifications[:, 3] == 2.0]
-            ML_classifications_wh_sink = ML_classifications[ML_classifications[:, 3] == 3.0]
-            ML_classifications_u = ML_classifications[ML_classifications[:, 3] == 4.0]
-            
-            # Define distance cutoffs for each class
-            STAT_DISTANCE_CUTOFF_PIX_DRY = config["STAT_DISTANCE_CUTOFF_PIX_DRY"]
-            STAT_DISTANCE_CUTOFF_PIX_WET = config["STAT_DISTANCE_CUTOFF_PIX_WET"]
-            STAT_DISTANCE_CUTOFF_PIX_SWAMP = config["STAT_DISTANCE_CUTOFF_PIX_SWAMP"]
-            STAT_DISTANCE_CUTOFF_PIX_SINK = config["STAT_DISTANCE_CUTOFF_PIX_SINK"]
-            STAT_DISTANCE_CUTOFF_PIX_U = config["STAT_DISTANCE_CUTOFF_PIX_U"]
-            
-            
-            # Cluster each class separately
-            ML_clusters_dry_wh = cluster_AF(ML_classifications_dry_wh, STAT_DISTANCE_CUTOFF_PIX_DRY)
-            ML_clusters_wh_swamp = cluster_AF(ML_classifications_wh_swamp, STAT_DISTANCE_CUTOFF_PIX_SWAMP)
-            ML_clusters_wh_wet = cluster_AF(ML_classifications_wh_wet, STAT_DISTANCE_CUTOFF_PIX_WET)
-            ML_clusters_wh_sink = cluster_AF(ML_classifications_wh_sink, STAT_DISTANCE_CUTOFF_PIX_SINK)
-            ML_clusters_u = cluster_AF(ML_classifications_u, STAT_DISTANCE_CUTOFF_PIX_U)
-            
-            # Condense clusters
-            ML_clusters_dry_wh = process_clusters_AF(ML_clusters_dry_wh)
-            ML_clusters_wh_swamp = process_clusters_AF(ML_clusters_wh_swamp)
-            ML_clusters_wh_wet = process_clusters_AF(ML_clusters_wh_wet)
-            ML_clusters_wh_sink = process_clusters_AF(ML_clusters_wh_sink)
-            ML_clusters_u = process_clusters_AF(ML_clusters_u)
-            
+            # Separate classifications by class, cluster and condense each separately
+            ML_clusters_by_class = {}
+            for class_id in registry.ids:
+                class_classifications = ML_classifications[ML_classifications[:, 3] == float(class_id)]
+                class_clusters = cluster_AF(class_classifications, registry.id_to_threshold[class_id])
+                ML_clusters_by_class[class_id] = process_clusters_AF(class_clusters)
+
             # Get image metadata (width and height)
             img = Image.open(
                 os.path.join(config["path"], config["pngs"], this_image + ".png")
@@ -353,76 +336,21 @@ def backwards_annotation_AF(run_folder, config):
             json_data["shapes"] = []
             
             # Add shapes for each class
-            for c in ML_clusters_dry_wh:
-                x, y, _, _, w, h = c
-                w = int(w / 2)
-                h = int(h / 2)
-                json_data["shapes"].append(
-                    {
-                        "label": "Dry_WH",
-                        "points": [[x - w, y - h], [x + w, y + h]],
-                        "group_id": None,
-                        "shape_type": "rectangle",
-                        "flags": {},
-                    }
-                )
-                
-            for c in ML_clusters_wh_swamp:
-                x, y, _, _, w, h = c
-                w = int(w / 2)
-                h = int(h / 2)
-                json_data["shapes"].append(
-                    {
-                        "label": "WH_swamp",
-                        "points": [[x - w, y - h], [x + w, y + h]],
-                        "group_id": None,
-                        "shape_type": "rectangle",
-                        "flags": {},
-                    }
-                )
-                
-            for c in ML_clusters_wh_wet:
-                x, y, _, _, w, h = c
-                w = int(w / 2)
-                h = int(h / 2)
-                json_data["shapes"].append(
-                    {
-                        "label": "WH_wet",
-                        "points": [[x - w, y - h], [x + w, y + h]],
-                        "group_id": None,
-                        "shape_type": "rectangle",
-                        "flags": {},
-                    }
-                )
-                
-            for c in ML_clusters_wh_sink:
-                x, y, _, _, w, h = c
-                w = int(w / 2)
-                h = int(h / 2)
-                json_data["shapes"].append(
-                    {
-                        "label": "WH_sink",
-                        "points": [[x - w, y - h], [x + w, y + h]],
-                        "group_id": None,
-                        "shape_type": "rectangle",
-                        "flags": {},
-                    }
-                )
-                
-            for c in ML_clusters_u:
-                x, y, _, _, w, h = c
-                w = int(w / 2)
-                h = int(h / 2)
-                json_data["shapes"].append(
-                    {
-                        "label": "U",
-                        "points": [[x - w, y - h], [x + w, y + h]],
-                        "group_id": None,
-                        "shape_type": "rectangle",
-                        "flags": {},
-                    }
-                )
-                
+            for class_id in registry.ids:
+                for c in ML_clusters_by_class[class_id]:
+                    x, y, _, _, w, h = c
+                    w = int(w / 2)
+                    h = int(h / 2)
+                    json_data["shapes"].append(
+                        {
+                            "label": registry.id_to_name[class_id],
+                            "points": [[x - w, y - h], [x + w, y + h]],
+                            "group_id": None,
+                            "shape_type": "rectangle",
+                            "flags": {},
+                        }
+                    )
+
             # Get the "image_data" key from existing JSON
             with open(
                 os.path.join(config["path"], config["pngs"], f"{this_image}.json"), "r"
@@ -483,9 +411,10 @@ def confusion_matrix_AF(run_folder, config):
 
         None
     Comment:
-    AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
-    Should run smoothly and did not modify the dependent functions. 
+    AF: Modified the above function to be able to handle any number of classes of
+    label for the waterhole detection project, as defined by the config.
     """
+    registry = load_class_registry(config)
     if os.path.exists(os.path.join(run_folder, "all_waterholes.csv")):
         all_data = pd.read_csv(os.path.join(run_folder, "all_waterholes.csv"))
     else:
@@ -505,8 +434,8 @@ def confusion_matrix_AF(run_folder, config):
     ConfusionMatrixDisplay.from_predictions(
         y_pred=pred,
         y_true=true,
-        labels=[-1, 0, 1, 2, 3, 4],
-        display_labels=["Not Classified", "Dry_WH", "WH_swamp", "WH_wet", "WH_sink", "U"],
+        labels=[-1, *registry.ids],
+        display_labels=["Not Classified", *registry.names],
     )
     fig = plt.gcf()
     fig.suptitle(
@@ -539,11 +468,12 @@ def process_image_AF(
     Returns:
 
         list of clusters in form [x, y, confidence, class, width, height, filename, in_ml, in_manual]
-    
+
     Comment:
-    AF: Modified the above function to be able to handle 4 classes of label for the waterhole detection project. 
-    Should run smoothly and did not modify the dependent functions. 
+    AF: Modified the above function to be able to handle any number of classes of
+    label for the waterhole detection project, as defined by the config.
     """
+    registry = load_class_registry(config)
     # labels will be in a parallel directory to detections
     # e.g detections = "Detections/b/../d", labels = "Labels/b/../d"
 
@@ -586,115 +516,44 @@ def process_image_AF(
     # ML classifications
     ML_classifications, _ = read_classifications_AF(class_folder=detections)
     
-    # Separate classifications by class
-    ML_classifications_dry_wh = ML_classifications[ML_classifications[:, 3] == 0.0]
-    ML_classifications_wh_swamp = ML_classifications[ML_classifications[:, 3] == 1.0]
-    ML_classifications_wh_wet = ML_classifications[ML_classifications[:, 3] == 2.0]
-    ML_classifications_wh_sink = ML_classifications[ML_classifications[:, 3] == 3.0]
-    ML_classifications_u = ML_classifications[ML_classifications[:, 3] == 4.0]
-    
-    # Define distance cutoffs for each class (adjust these as needed)
-    STAT_DISTANCE_CUTOFF_PIX_DRY = config["STAT_DISTANCE_CUTOFF_PIX_DRY"]
-    STAT_DISTANCE_CUTOFF_PIX_WET = config["STAT_DISTANCE_CUTOFF_PIX_WET"]
-    STAT_DISTANCE_CUTOFF_PIX_SWAMP = config["STAT_DISTANCE_CUTOFF_PIX_SWAMP"]
-    STAT_DISTANCE_CUTOFF_PIX_SINK = config["STAT_DISTANCE_CUTOFF_PIX_SINK"]
-    STAT_DISTANCE_CUTOFF_PIX_U = config["STAT_DISTANCE_CUTOFF_PIX_U"]
-    
-    # cluster each class separately
-    ML_clusters_dry_wh = cluster_AF(ML_classifications_dry_wh, STAT_DISTANCE_CUTOFF_PIX_DRY)
-    ML_clusters_wh_swamp = cluster_AF(ML_classifications_wh_swamp, STAT_DISTANCE_CUTOFF_PIX_SWAMP)
-    ML_clusters_wh_wet = cluster_AF(ML_classifications_wh_wet, STAT_DISTANCE_CUTOFF_PIX_WET)
-    ML_clusters_wh_sink = cluster_AF(ML_classifications_wh_sink, STAT_DISTANCE_CUTOFF_PIX_SINK)
-    ML_clusters_u = cluster_AF(ML_classifications_u, STAT_DISTANCE_CUTOFF_PIX_U)
-    
     # save clusters as csv for later analysis
     if not os.path.exists(os.path.join(detections, "clusters")):
         os.makedirs(os.path.join(detections, "clusters"))
-    
-    # Save each class clusters separately
-    dry_wh_outfile = os.path.join(detections, "clusters", "dry_wh_clusters.csv")
-    wh_swamp_outfile = os.path.join(detections, "clusters", "wh_swamp_clusters.csv")
-    wh_wet_outfile = os.path.join(detections, "clusters", "wh_wet_clusters.csv")
-    wh_sink_outfile = os.path.join(detections, "clusters", "wh_sink_clusters.csv")
-    u_outfile = os.path.join(detections, "clusters", "u_clusters.csv")
-    
-    with open(dry_wh_outfile, "w") as f:
-        for c in ML_clusters_dry_wh:
-            f.write(",".join([str(i) for i in c]) + "\n")
-    with open(wh_swamp_outfile, "w") as f:
-        for c in ML_clusters_wh_swamp:
-            f.write(",".join([str(i) for i in c]) + "\n")
-    with open(wh_wet_outfile, "w") as f:
-        for c in ML_clusters_wh_wet:
-            f.write(",".join([str(i) for i in c]) + "\n")
-    with open(wh_sink_outfile, "w") as f:
-        for c in ML_clusters_wh_sink:
-            f.write(",".join([str(i) for i in c]) + "\n")
-    with open(u_outfile, "w") as f:
-        for c in ML_clusters_u:
-            f.write(",".join([str(i) for i in c]) + "\n")
 
     # manual annotations
     manual_annotations, _ = read_classifications_AF(class_folder=label_dir)
-    
-    # Handle empty manual annotations
-    if len(manual_annotations) == 0:
-        manual_annotations_dry_wh = np.empty((0, 7))
-        manual_annotations_wh_swamp = np.empty((0, 7))
-        manual_annotations_wh_wet = np.empty((0, 7))
-        manual_annotations_wh_sink = np.empty((0, 7))
-        manual_annotations_u = np.empty((0, 7))
-    else:
-        # Separate manual annotations by class
-        manual_annotations_dry_wh = manual_annotations[manual_annotations[:, 3] == 0.0]
-        manual_annotations_wh_swamp = manual_annotations[manual_annotations[:, 3] == 1.0]
-        manual_annotations_wh_wet = manual_annotations[manual_annotations[:, 3] == 2.0]
-        manual_annotations_wh_sink = manual_annotations[manual_annotations[:, 3] == 3.0]
-        manual_annotations_u = manual_annotations[manual_annotations[:, 3] == 4.0]
-    
-    # cluster manual annotations
-    manual_clusters_dry_wh = cluster_AF(manual_annotations_dry_wh, STAT_DISTANCE_CUTOFF_PIX_DRY)
-    manual_clusters_wh_swamp = cluster_AF(manual_annotations_wh_swamp, STAT_DISTANCE_CUTOFF_PIX_SWAMP)
-    manual_clusters_wh_wet = cluster_AF(manual_annotations_wh_wet, STAT_DISTANCE_CUTOFF_PIX_WET)
-    manual_clusters_wh_sink = cluster_AF(manual_annotations_wh_sink, STAT_DISTANCE_CUTOFF_PIX_SINK)
-    manual_clusters_u = cluster_AF(manual_annotations_u, STAT_DISTANCE_CUTOFF_PIX_U)
 
-    # process all clusters
-    ML_clusters_dry_wh = process_clusters_AF(ML_clusters_dry_wh)
-    ML_clusters_wh_swamp = process_clusters_AF(ML_clusters_wh_swamp)
-    ML_clusters_wh_wet = process_clusters_AF(ML_clusters_wh_wet)
-    ML_clusters_wh_sink = process_clusters_AF(ML_clusters_wh_sink)
-    ML_clusters_u = process_clusters_AF(ML_clusters_u)
-    
-    manual_clusters_dry_wh = process_clusters_AF(manual_clusters_dry_wh)
-    manual_clusters_wh_swamp = process_clusters_AF(manual_clusters_wh_swamp)
-    manual_clusters_wh_wet = process_clusters_AF(manual_clusters_wh_wet)
-    manual_clusters_wh_sink = process_clusters_AF(manual_clusters_wh_sink)
-    manual_clusters_u = process_clusters_AF(manual_clusters_u)
+    # Separate, cluster, and condense both ML and manual annotations, per class
+    ML_clusters_by_class = {}
+    manual_clusters_by_class = {}
+    for class_id in registry.ids:
+        cutoff = registry.id_to_threshold[class_id]
+
+        class_ml = ML_classifications[ML_classifications[:, 3] == float(class_id)]
+        ML_clusters_by_class[class_id] = process_clusters_AF(cluster_AF(class_ml, cutoff))
+
+        class_manual = (
+            manual_annotations[manual_annotations[:, 3] == float(class_id)]
+            if len(manual_annotations) > 0
+            else np.empty((0, 7))
+        )
+        manual_clusters_by_class[class_id] = process_clusters_AF(cluster_AF(class_manual, cutoff))
+
+        # Save each class's ML clusters separately
+        outfile = os.path.join(detections, "clusters", f"{registry.id_to_name[class_id].lower()}_clusters.csv")
+        with open(outfile, "w") as f:
+            for c in ML_clusters_by_class[class_id]:
+                f.write(",".join([str(i) for i in c]) + "\n")
 
     # Combine all ML clusters and manual clusters
     ML_clusters = np.concatenate(
-        (
-            ML_clusters_dry_wh, 
-            ML_clusters_wh_swamp, 
-            ML_clusters_wh_wet, 
-            ML_clusters_wh_sink, 
-            ML_clusters_u
-        ), 
-        axis=0
-    ) if any(len(arr) > 0 for arr in [ML_clusters_dry_wh, ML_clusters_wh_swamp, ML_clusters_wh_wet, ML_clusters_wh_sink, ML_clusters_u]) else np.empty((0, 6))
-    
+        [ML_clusters_by_class[cid] for cid in registry.ids], axis=0
+    ) if any(len(ML_clusters_by_class[cid]) > 0 for cid in registry.ids) else np.empty((0, 6))
+
     manual_clusters = np.concatenate(
-        (
-            manual_clusters_dry_wh, 
-            manual_clusters_wh_swamp, 
-            manual_clusters_wh_wet, 
-            manual_clusters_wh_sink, 
-            manual_clusters_u
-        ), 
-        axis=0
-    ) if any(len(arr) > 0 for arr in [manual_clusters_dry_wh, manual_clusters_wh_swamp, manual_clusters_wh_wet, manual_clusters_wh_sink, manual_clusters_u]) else np.empty((0, 6))
-    
+        [manual_clusters_by_class[cid] for cid in registry.ids], axis=0
+    ) if any(len(manual_clusters_by_class[cid]) > 0 for cid in registry.ids) else np.empty((0, 6))
+
     # Compare ML and manual clusters
     COMPARE_DISTANCE_CUTOFF_PIX = config["COMPARE_DISTANCE_CUTOFF_PIX"]
     comparison = compare(ML_clusters, manual_clusters, COMPARE_DISTANCE_CUTOFF_PIX)
@@ -922,14 +781,8 @@ def classifications_to_lat_long_AF(run_folder, run_config):
     )
     
     # Class dictionary for mapping numeric classes to names
-    class_dict = {
-        0: "Dry_WH",
-        1: "WH_swamp",
-        2: "WH_wet", 
-        3: "WH_sink",
-        4: "U"
-    }
-    
+    class_dict = load_class_registry(run_config).id_to_name
+
     # Get all the images that are relevant
     # Involves reading all of the output files from the detections function
     # raw_images = run_config["raw_images"] AF
@@ -1118,14 +971,8 @@ def plot_waterholes(config_path, config):
     print(f'CSVs found: {all_csvs}')
 
     # Dictionary to map numerical classes to names
-    class_names = {
-        0: "Dry_W",
-        1: "WH_swamp",
-        2: "WH_wet",
-        3: "WH_sink",
-        4: "U"  # Unknown
-    }
-    
+    class_names = load_class_registry(config).id_to_name
+
     # Color mapping for different scenarios
     color_map = {
         "match": "g",           # Green for matches

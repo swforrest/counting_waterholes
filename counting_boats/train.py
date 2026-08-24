@@ -20,6 +20,7 @@ import os
 import yaml
 import numpy as np
 from  .boat_utils import image_cutting_support as ics
+from .boat_utils.waterhole_classes import load_class_registry
 
 app = typer.Typer()
 
@@ -144,6 +145,7 @@ def segment(
     os.makedirs(image_out, exist_ok=True)
     
 
+    name_to_id = load_class_registry(cfg, require_thresholds=False).name_to_id
     for i, (image, label) in enumerate(zip(images, labels)):
         ics.segment_image(
             image,
@@ -152,6 +154,7 @@ def segment(
             cfg["STRIDE"],
             im_outdir=image_out,
             labels_outdir=label_out,
+            name_to_id=name_to_id,
         )
     # split the images into training and validation
     if train_val_split == 1:

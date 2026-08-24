@@ -59,6 +59,22 @@ train: D:\Waterholes_project\counting_waterholes\training_v4\train\train\images
 
 val: D:\Waterholes_project\counting_waterholes\training_v4\train\val\images
   # - C:\ML_Software\MoretonVal\images
+
+#-------------------
+##Class definitions## -- REQUIRED, drives the entire pipeline (no class list is
+# hardcoded in the Python code -- the number and names of classes here can be
+# anything; add, remove, or rename freely for a different model).
+#
+# 'names' maps each YOLO class id to a class name (this block is also read
+# directly by YOLOv5 itself via --data, which infers nc = len(names)).
+# Requirements:
+#   - Keys MUST be contiguous integers starting at 0 (0, 1, 2, ... N-1).
+#   - Names can be anything, but must exactly match the LabelMe "label" strings
+#     used when hand-annotating waterholes.
+#   - If you have matching test/deploy configs for this same class set, keep
+#     their 'names:' block IDENTICAL (same names, same ids) -- each config file
+#     is self-contained and read independently, so nothing enforces this across
+#     files automatically.
 names:
   0: Dry_WH
   1: WH_swamp

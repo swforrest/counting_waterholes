@@ -57,3 +57,6 @@ cookie-cutting/labels_pseudo
 !cookie-cutting/tests/test_wh_temporal.py
 
 .pytest_cache
+
+# Claude Code per-machine local settings
+.claude/settings.local.json

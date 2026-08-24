@@ -136,6 +136,8 @@ def process_sub_image_with_labels(args):
             - remove_empty (bool): Flag indicating whether to remove empty images.
             - im_outdir (str): Directory path to save processed images.
             - labels_outdir (str): Directory path to save labels.
+            - name_to_id (dict): class name -> YOLO class id mapping, from the
+                config's 'names:' block.
             - empty_counter (multiprocessing.Value): Counter for empty images.
             - skipped_counter (multiprocessing.Value): Counter for skipped images.
             - progress (multiprocessing.Value): Progress counter.
@@ -156,6 +158,7 @@ def process_sub_image_with_labels(args):
             remove_empty,
             im_outdir,
             labels_outdir,
+            name_to_id,
         ),
         empty_counter,
         skipped_counter,
@@ -226,16 +229,9 @@ def process_sub_image_with_labels(args):
             c._top -= 1
             c._bottom += 1
 
-        classLabel = (
-            0 if c.get_label() == "Dry_WH" \
-                else 1 if c.get_label() == "WH_swamp" \
-                    else 2 if c.get_label() == "WH_wet" \
-                        else 3 if c.get_label() == "WH_sink" \
-                            else 4 if c.get_label() == "U" \
-                                else -1
-        )
+        classLabel = name_to_id.get(c.get_label(), -1)
         if classLabel == -1:
-              continue  # Skip tankers #AF: we have no tankers but I also want to skip some introduced -1
+              continue  # Skip unrecognized labels (e.g. tankers, or any label not in the config's 'names:')
         outfile.write(
             str(classLabel)
             + " "
@@ -264,6 +260,7 @@ def segment_image(
     remove_empty=0.9,
     im_outdir=None,
     labels_outdir=None,
+    name_to_id=None,
 ):
     """
     Segments a large .tif file into smaller .png files for use in a neural network. Also created
@@ -277,11 +274,20 @@ def segment_image(
         overlap_size: The desired amount of overlap that the segmented images should have
         metadata_components: The metadata of the image - useful if the metadata is stripped out in a previous
             operation on the image/file.
+        name_to_id: dict mapping class name (LabelMe "label") -> YOLO class id, from
+            the config's 'names:' block. Required - build it with
+            waterhole_classes.load_class_registry(config, require_thresholds=False).name_to_id
 
     Returns:
 
         None
     """
+    if name_to_id is None:
+        raise ValueError(
+            "segment_image() requires name_to_id (class name -> id mapping), "
+            "built from the config's 'names:' block via "
+            "waterhole_classes.load_class_registry(config, require_thresholds=False).name_to_id"
+        )
     random.seed()
     # Open the image with tifffile - this reads the image in as a 2d array
     openImage = Image.open(image)
@@ -364,6 +370,7 @@ def segment_image(
             remove_empty,
             im_outdir,
             labels_outdir,
+            name_to_id,
         )
         for i in range(sub_images.shape[0])
         for j in range(sub_images.shape[1])

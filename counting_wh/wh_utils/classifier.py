@@ -9,6 +9,7 @@ import pandas as pd
 from datetime import datetime
 from . import image_cutting_support as ics
 from .config import cfg
+from .waterhole_classes import load_class_registry
 from tqdm import tqdm
 import torch
 import stat
@@ -142,7 +143,7 @@ def process_tif_waterhole(
 
     # Separate waterholes by type
     waterhole_types = {}
-    for waterhole_type in range(5):  # 0-4 waterhole types
+    for waterhole_type in distance_cutoffs:  # class ids, as defined by the config's 'names:'
         type_waterholes = classifications[classifications[:, 3].astype(float) == waterhole_type]
         
         # Apply type-specific clustering
@@ -372,18 +373,22 @@ def classify_directory(directory, classify_days=None):
                 print("No metadata file found for", file)
         save_coverage(day, polygons)
 
-def classify_directory_AF(directory, classify_days=None):
+def classify_directory_AF(directory, config, classify_days=None):
     """
     Use for directory of tiff images. Preprocesses, classifies, clusters.
     Writes the results to a csv file called wh_detections.csv in the output directory
 
     Args:
         directory: The directory to classify
+        config: config dict containing 'names:' and 'class_distance_cutoff_px:'
+            (e.g. from parse_config() on a test/deploy config)
         classify_days: list of days to classify in format "DD/MM/YYYY"
 
     Returns:
         None
     """
+    registry = load_class_registry(config)
+
      # Extract unique days from the files
     days = {ics.get_date_from_filename(file) for file in os.listdir(directory)}
     days.discard(None)
@@ -412,14 +417,7 @@ def classify_directory_AF(directory, classify_days=None):
     daily_results = [
         process_day_waterhole(
             files,
-            # Use different cutoffs for different waterhole types
-            {
-                0: cfg["STAT_DISTANCE_CUTOFF_PIX_DRY"],    # Dry_WH
-                1: cfg["STAT_DISTANCE_CUTOFF_PIX_SWAMP"],  # WH_swamp
-                2: cfg["STAT_DISTANCE_CUTOFF_PIX_WET"],    # WH_wet
-                3: cfg["STAT_DISTANCE_CUTOFF_PIX_SINK"],   # WH_sink
-                4: cfg["STAT_DISTANCE_CUTOFF_PIX_U"]       # Unclassified
-            },
+            registry.id_to_threshold,
             day,
             i,
             len(days)
