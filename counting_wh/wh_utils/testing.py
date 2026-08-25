@@ -28,7 +28,7 @@ from .classifier import cluster, process_clusters, read_classifications, pixel2l
 from .classifier import cluster_AF, read_classifications_AF, process_clusters_AF 
 #AF: model run is on the GPU and not my Laptop and the testing.py import doesn't work without. 
 #Took it out but need it back in for the GPU
-from .config import cfg
+from .config import cfg, resolve_device
 from . import image_cutting_support as ics
 from . import heatmap as hm
 from . import iou as iou_utils
@@ -235,7 +235,7 @@ def run_detection(run_folder, config):
                 print(f"Already classified {this_classification_dir}")
                 continue
             os.makedirs(this_classification_dir, exist_ok=True)
-            device = cfg.get("device", "cuda:0")
+            device = resolve_device(config.get("device", "auto"))
             tile_size = cfg.get("img_size", 416)
             # res = os.system(
                 # f"{python} {yolo}/detect.py --imgsz {tile_size} --save-txt --save-conf --weights {weights} --source {root} --device {device} --nosave --conf-thres 0.15"

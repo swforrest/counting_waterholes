@@ -22,6 +22,7 @@ import numpy as np
 import torch
 from  .wh_utils import image_cutting_support as ics
 from .wh_utils.waterhole_classes import load_class_registry
+from .wh_utils.config import resolve_device
 
 app = typer.Typer()
 
@@ -602,6 +603,43 @@ def reorganize_folders(config_file: str = typer.Option("", help="Path to the con
     else:
         print("\nSome operations failed. Please check the error messages above.")
 
+
+
+def write_resolved_dataset_yaml(cfg: dict, config_path: str) -> str:
+    """
+    Write a copy of the config with absolute dataset paths, for YOLOv5 to read.
+
+    YOLOv5 resolves a relative "path:" in its --data file against its OWN
+    install directory, not against this repo, so a relative path that looks
+    correct here would send it looking inside the yolov5 clone. Resolving the
+    dataset paths to absolutes up front lets the checked-in config stay fully
+    relative and portable while YOLOv5 still finds the data.
+
+    Args:
+        cfg: the already-parsed training config
+        config_path: path to the config file it came from
+
+    Returns:
+        Path to the generated yaml to hand to YOLOv5 via --data.
+    """
+    resolved = dict(cfg)
+    # Absolutise every dataset path. The config keeps these relative to the repo
+    # root so it stays portable; YOLOv5 accepts absolute train/val entries, and
+    # this also keeps them valid for the describe/cull commands, which read the
+    # same keys relative to the working directory.
+    resolved["path"] = os.path.abspath(cfg.get("path", "."))
+    for key in ("train", "val", "test"):
+        if isinstance(resolved.get(key), str):
+            resolved[key] = os.path.abspath(resolved[key])
+
+    out_dir = os.path.abspath(cfg["output_dir"])
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, "_yolo_dataset.resolved.yaml")
+    with open(out_path, "w") as f:
+        yaml.safe_dump(resolved, f, sort_keys=False)
+    print(f"YOLOv5 dataset yaml written to {out_path}")
+    return out_path
+
 if __name__ == "__main__":
     print("Starting folder reorganization...")
     reorganize_folders()
@@ -626,50 +664,26 @@ def train(
         None
     """
     cfg = parse_config(config)
-    # train the model on the images in cfg["output_dir"]
-
-
-    # Set the device to be used (GPU or CPU)
-    if torch.cuda.is_available():
-        device = "cuda"
-    elif torch.backends.mps.is_available():  # For Mac M1/M2/M3/M4
-        device = "mps"
-    else:
-        device = "cpu"
+    device = resolve_device(cfg.get("device", "auto"))
     print(f"Using {device} device")
-
-    # if using MPS, set default tensor type to float32 to avoid potential issues
-    if torch.backends.mps.is_available():
-        # Set default tensor type for PyTorch
+    if device == "mps":
+        # MPS is picky about dtypes; keep everything float32
         torch.set_default_dtype(torch.float32)
-        print('Set default tensor type to float32')
-
-
-    # have to use system calls to train yolov5
-    command = f"{cfg['python']} {cfg['yolo_dir']}/train.py --device {device} \
-    --img {cfg['TILE_SIZE']} --batch {cfg['BATCH_SIZE']} \
-    --workers {cfg['workers']} \
-    --epochs {cfg['EPOCHS']} --data {config} \
-    --weights {cfg['weights']} --save-period 50"
-    
-    # # Save current directory
-    # original_dir = os.getcwd()
-
-    # # Change to yolo directory
-    # os.chdir(cfg['yolo_dir'])
-
-    # # Make config path absolute
-    # yolo_abs_path = os.path.abspath(os.path.join(original_dir, config))
-
-    # # have to use system calls to train yolov5
-    # command = f"{cfg['python']} {yolo_abs_path}/train.py --device {device} \
-    # --img {cfg['TILE_SIZE']} --batch {cfg['BATCH_SIZE']} \
-    # --workers {cfg['workers']} \
-    # --epochs {cfg['EPOCHS']} --data {config} \
-    # --weights {cfg['weights']} --save-period 50"
-
+    data_yaml = write_resolved_dataset_yaml(cfg, config)
+    # have to use system calls to train yolov5.
+    # Every path is quoted: repo paths routinely contain spaces (OneDrive,
+    # Program Files, ...) and an unquoted command silently breaks on them.
+    yolo_train = os.path.join(cfg["yolo_dir"], "train.py")
+    command = (
+        f'"{cfg["python"]}" "{yolo_train}"'
+        f' --device {device}'
+        f' --img {cfg["TILE_SIZE"]} --batch {cfg["BATCH_SIZE"]}'
+        f' --workers {cfg["workers"]}'
+        f' --epochs {cfg["EPOCHS"]} --data "{data_yaml}"'
+        f' --weights "{cfg["weights"]}" --save-period 50'
+    )
     # print command in yellow:
-    print(f"\033[93m{command}\033[0m")
+    print(f"\\033[93m{command}\\033[0m")
     os.system(command)
 
 

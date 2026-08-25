@@ -1,0 +1,193 @@
+# =============================================================================
+#  DEPLOYMENT / INFERENCE CONFIG  --  counting_waterholes
+# =============================================================================
+#  Replaces config_deploy_Drive.yaml. Use this to run a trained model over NEW,
+#  UNLABELLED imagery and produce waterhole detections.
+#  If you have ground truth and want accuracy metrics, use config_test.yaml.
+#
+#  The deployment workflow reuses the first half of the testing pipeline:
+#      prepare -> run_detection -> backwards_annotation
+#  so there is no ground-truth comparison, no confusion matrix, and no
+#  COMPARE_IOU_THRESHOLD here.
+#
+#  Everything is relative to the REPOSITORY ROOT, so the same file works for
+#  everyone on macOS, Windows and Linux. Run from the repo root; only the two
+#  paths under "Machine-specific" may need editing.
+#
+#  Path rules:
+#    - Always use forward slashes (/). Python accepts them on Windows too;
+#      backslashes break on macOS and Linux.
+#    - The sub-paths in "Run folder layout" are relative to 'path', not to the
+#      repo root.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Machine-specific -- the only entries you may need to change
+# -----------------------------------------------------------------------------
+
+# Where the repo lives. "." means "the directory you run from" (the repo root).
+proj_root: .
+
+# Your yolov5 clone. The default assumes it sits NEXT TO this repo:
+#     parent/
+#       counting_waterholes/   <- this repo
+#       yolov5/                <- git clone https://github.com/ultralytics/yolov5
+# If yours is elsewhere, put an absolute path here.
+yolo_dir: ../yolov5
+
+# Interpreter used to launch YOLOv5. "python" is correct inside the activated
+# conda env on every OS. If macOS cannot find it, use "python3".
+python: python
+
+# Compute device. "auto" picks the best available on this machine:
+#   NVIDIA GPU -> cuda:0   |   Apple Silicon -> mps   |   otherwise -> cpu
+device: auto
+
+# Trained model to deploy. Either the shipped weights, or the best checkpoint
+# from your own run, e.g. ./runs/train/exp/weights/best.pt
+weights: ./data/NN_weights.pt
+
+
+# -----------------------------------------------------------------------------
+# Run folder layout
+# -----------------------------------------------------------------------------
+# 'path' is the run root, relative to the repo. Everything below is relative to
+# 'path'. Only raw_images needs to exist up front - the rest is created for you.
+#
+#  deployment/
+#    raw_images/          <- YOU put the new .tif files here
+#    pngs/                <- padded PNGs and the generated
+#                            *_labelme_auto.json detection files
+#    segmented_images/    <- tiled images, by date / image name
+#    labels/              <- tiled labels (unused without ground truth, but the
+#                            pipeline still expects the folder)
+#    classifications/     <- raw YOLOv5 detections (delete between reruns)
+#    plots/               <- any figures produced
+#    results/             <- final detection CSV / JSON output
+# -----------------------------------------------------------------------------
+path: ./deployment
+
+raw_images: ./raw_images
+pngs: ./pngs
+segmented_images: ./segmented_images
+labels: ./labels
+classifications: ./classifications
+plots: ./plots
+output_dir: ./results
+
+# Used by the classifier when running straight off a TIFF directory, and by the
+# Planet download helpers. Relative to the repo root, not to 'path'.
+tif_dir: ./images/RawImages
+download_dir: ./images/downloads
+
+
+# -----------------------------------------------------------------------------
+# Tiling -- must match the values the model was TRAINED with
+# -----------------------------------------------------------------------------
+TILE_SIZE: 416
+STRIDE: 104
+img_size: 416
+img_stride: 104
+
+workers: 6
+BATCH_SIZE: 8
+use_comet: False
+
+
+# -----------------------------------------------------------------------------
+# Detection
+# -----------------------------------------------------------------------------
+# Discard any detection below this confidence before clustering. Deployment
+# output is not checked against ground truth, so prefer a higher value than you
+# would use for testing to keep false positives down.
+CONFIDENCE_THRESHOLD: 0.7
+
+
+# -----------------------------------------------------------------------------
+# Class definitions -- REQUIRED, drives the entire pipeline
+# -----------------------------------------------------------------------------
+# No class list is hardcoded in the Python code: the number and names of classes
+# here can be anything.
+#
+#   - Keys MUST be contiguous integers starting at 0 (0, 1, 2, ... N-1).
+#   - Must be IDENTICAL (same names, same ids) to the 'names:' block in the
+#     training config that produced 'weights:' above -- class ids are baked into
+#     the trained model and are not recorded anywhere else.
+names:
+  0: Dry_WH
+  1: WH_swamp
+  2: WH_wet
+  3: WH_sink
+  4: U
+
+
+# -----------------------------------------------------------------------------
+# Reconciling detections -- how two boxes are judged to be the same waterhole
+# -----------------------------------------------------------------------------
+# 'OVERLAP_METRIC' defines HOW overlap is measured. This is the knob to change
+# if merging misbehaves on your waterhole shapes.
+#   iou   - intersection / union (default). Penalises a size mismatch, so a
+#           small waterhole whose box sits inside a big irregular neighbour is
+#           KEPT SEPARATE. Right for round/elliptical holes, and safe when a
+#           large odd-shaped hole can engulf a smaller one.
+#   iomin - intersection / area of the SMALLER box. A box fully inside another
+#           scores 1.0, so containment always merges. Use only if the model
+#           emits a tight box and a loose box for the SAME waterhole; it will
+#           also swallow a genuinely distinct small waterhole inside a big box.
+# Both are strict about non-overlap: boxes that do not touch score 0 and never
+# merge, however close their centres.
+OVERLAP_METRIC: iou
+
+# Minimum overlap for two detections of the SAME class to be merged into one
+# waterhole, per class.
+#   - Keyed by class NAME -- must match a name in 'names:' above exactly.
+#   - Range 0-1. LOWER = more permissive (merges more); HIGHER = stricter.
+#   - EVERY class in 'names:' needs an entry, or the run fails fast naming the
+#     missing class. Extra entries are ignored with a warning.
+#
+# Keep these the SAME as the values you validated with in config_test.yaml,
+# otherwise your deployment counts will not match your measured accuracy.
+class_iou_threshold:
+  Dry_WH: 0.5
+  WH_swamp: 0.5
+  WH_wet: 0.5
+  WH_sink: 0.5
+  U: 0.5
+
+# Used when reclustering detections across a whole day in lat/long space.
+# Roughly the image resolution: at 3m/pixel, 10px is about 30m, which near
+# -27 degrees latitude is about 0.0003 degrees.
+STAT_DISTANCE_CUTOFF_LATLONG: 0.00025
+
+
+# -----------------------------------------------------------------------------
+# Plotting
+# -----------------------------------------------------------------------------
+plot_box_size: 100
+stitch_first: True
+
+
+# -----------------------------------------------------------------------------
+# Pipeline stages
+# -----------------------------------------------------------------------------
+# Only used when driving the pipeline by module. The notebooks call each step
+# explicitly, so these stay False there.
+# The analyse block is kept because the task runner walks the whole tree, but
+# every entry stays False: those steps need ground truth, which deployment
+# imagery does not have.
+tasks:
+  prepare: False               # TIFF -> padded PNG
+  segment: False               # tile the images
+  run_detection: False         # run YOLOv5 over the tiles
+  backwards_annotation: False  # detections -> LabelMe JSON
+
+  analyse:
+    compare_detections_to_ground_truth: False
+    plots:
+      confusion_matrix: False
+      boat_count_compare: False
+    images:
+      all_mistakes: False
+      subimage_confidence: False
+      coverage_heatmap: False

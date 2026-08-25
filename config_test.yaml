@@ -1,0 +1,204 @@
+# =============================================================================
+#  TESTING / VALIDATION CONFIG  --  counting_waterholes
+# =============================================================================
+#  Replaces the per-user config_test_* variants. Use this when you HAVE ground
+#  truth labels and want to measure the model: detections are matched against
+#  your labels to produce comparison CSVs, a confusion matrix and plots.
+#  For running on new unlabelled imagery, use config_deploy.yaml instead.
+#
+#  Everything is relative to the REPOSITORY ROOT, so the same file works for
+#  everyone on macOS, Windows and Linux. Run from the repo root; only the two
+#  paths under "Machine-specific" may need editing.
+#
+#  Path rules:
+#    - Always use forward slashes (/). Python accepts them on Windows too;
+#      backslashes break on macOS and Linux.
+#    - The sub-paths in "Run folder layout" are relative to 'path', not to the
+#      repo root. The code joins them as path + sub-path.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Machine-specific -- the only entries you may need to change
+# -----------------------------------------------------------------------------
+
+# Where the repo lives. "." means "the directory you run from" (the repo root).
+proj_root: .
+
+# Your yolov5 clone. The default assumes it sits NEXT TO this repo:
+#     parent/
+#       counting_waterholes/   <- this repo
+#       yolov5/                <- git clone https://github.com/ultralytics/yolov5
+# If yours is elsewhere, put an absolute path here.
+yolo_dir: ../yolov5
+
+# Interpreter used to launch YOLOv5. "python" is correct inside the activated
+# conda env on every OS. If macOS cannot find it, use "python3".
+python: python
+
+# Compute device. "auto" picks the best available on this machine:
+#   NVIDIA GPU -> cuda:0   |   Apple Silicon -> mps   |   otherwise -> cpu
+device: auto
+
+# Trained model to evaluate. Either the shipped weights, or the best checkpoint
+# from your own run, e.g. ./runs/train/exp/weights/best.pt
+weights: ./data/NN_weights.pt
+
+
+# -----------------------------------------------------------------------------
+# Run folder layout
+# -----------------------------------------------------------------------------
+# 'path' is the run root, relative to the repo. Everything below is relative to
+# 'path'. Only raw_images needs to exist up front - the rest is created for you.
+#
+#  testing/
+#    raw_images/          <- YOU put the .tif files here
+#    pngs/                <- padded PNGs, your LabelMe .json, and the
+#                            generated *_labelme_auto.json files
+#    segmented_images/    <- tiled images, by date / image name
+#    labels/              <- tiled ground-truth labels
+#    classifications/     <- raw YOLOv5 detections (delete between reruns)
+#    plots/               <- confusion matrix, comparison figures
+#    results/             <- summary output
+# -----------------------------------------------------------------------------
+path: ./testing
+
+raw_images: ./raw_images
+pngs: ./pngs
+segmented_images: ./segmented_images
+labels: ./labels
+classifications: ./classifications
+plots: ./plots
+output_dir: ./results
+
+
+# -----------------------------------------------------------------------------
+# Tiling and training hyperparameters
+# -----------------------------------------------------------------------------
+# Tile size and stride must match between training, testing and deployment.
+# STRIDE is the step between tiles (104 = 25% overlap of a 416px tile), which
+# keeps waterholes on a tile edge detectable in the neighbouring tile.
+TILE_SIZE: 416
+STRIDE: 104
+img_size: 416
+img_stride: 104
+
+BATCH_SIZE: 8      # lower this if you run out of GPU memory
+EPOCHS: 100
+workers: 6         # dataloader workers; on Windows try 0 if you hit issues
+cache: False       # cache images in RAM for speed (needs plenty of memory)
+
+# Comet experiment tracking. If True, comet must be configured
+# (env vars or a .comet.config file).
+use_comet: False
+
+
+# -----------------------------------------------------------------------------
+# Detection
+# -----------------------------------------------------------------------------
+# Discard any detection below this confidence before clustering.
+CONFIDENCE_THRESHOLD: 0.7
+
+
+# -----------------------------------------------------------------------------
+# Class definitions -- REQUIRED, drives the entire pipeline
+# -----------------------------------------------------------------------------
+# No class list is hardcoded in the Python code: the number and names of classes
+# here can be anything.
+#
+#   - Keys MUST be contiguous integers starting at 0 (0, 1, 2, ... N-1).
+#   - Must be IDENTICAL (same names, same ids) to the 'names:' block in the
+#     training config that produced 'weights:' above -- class ids are baked into
+#     the trained model and are not recorded anywhere else.
+names:
+  0: Dry_WH
+  1: WH_swamp
+  2: WH_wet
+  3: WH_sink
+  4: U
+
+
+# -----------------------------------------------------------------------------
+# Reconciling detections -- how two boxes are judged to be the same waterhole
+# -----------------------------------------------------------------------------
+# 'OVERLAP_METRIC' defines HOW overlap is measured. This is the knob to change
+# if merging misbehaves on your waterhole shapes.
+#   iou   - intersection / union (default). Penalises a size mismatch, so a
+#           small waterhole whose box sits inside a big irregular neighbour is
+#           KEPT SEPARATE. Right for round/elliptical holes, and safe when a
+#           large odd-shaped hole can engulf a smaller one.
+#   iomin - intersection / area of the SMALLER box. A box fully inside another
+#           scores 1.0, so containment always merges. Use only if the model
+#           emits a tight box and a loose box for the SAME waterhole; it will
+#           also swallow a genuinely distinct small waterhole inside a big box.
+# Both are strict about non-overlap: boxes that do not touch score 0 and never
+# merge, however close their centres.
+OVERLAP_METRIC: iou
+
+# Minimum overlap for two detections of the SAME class to be merged into one
+# waterhole, per class.
+#   - Keyed by class NAME -- must match a name in 'names:' above exactly.
+#   - Range 0-1. LOWER = more permissive (merges more); HIGHER = stricter.
+#   - EVERY class in 'names:' needs an entry, or the run fails fast naming the
+#     missing class. Extra entries are ignored with a warning.
+#
+# NOTE: 0.5 is the conventional starting point; these still need tuning on your
+# data. There is no conversion from the old pixel cutoffs, so the previous
+# per-class tuning did NOT carry over -- WH_swamp used to be the most permissive
+# class, so you may want a lower threshold for it.
+class_iou_threshold:
+  Dry_WH: 0.5
+  WH_swamp: 0.5
+  WH_wet: 0.5
+  WH_sink: 0.5
+  U: 0.5
+
+# Minimum overlap for a detection to count as matching a GROUND-TRUTH label.
+# Matching is greedy and one-to-one: each detection pairs with at most one label
+# (highest overlap first), so unmatched detections are false positives and
+# unmatched labels are false negatives.
+COMPARE_IOU_THRESHOLD: 0.5
+
+# Used when reclustering detections across a whole day in lat/long space.
+# Roughly the image resolution: at 3m/pixel, 10px is about 30m, which near
+# -27 degrees latitude is about 0.0003 degrees.
+STAT_DISTANCE_CUTOFF_LATLONG: 0.00025
+
+
+# -----------------------------------------------------------------------------
+# Plotting
+# -----------------------------------------------------------------------------
+# Side length in pixels of the box drawn around each waterhole in comparison
+# figures. Purely cosmetic; tune so the boxes are readable at your image scale.
+plot_box_size: 100
+# Stitch the tiles back into one image per scene before plotting. Set False to
+# plot on the individual tiles instead (faster, but harder to interpret).
+stitch_first: True
+
+
+# -----------------------------------------------------------------------------
+# Pipeline stages
+# -----------------------------------------------------------------------------
+# Only used when driving the pipeline by module (counting_boats.testing).
+# The notebooks call each step explicitly, so these stay False there.
+tasks:
+  # Not needed again if already done and the paths above exist
+  prepare: False               # TIFF -> padded PNG, ready for labelling
+  segment: False               # tile the images and their labels
+  run_detection: False         # run YOLOv5 over the tiles
+  backwards_annotation: False  # detections -> LabelMe JSON
+
+  analyse:
+    # Main step: cluster detections and compare to ground truth, writing the
+    # comparison CSVs. Required by everything below.
+    compare_detections_to_ground_truth: False
+
+    plots:
+      confusion_matrix: False    # per-class confusion matrix
+      boat_count_compare: False  # detected vs labelled counts per image
+    images:
+      all_mistakes: False        # collate every mismatch into comparison images
+      # Number of randomly chosen waterholes to show per-tile confidence for.
+      # 0 or False disables it; set an integer to enable.
+      subimage_confidence: False
+      coverage_heatmap: False    # GeoTIFF heatmap of image coverage
