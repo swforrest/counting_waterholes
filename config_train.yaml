@@ -65,12 +65,12 @@ weights: yolov5s.pt
 # -----------------------------------------------------------------------------
 
 # Source .tif files for training
-raw_images: ./training/raw_images
+raw_images: ./training/raw_images 
 # Used by extract_zip(); same folder keeps the workflow uniform
 tif_dir: ./training/raw_images
 
 # Padded PNGs, LabelMe .json, and the segmentation output
-output_dir: ./training/output
+output_dir: ./training/output/waterhole_river
 
 # Where segment() leaves its output, consumed by cull_AF()/reorganize_folders()
 segmented_images: ./training/output/images/train
