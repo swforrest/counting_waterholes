@@ -116,14 +116,17 @@ def process_tif(
 
 def process_tif_waterhole(
     file: str, 
-    distance_cutoffs: dict
+    distance_cutoffs: dict,
+    overlap_metric: str = "iou"
 ) -> np.ndarray:
     """
     Process a single tiff file for waterhole detection.
 
     Args:
         file: The tiff file to process
-        distance_cutoffs: Dictionary of per-class IoU thresholds (0-1), keyed by class id
+        distance_cutoffs: Dictionary of per-class overlap thresholds (0-1), keyed by class id
+        overlap_metric: overlap measure used to merge duplicates ("iou" or "iomin"),
+            from the config's OVERLAP_METRIC key
 
     Returns:
         Array of classified waterholes
@@ -150,7 +153,7 @@ def process_tif_waterhole(
         # Apply type-specific clustering
         if len(type_waterholes) > 0:
             clustered_waterholes = cluster_AF(
-                type_waterholes, distance_cutoffs[waterhole_type], metric="iou"
+                type_waterholes, distance_cutoffs[waterhole_type], metric=overlap_metric
             )
             processed_waterholes = process_clusters_AF(clustered_waterholes)
             
@@ -223,17 +226,20 @@ def process_day_waterhole(
     distance_cutoffs: dict,
     day: str,
     day_index: int,
-    total_days: int
+    total_days: int,
+    overlap_metric: str = "iou"
 ) -> tuple[np.ndarray, str]:
     """
     Process a day's images for waterhole detection.
 
     Args:
         files: List of files to process for the day
-        distance_cutoffs: Dictionary of distance cutoffs for each waterhole type
+        distance_cutoffs: Dictionary of per-class overlap thresholds (0-1), keyed by class id
         day: The day being processed
         day_index: Index of the current day
         total_days: Total number of days to process
+        overlap_metric: overlap measure used to merge duplicates ("iou" or "iomin"),
+            from the config's OVERLAP_METRIC key
 
     Returns:
         Tuple of classified waterholes and the day
@@ -244,7 +250,8 @@ def process_day_waterhole(
     all_waterhole_classifications = [
         process_tif_waterhole(
             file, 
-            distance_cutoffs
+            distance_cutoffs,
+            overlap_metric
         ) for file in files
     ]
 
@@ -391,6 +398,7 @@ def classify_directory_AF(directory, config, classify_days=None):
         None
     """
     registry = load_class_registry(config)
+    overlap_metric = iou_utils.validate_metric(config.get("OVERLAP_METRIC", "iou"))
 
      # Extract unique days from the files
     days = {ics.get_date_from_filename(file) for file in os.listdir(directory)}
@@ -423,7 +431,8 @@ def classify_directory_AF(directory, config, classify_days=None):
             registry.id_to_threshold,
             day,
             i,
-            len(days)
+            len(days),
+            overlap_metric
         )
         for i, (files, day) in enumerate(daily_data)
     ]
@@ -1056,17 +1065,19 @@ def cluster_AF(
         classifications: The classifications to cluster, in the form x, y, confidence, class, width, height
         cutoff: The cutoff to use for clustering. Its meaning depends on `metric`:
             - metric="distance": maximum centre-to-centre distance in pixels.
-            - metric="iou": minimum IoU (0-1) for two boxes to be merged.
-        metric: "iou" to reconcile boxes by Intersection over Union (accounts for
-            box size and shape), or "distance" for the legacy centre-distance
-            behaviour. Defaults to "distance" so the boat pipeline is unaffected.
+            - otherwise: minimum overlap score (0-1) for two boxes to be merged.
+        metric: how to decide two boxes are the same object. "iou" (intersection
+            over union) or "iomin" (intersection over the smaller box) reconcile
+            by area overlap and account for box size and shape - see boat_utils.iou.
+            "distance" keeps the legacy centre-distance behaviour and is the
+            default so the boat pipeline is unaffected.
 
     Returns:
         The classifications with an additional column for the cluster number
         Columns: x, y, confidence, class, width, height, cluster
     """
-    if metric not in ("distance", "iou"):
-        raise ValueError(f"cluster_AF: metric must be 'distance' or 'iou', got {metric!r}")
+    if metric != "distance":
+        iou_utils.validate_metric(metric)
 
     if classifications.shape[0] < 2:
         # add cluster = 1 to point
@@ -1074,11 +1085,11 @@ def cluster_AF(
             classifications = np.array([np.append(classifications[0], 1)])
         return classifications
 
-    if metric == "iou":
-        # Work in (1 - IoU) space so that a higher IoU means a smaller distance.
-        # An IoU threshold of t therefore becomes a linkage cutoff of 1 - t.
-        distances = iou_utils.iou_condensed_distance(
-            iou_utils.extract_boxes(classifications)
+    if metric != "distance":
+        # Work in (1 - overlap) space so a higher overlap means a smaller
+        # distance. An overlap threshold of t becomes a linkage cutoff of 1 - t.
+        distances = iou_utils.overlap_condensed_distance(
+            iou_utils.extract_boxes(classifications), metric=metric
         )
         cutoff = 1.0 - cutoff
     else:

@@ -292,6 +292,7 @@ def backwards_annotation_AF(run_folder, config):
     """
     config = parse_config(config)  # To solve the error: 'str' object has no attribute 'get'
     registry = load_class_registry(config)
+    overlap_metric = iou_utils.validate_metric(config.get("OVERLAP_METRIC", "iou"))
     run_folder = os.path.normpath(run_folder)
     detection_dir = os.path.join(config["path"], config["classifications"])
     print(f"Detection directory {detection_dir}")
@@ -319,7 +320,8 @@ def backwards_annotation_AF(run_folder, config):
             for class_id in registry.ids:
                 class_classifications = ML_classifications[ML_classifications[:, 3] == float(class_id)]
                 class_clusters = cluster_AF(
-                    class_classifications, registry.id_to_threshold[class_id], metric="iou"
+                    class_classifications, registry.id_to_threshold[class_id],
+                    metric=overlap_metric
                 )
                 ML_clusters_by_class[class_id] = process_clusters_AF(class_clusters)
 
@@ -477,6 +479,7 @@ def process_image_AF(
     label for the waterhole detection project, as defined by the config.
     """
     registry = load_class_registry(config)
+    overlap_metric = iou_utils.validate_metric(config.get("OVERLAP_METRIC", "iou"))
     # labels will be in a parallel directory to detections
     # e.g detections = "Detections/b/../d", labels = "Labels/b/../d"
 
@@ -534,7 +537,7 @@ def process_image_AF(
 
         class_ml = ML_classifications[ML_classifications[:, 3] == float(class_id)]
         ML_clusters_by_class[class_id] = process_clusters_AF(
-            cluster_AF(class_ml, cutoff, metric="iou")
+            cluster_AF(class_ml, cutoff, metric=overlap_metric)
         )
 
         class_manual = (
@@ -543,7 +546,7 @@ def process_image_AF(
             else np.empty((0, 7))
         )
         manual_clusters_by_class[class_id] = process_clusters_AF(
-            cluster_AF(class_manual, cutoff, metric="iou")
+            cluster_AF(class_manual, cutoff, metric=overlap_metric)
         )
 
         # Save each class's ML clusters separately
@@ -563,12 +566,14 @@ def process_image_AF(
 
     # Compare ML and manual clusters
     COMPARE_IOU_THRESHOLD = config["COMPARE_IOU_THRESHOLD"]
-    comparison = compare(ML_clusters, manual_clusters, COMPARE_IOU_THRESHOLD)
+    comparison = compare(
+        ML_clusters, manual_clusters, COMPARE_IOU_THRESHOLD, overlap_metric
+    )
     return comparison
 
 
 
-def compare(ml: np.ndarray, manual: np.ndarray, iou_threshold):
+def compare(ml: np.ndarray, manual: np.ndarray, iou_threshold, overlap_metric: str = "iou"):
     """
     Match detections against ground-truth labels by Intersection over Union.
 
@@ -585,7 +590,9 @@ def compare(ml: np.ndarray, manual: np.ndarray, iou_threshold):
 
         ml: list of clusters in form [x, y, confidence, class, width, height]
         manual: list of clusters in form [x, y, confidence, class, width, height]
-        iou_threshold: minimum IoU (0-1) for a detection to count as matching a label
+        iou_threshold: minimum overlap (0-1) for a detection to count as matching a label
+        overlap_metric: overlap measure, "iou" or "iomin", from the config's
+            OVERLAP_METRIC key. See boat_utils.iou for the difference.
 
     Returns:
 
@@ -601,7 +608,10 @@ def compare(ml: np.ndarray, manual: np.ndarray, iou_threshold):
         return []
 
     pairs = iou_utils.greedy_match(
-        iou_utils.extract_boxes(ml), iou_utils.extract_boxes(manual), iou_threshold
+        iou_utils.extract_boxes(ml),
+        iou_utils.extract_boxes(manual),
+        iou_threshold,
+        metric=overlap_metric,
     )
     matched_ml = {i for i, _ in pairs}
     matched_manual = {j for _, j in pairs}

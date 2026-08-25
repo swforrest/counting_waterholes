@@ -100,6 +100,21 @@ names:
   3: WH_sink
   4: U
 
+# 'OVERLAP_METRIC' defines HOW overlap between two boxes is measured. This is the
+# knob to change if merging is not behaving well on your waterhole shapes.
+#   iou   - intersection / union (default). Penalises a size mismatch, so a small
+#           waterhole whose box sits inside a big irregular neighbour's box scores
+#           LOW and is KEPT AS A SEPARATE waterhole. Right for round/elliptical
+#           holes, and safe when a big odd-shaped hole can engulf a smaller one.
+#   iomin - intersection / area of the SMALLER box. A box fully inside another
+#           scores 1.0, so containment always merges. Only use this if the model
+#           emits a tight box and a loose box for the SAME waterhole; be aware it
+#           will also swallow a genuinely distinct small waterhole sitting inside
+#           a bigger box.
+# Both are strict about non-overlap: boxes that do not touch score 0 and never
+# merge, however close their centres.
+OVERLAP_METRIC: iou
+
 # 'class_iou_threshold' is the Intersection over Union (IoU) above which two
 # detections of the SAME class are treated as the same waterhole and merged.
 # IoU = area of overlap / area of union, so it accounts for box size AND shape,
