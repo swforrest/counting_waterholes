@@ -36,13 +36,30 @@ TEMP = os.path.join(os.getcwd(), "Boat_Temp")
 TEMP_PNG = os.path.join(os.getcwd(), "Boat_Temp_PNG")
 """ Temporary directory for storing png version of tif images """
 
-TILE_SIZE = cfg["TILE_SIZE"]
-STRIDE = cfg["STRIDE"]
+TILE_SIZE = cfg.get("TILE_SIZE", 416)
+STRIDE = cfg.get("STRIDE", 104)
 
 SAVE_COVERAGE = True
 
 
-model = torch.hub.load(cfg["yolo_dir"], "custom", path=cfg["weights"], source="local")
+_model = None
+
+
+def get_model():
+    """
+    Load the YOLOv5 model, once, on first use.
+
+    Loading used to happen at import time, which meant merely importing this
+    module read a checkpoint off disk and required a valid yolo_dir/weights in
+    config.yml - so an unrelated notebook could fail on import alone. Deferring
+    it keeps imports cheap and lets the per-stage configs supply the paths.
+    """
+    global _model
+    if _model is None:
+        _model = torch.hub.load(
+            cfg["yolo_dir"], "custom", path=cfg["weights"], source="local"
+        )
+    return _model
 
 
 def main(save_coverage=True, days=None):
@@ -579,7 +596,7 @@ def detect_from_tif(
             continue
         # run the model
         with torch.no_grad():
-            prediction = model(sub_image)
+            prediction = get_model()(sub_image)
         # convert to numpy
         prediction = prediction.xywhn
         if len(prediction) == 0:
@@ -671,7 +688,7 @@ def detect_from_tif_AF(
         
         # Run the model
         with torch.no_grad():
-            prediction = model(sub_image)
+            prediction = get_model()(sub_image)
         
         # Convert to numpy
         prediction = prediction.xywhn

@@ -729,9 +729,14 @@ def predict_tile(
     confidence = np.full(flat.shape[0], np.nan) if with_confidence else None
 
     if observed.any():
-        predicted[observed] = model.predict(flat[observed]).astype(np.uint8)
+        # A DataFrame, not a bare array: the model was fitted on named columns,
+        # so this lets sklearn CHECK the order matches rather than warn that it
+        # cannot. Applying a model with permuted features is the one failure
+        # mode that produces confident nonsense instead of an error.
+        frame = pd.DataFrame(flat[observed], columns=feature_names)
+        predicted[observed] = model.predict(frame).astype(np.uint8)
         if with_confidence and hasattr(model, "predict_proba"):
-            confidence[observed] = model.predict_proba(flat[observed]).max(axis=1)
+            confidence[observed] = model.predict_proba(frame).max(axis=1)
 
     return (
         predicted.reshape(tile.shape),

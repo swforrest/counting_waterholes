@@ -7,16 +7,33 @@ usage:
 """
 
 import os
+import warnings
+
 import yaml
 
 config_path = os.path.join(os.getcwd(), "config.yml")
 
-with open(config_path, "r") as ymlfile:
-    cfg = yaml.load(ymlfile, Loader=yaml.FullLoader)
-    os.makedirs(cfg["output_dir"], exist_ok=True)
+# config.yml drives the automated Planet acquisition pipeline only. The
+# training / testing / deployment workflows each pass their own config file
+# explicitly, so this is optional: if it is absent (for example it has been
+# archived), fall back to an empty cfg rather than making the whole package
+# impossible to import.
+if os.path.exists(config_path):
+    with open(config_path, "r") as ymlfile:
+        cfg = yaml.load(ymlfile, Loader=yaml.FullLoader) or {}
+    if cfg.get("output_dir"):
+        os.makedirs(cfg["output_dir"], exist_ok=True)
     cfg["tif_dir"] = cfg.get(
-        "tif_dir", os.path.join(cfg["proj_root"], "images", "RawImages")
+        "tif_dir", os.path.join(cfg.get("proj_root", "."), "images", "RawImages")
     )  # This is generated so not included in the config file
+else:
+    cfg = {}
+    warnings.warn(
+        f"No config.yml found at {config_path}. That file is only needed for the "
+        "automated Planet acquisition pipeline; training, testing and deployment "
+        "pass their own config explicitly and are unaffected.",
+        stacklevel=2,
+    )
 
 
 def resolve_device(value="auto"):

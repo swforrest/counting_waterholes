@@ -722,6 +722,7 @@ def plot_prediction_map(
     footprint: np.ndarray | None = None,
     held_out: bool = True,
     alphaearth: np.ndarray | None = None,
+    box_mask: np.ndarray | None = None,
     figsize: tuple[float, float] = (17, 4.3),
 ):
     """Where the model is right and wrong, spatially.
@@ -800,6 +801,12 @@ def plot_prediction_map(
                 f"confidence (median {median:.2f})\nstretched {low:.2f}-1.00", fontsize=9
             )
 
+        # Cyan solid = footprint (this basin), yellow dotted = the labelled
+        # bounding box (this site's extent). Anything outside the box belongs to
+        # a neighbouring waterhole, which half these tiles contain.
+        if box_mask is not None and box_mask.any():
+            axis.contour(box_mask, levels=[0.5], colors="#ffff00",
+                         linewidths=1.0, linestyles="dotted")
         if footprint is not None and footprint.any():
             axis.contour(footprint, levels=[0.5], colors="#00ffff", linewidths=1.0)
         axis.set_xticks([])
@@ -856,6 +863,122 @@ def plot_error_by_class_map(
     figure.suptitle(
         f"site {tile.key.site_id} {tile.key.year_month} — "
         f"green = correct, other colours = what it was mistaken for", fontsize=10,
+    )
+    return figure
+
+
+# --- composition through time ----------------------------------------------
+
+
+def plot_site_composition(
+    table: pd.DataFrame,
+    site_id: str,
+    cfg: Config,
+    denominator: str = "bbox",
+    figsize: tuple[float, float] = (12, 4.2),
+):
+    """Stacked-area composition for one waterhole through time.
+
+    Months flagged as isolated-wet are marked rather than removed: the flag says
+    the value is suspicious, not that it is wrong, and deciding is the analyst's
+    job.
+    """
+    site = table[table["site_id"] == site_id].sort_values(["year", "month"]).copy()
+    if site.empty:
+        raise KeyError(f"no rows for site {site_id}")
+
+    site["date"] = pd.to_datetime(site["year_month"] + "-01")
+    names = [d.name for d in cfg.classes if not d.ignore]
+    columns = [f"{denominator}_frac_{name}" for name in names]
+
+    figure, axis = plt.subplots(figsize=figsize, constrained_layout=True)
+    axis.stackplot(
+        site["date"],
+        *[site[column].fillna(0.0) for column in columns],
+        labels=names,
+        colors=[cfg.class_by_name(name).colour for name in names],
+    )
+
+    # Unobserved months would otherwise read as an abrupt change in composition.
+    missing = site[site[f"{denominator}_n_classified"].fillna(0) == 0]
+    for date in missing["date"]:
+        axis.axvspan(date, date, color="#ffffff", alpha=0.0)
+    if len(missing):
+        axis.scatter(missing["date"], np.full(len(missing), 1.02), marker="v",
+                     s=18, color="#999999", label="no data")
+
+    flagged = site[site.get("flag_isolated_wet", False) == True]  # noqa: E712
+    if len(flagged):
+        axis.scatter(flagged["date"], np.full(len(flagged), 1.06), marker="*",
+                     s=45, color="#D62728", label="isolated wet (flagged)")
+
+    axis.set_ylim(0, 1.10)
+    axis.set_ylabel(f"fraction within the {denominator}")
+    axis.set_title(
+        f"site {site_id} — surface composition through time "
+        f"({site['label'].iloc[0] if 'label' in site else ''})", fontsize=10,
+    )
+    axis.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=8)
+    return figure
+
+
+def plot_composition_heatmap(
+    table: pd.DataFrame,
+    cfg: Config,
+    class_name: str = "open_water",
+    denominator: str = "bbox",
+    figsize: tuple[float, float] = (13, 9),
+):
+    """Site x month heatmap of one class's fraction, all waterholes at once.
+
+    The seasonal banding should be obvious as vertical stripes; a site that looks
+    unlike its neighbours is either genuinely different or a site the model does
+    not handle, and the confidence column is the way to tell those apart.
+    """
+    column = f"{denominator}_frac_{class_name}"
+    if column not in table.columns:
+        raise KeyError(f"{column} not in the table")
+
+    wide = table.pivot_table(
+        index="site_id", columns="year_month", values=column, aggfunc="mean"
+    )
+
+    figure, axis = plt.subplots(figsize=figsize, constrained_layout=True)
+    image = axis.imshow(wide.to_numpy(), aspect="auto", cmap="YlGnBu",
+                        vmin=0, vmax=float(np.nanpercentile(wide.to_numpy(), 99)) or 1)
+
+    step = max(1, len(wide.columns) // 14)
+    axis.set_xticks(range(0, len(wide.columns), step))
+    axis.set_xticklabels(wide.columns[::step], rotation=45, ha="right", fontsize=7)
+    axis.set_yticks(range(len(wide.index)))
+    axis.set_yticklabels(wide.index, fontsize=5)
+    axis.set_title(f"{class_name} fraction within the {denominator}", fontsize=10)
+    plt.colorbar(image, ax=axis, fraction=0.02, pad=0.01, label="fraction")
+    return figure
+
+
+def plot_composition_quality(table: pd.DataFrame, figsize: tuple[float, float] = (11, 3.6)):
+    """Where the composition series can and cannot be trusted."""
+    figure, (quality_axis, confidence_axis) = plt.subplots(
+        1, 2, figsize=figsize, constrained_layout=True
+    )
+
+    order = ["good", "fair", "thin", "poor"]
+    counts = table["data_quality"].value_counts().reindex(order).fillna(0)
+    colours = {"good": "#2CA02C", "fair": "#1D6FA5", "thin": "#B5651D", "poor": "#D62728"}
+    quality_axis.bar(order, counts, color=[colours[k] for k in order])
+    quality_axis.set_ylabel("site-months")
+    quality_axis.set_title(
+        f"data quality ({100 * counts.get('good', 0) / len(table):.0f}% good)", fontsize=10
+    )
+
+    by_site = table.groupby("site_id")["mean_confidence"].mean().sort_values()
+    confidence_axis.hist(by_site, bins=30, color="#1D6FA5")
+    confidence_axis.set_xlabel("mean prediction confidence, per site")
+    confidence_axis.set_ylabel("sites")
+    confidence_axis.set_title(
+        "the model saw 27 sites and is applied to 187;\nlow confidence marks the unlike ones",
+        fontsize=9,
     )
     return figure
 

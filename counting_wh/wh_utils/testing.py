@@ -79,7 +79,7 @@ def prepare(run_folder, config):
         None
     """
     config = parse_config(config)
-    img_folder = config["raw_images"]  # folder with the tif files
+    img_folder = os.path.join(config["path"], config["raw_images"])  # folder with the tif files
     save_folder = os.path.join(config["path"], config["pngs"])
     os.makedirs(save_folder, exist_ok=True)
     print('read the file path correctly')
@@ -575,13 +575,13 @@ def process_image_AF(
 
 def compare(ml: np.ndarray, manual: np.ndarray, iou_threshold, overlap_metric: str = "iou"):
     """
-    Match detections against ground-truth labels by Intersection over Union.
+    Match detections against ground-truth labels by box overlap.
 
-    Uses greedy one-to-one matching (COCO style): every candidate pair with an
-    IoU of at least `iou_threshold` is considered, highest IoU first, and each
-    box on either side is consumed at most once. That gives a clean
-    true-positive / false-positive / false-negative split, so the counts feeding
-    the confusion matrix are trustworthy.
+    Uses greedy one-to-one matching (COCO style): every candidate pair scoring at
+    least `iou_threshold` is considered, highest overlap first, and each box on
+    either side is consumed at most once. That gives a clean true-positive /
+    false-positive / false-negative split, so the counts feeding the confusion
+    matrix are trustworthy.
 
     Replaces the previous centre-distance clustering, which ignored box size and
     shape and could lump several detections and several labels into one blob.
@@ -596,9 +596,23 @@ def compare(ml: np.ndarray, manual: np.ndarray, iou_threshold, overlap_metric: s
 
     Returns:
 
-        list of clusters in form [x, y, ml_class, manual_class], where a class of
-        -1 means "absent from that set" (unmatched detection -> manual_class -1,
-        missed label -> ml_class -1).
+        List of dicts, one per comparison entry. Always carries x, y, ml_class
+        and manual_class (a class of -1 meaning "absent from that set"), which is
+        what the comparison CSV and confusion matrix use. The remaining fields
+        record how well the boxes lined up and how big they were, which the
+        assessment functions in boat_utils.evaluation build on:
+
+            match_type          matched | false_positive | false_negative
+            overlap             score of the matched pair (NaN if unmatched)
+            ml_best_overlap     best overlap this detection had with ANY label
+            manual_best_overlap best overlap this label had with ANY detection
+            ml_w/h/area         detection box size in pixels (NaN if missed)
+            ml_confidence       detection confidence (NaN if missed)
+            manual_w/h/area     label box size in pixels (NaN if a false positive)
+
+        The two *_best_overlap fields are what makes a threshold sweep possible
+        after the fact: they are recorded regardless of whether the pair actually
+        met `iou_threshold`.
     """
     ml = np.asarray(ml)
     manual = np.asarray(manual)
@@ -607,42 +621,127 @@ def compare(ml: np.ndarray, manual: np.ndarray, iou_threshold, overlap_metric: s
     if n_ml == 0 and n_manual == 0:
         return []
 
+    ml_boxes = iou_utils.extract_boxes(ml)
+    manual_boxes = iou_utils.extract_boxes(manual)
+    scores = iou_utils.overlap_matrix(ml_boxes, manual_boxes, metric=overlap_metric)
+
+    # Best available partner for each box, regardless of the threshold. Zero when
+    # there is nothing on the other side at all.
+    ml_best = scores.max(axis=1) if scores.size else np.zeros(n_ml)
+    manual_best = scores.max(axis=0) if scores.size else np.zeros(n_manual)
+
     pairs = iou_utils.greedy_match(
-        iou_utils.extract_boxes(ml),
-        iou_utils.extract_boxes(manual),
-        iou_threshold,
-        metric=overlap_metric,
+        ml_boxes, manual_boxes, iou_threshold, metric=overlap_metric
     )
     matched_ml = {i for i, _ in pairs}
     matched_manual = {j for _, j in pairs}
 
+    nan = float("nan")
+
+    def ml_fields(i):
+        w, h = float(ml[i][4]), float(ml[i][5])
+        return {
+            "ml_class": int(float(ml[i][3])),
+            "ml_w": round(w, 2),
+            "ml_h": round(h, 2),
+            "ml_area": round(w * h, 2),
+            "ml_confidence": round(float(ml[i][2]), 4),
+            "ml_best_overlap": round(float(ml_best[i]), 4),
+        }
+
+    def manual_fields(j):
+        w, h = float(manual[j][4]), float(manual[j][5])
+        return {
+            "manual_class": int(float(manual[j][3])),
+            "manual_w": round(w, 2),
+            "manual_h": round(h, 2),
+            "manual_area": round(w * h, 2),
+            "manual_best_overlap": round(float(manual_best[j]), 4),
+        }
+
+    empty_ml = {
+        "ml_class": -1, "ml_w": nan, "ml_h": nan, "ml_area": nan,
+        "ml_confidence": nan, "ml_best_overlap": nan,
+    }
+    empty_manual = {
+        "manual_class": -1, "manual_w": nan, "manual_h": nan,
+        "manual_area": nan, "manual_best_overlap": nan,
+    }
+
     results = []
-    # Matched pairs: a true positive for the confusion matrix (the two classes
-    # may still disagree, which is exactly what the matrix is there to show).
+    # Matched pairs. The two classes may still disagree, which is exactly what
+    # the confusion matrix is there to show.
     for i, j in pairs:
         x = (float(ml[i][0]) + float(manual[j][0])) / 2
         y = (float(ml[i][1]) + float(manual[j][1])) / 2
-        results.append(
-            [round(x, 3), round(y, 3), int(float(ml[i][3])), int(float(manual[j][3]))]
-        )
+        row = {"x": round(x, 3), "y": round(y, 3), "match_type": "matched",
+               "overlap": round(float(scores[i, j]), 4)}
+        row.update(ml_fields(i))
+        row.update(manual_fields(j))
+        results.append(row)
     # Detections with no label -> false positives
     for i in range(n_ml):
         if i not in matched_ml:
-            results.append(
-                [round(float(ml[i][0]), 3), round(float(ml[i][1]), 3), int(float(ml[i][3])), -1]
-            )
+            row = {"x": round(float(ml[i][0]), 3), "y": round(float(ml[i][1]), 3),
+                   "match_type": "false_positive", "overlap": nan}
+            row.update(ml_fields(i))
+            row.update(empty_manual)
+            results.append(row)
     # Labels with no detection -> false negatives
     for j in range(n_manual):
         if j not in matched_manual:
-            results.append(
-                [
-                    round(float(manual[j][0]), 3),
-                    round(float(manual[j][1]), 3),
-                    -1,
-                    int(float(manual[j][3])),
-                ]
-            )
+            row = {"x": round(float(manual[j][0]), 3), "y": round(float(manual[j][1]), 3),
+                   "match_type": "false_negative", "overlap": nan}
+            row.update(empty_ml)
+            row.update(manual_fields(j))
+            results.append(row)
     return results
+
+
+COMPARISON_COLUMNS = ["x", "y", "ml_class", "manual_class"]
+"""Legacy comparison CSV schema. Several readers take these four columns
+positionally, so nothing may be added to it - richer fields go to the sibling
+details file instead."""
+
+DETAILS_COLUMNS = [
+    "x", "y", "match_type", "ml_class", "manual_class", "overlap",
+    "ml_best_overlap", "manual_best_overlap",
+    "ml_w", "ml_h", "ml_area", "ml_confidence",
+    "manual_w", "manual_h", "manual_area",
+]
+"""Per-match detail schema, read by boat_utils.evaluation."""
+
+
+def comparisons_to_csv(comparisons, filename):
+    """
+    Write the comparisons to a csv file, plus a sibling details file.
+
+    Two files are written per image:
+
+        <image>.csv              x, y, ml_class, manual_class. Unchanged schema -
+                                 the confusion matrix, count comparison and
+                                 lat/long conversion all read this, and some do
+                                 so positionally, so it must stay exactly four
+                                 columns.
+        <image>.details.csv      every field compare() produced, including the
+                                 overlap scores and box sizes needed to assess
+                                 localisation quality and recall by size.
+
+    Args:
+
+        comparisons: list of dicts from compare()
+        filename: path of the comparison csv to write
+
+    Returns:
+
+        None
+    """
+    details = pd.DataFrame(comparisons, columns=DETAILS_COLUMNS)
+    df = details[COMPARISON_COLUMNS]
+    df.to_csv(filename, index=False)
+
+    base = filename[:-4] if filename.endswith(".csv") else filename
+    details.to_csv(base + ".details.csv", index=False)
 
 
 def combine_detections_and_labels(ml, manual):
@@ -678,22 +777,6 @@ def combine_detections_and_labels(ml, manual):
     return all, all_points
 
 
-def comparisons_to_csv(comparisons, filename):
-    """
-    Write the comparisons to a csv file
-
-    Args:
-
-        comparisons: list of clusters in form [x, y, ml_class, manual_class]
-        filename: the name of the file to write to
-
-    Returns:
-
-        None
-
-    """
-    df = pd.DataFrame(comparisons, columns=["x", "y", "ml_class", "manual_class"])
-    df.to_csv(filename, index=False)
 
 
 def classifications_to_lat_long(run_folder, run_config):
@@ -1470,7 +1553,7 @@ def coverage_heatmap(run_folder, config):
     
             None
     """
-    tif_dir = config["raw_images"]
+    tif_dir = os.path.join(config["path"], config["raw_images"])
     # walk
     tifs = [
         os.path.join(root, file)
