@@ -972,12 +972,32 @@ def plot_composition_quality(table: pd.DataFrame, figsize: tuple[float, float] =
         f"data quality ({100 * counts.get('good', 0) / len(table):.0f}% good)", fontsize=10
     )
 
-    by_site = table.groupby("site_id")["mean_confidence"].mean().sort_values()
-    confidence_axis.hist(by_site, bins=30, color="#1D6FA5")
+    # Confidence is optional — write_confidence=False halves the run time and
+    # leaves this column entirely NaN — so the panel explains its absence rather
+    # than failing on an empty histogram.
+    by_site = (
+        table.groupby("site_id")["mean_confidence"].mean().dropna().sort_values()
+    )
+
+    if by_site.empty:
+        confidence_axis.text(
+            0.5, 0.5,
+            "no confidence recorded\n\nset write_confidence=True in PredictParams\n"
+            "and re-run to see which sites the model\nis least sure about",
+            ha="center", va="center", fontsize=9, color="#666666",
+            transform=confidence_axis.transAxes,
+        )
+        confidence_axis.set_xticks([])
+        confidence_axis.set_yticks([])
+        confidence_axis.set_title("prediction confidence (not written)", fontsize=10)
+        return figure
+
+    confidence_axis.hist(by_site, bins=min(30, max(5, len(by_site))), color="#1D6FA5")
     confidence_axis.set_xlabel("mean prediction confidence, per site")
     confidence_axis.set_ylabel("sites")
     confidence_axis.set_title(
-        "the model saw 27 sites and is applied to 187;\nlow confidence marks the unlike ones",
+        f"prediction confidence over {len(by_site)} sites\n"
+        "the model saw far fewer than it is applied to; low values mark the unlike ones",
         fontsize=9,
     )
     return figure

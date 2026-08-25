@@ -39,11 +39,50 @@ import wh_bbox
 import wh_features
 import wh_footprint
 import wh_naming
+import wh_tiles
 import wh_train
 from wh_config import Config
 from wh_features import FeatureParams
 
 WGS84 = "EPSG:4326"
+
+# The display layers written beside each class raster. All three share one grid
+# and one bounds.json, so a web map can stack or swap them freely.
+#
+#   pred  the classification, class 0 transparent
+#   rgb   true colour — what the classifier actually saw
+#   conf  max class probability — how much of it to believe
+#
+# rgb and conf exist because a class overlay on a basemap is unfalsifiable on its
+# own: the basemap is a different sensor from a different year, so a viewer has
+# no way to tell a correct classification from a confident wrong one. Flipping
+# between the three answers "what was this made from, and how sure is it?"
+PNG_LAYERS = ("pred", "rgb", "conf")
+
+# Fixed so the notebook's confidence panel and the dashboard's cannot drift
+# apart. The floor is 0.4 rather than 0 because a six-class model is never much
+# below chance, and stretching from zero wastes most of the ramp.
+CONFIDENCE_CMAP = "cividis"
+CONFIDENCE_VMIN = 0.4
+CONFIDENCE_VMAX = 1.0
+
+# Display-image encoding. Measured on a 150x151 chip, per site-month:
+#
+#            PNG      WebP
+#   pred    2.1 KB    0.9 KB   lossless
+#   conf   18.6 KB    4.8 KB   lossless
+#   rgb    49.4 KB    4.7 KB   lossy q80
+#
+# Across 15,708 site-months that is ~1.2 GB against ~150 MB. PNG is the default
+# because it is what already exists on disk and it needs no decisions about
+# browser support; WebP is what makes the whole archive comfortably static-
+# hostable. Every browser since 2020 (Safari 14) reads WebP.
+IMAGE_FORMATS = ("png", "webp")
+
+# Only the true-colour layer is encoded lossily. Class and confidence images are
+# flat colour, where lossy compression would invent intermediate colours that
+# decode back to the wrong class or the wrong confidence.
+WEBP_RGB_QUALITY = 80
 
 
 @dataclass
@@ -63,10 +102,17 @@ class PredictParams:
     # dashboard actually needs.
     write_confidence: bool = True
 
-    # Colourised PNG beside each GeoTIFF. A browser cannot draw a GeoTIFF without
-    # a tile server, but it can place a PNG as an image overlay given bounds —
-    # which is what makes a backend-free dashboard possible.
-    write_png: bool = True
+    # Colourised PNGs beside each GeoTIFF. A browser cannot draw a GeoTIFF
+    # without a tile server, but it can place a PNG as an image overlay given
+    # bounds — which is what makes a backend-free dashboard possible.
+    #
+    # See PNG_LAYERS. Empty tuple writes none; ("pred",) is the old behaviour.
+    # "conf" requires write_confidence.
+    png_layers: tuple[str, ...] = PNG_LAYERS
+
+    # "png" or "webp" — see IMAGE_FORMATS for the measured sizes. webp is ~8x
+    # smaller across the archive and is what keeps it static-hostable.
+    image_format: str = "png"
 
     # Which region the notebook's plots summarise. Both are always written to the
     # CSV; this only chooses the default view.
@@ -93,12 +139,34 @@ class PredictParams:
     # whole run gets slower, not faster.
     workers: int = 6
 
+    def __post_init__(self) -> None:
+        unknown = [layer for layer in self.png_layers if layer not in PNG_LAYERS]
+        if unknown:
+            raise ValueError(
+                f"unknown png_layers {unknown}; choose from {list(PNG_LAYERS)}"
+            )
+        if self.image_format not in IMAGE_FORMATS:
+            raise ValueError(
+                f"unknown image_format {self.image_format!r}; "
+                f"choose from {list(IMAGE_FORMATS)}"
+            )
+        if "conf" in self.png_layers and not self.write_confidence:
+            # Refused rather than skipped: silently dropping a requested layer is
+            # how you discover at the dashboard that the trust overlay is missing
+            # and the archive needs another hour.
+            raise ValueError(
+                "png_layers includes 'conf' but write_confidence is False, so no "
+                "confidence is computed to draw. Either set write_confidence=True "
+                "or drop 'conf' from png_layers."
+            )
+
     def as_dict(self) -> dict[str, object]:
         return {
             "model_name": self.model_name,
             "majority_filter_px": self.majority_filter_px,
             "write_confidence": self.write_confidence,
-            "write_png": self.write_png,
+            "png_layers": list(self.png_layers),
+            "image_format": self.image_format,
             "denominator": self.denominator,
             "flag_isolated_wet": self.flag_isolated_wet,
             "low_obs_threshold": self.low_obs_threshold,
@@ -152,10 +220,23 @@ def site_dir(cfg: Config, site_id: str) -> Path:
     return cfg.paths["predictions"] / "pixel_predictions" / f"site_{site_id}"
 
 
-def raster_path(cfg: Config, site_id: str, stem: str, kind: str = "pred") -> Path:
-    suffix = ".png" if kind == "png" else ".tif"
-    name = "pred" if kind == "png" else kind
-    return site_dir(cfg, site_id) / f"{stem}_{name}{suffix}"
+def raster_path(
+    cfg: Config,
+    site_id: str,
+    stem: str,
+    kind: str = "pred",
+    image_format: str = "png",
+) -> Path:
+    """Path of one output layer for one site-month.
+
+    `kind` is "pred" or "conf" for the GeoTIFFs, or "pred_png" / "rgb_png" /
+    "conf_png" for the display images — which take `image_format`, recorded in
+    the site's bounds.json so the dashboard knows the extension. Every path is
+    derivable from a site_id and a year_month, so nothing has to list a directory.
+    """
+    if kind.endswith("_png"):
+        return site_dir(cfg, site_id) / f"{stem}_{kind[:-4]}.{image_format}"
+    return site_dir(cfg, site_id) / f"{stem}_{kind}.tif"
 
 
 def composition_path(cfg: Config) -> Path:
@@ -191,19 +272,90 @@ def _class_rgba(classes: np.ndarray, cfg: Config) -> np.ndarray:
     return rgba
 
 
-def write_png(path: Path, classes: np.ndarray, cfg: Config) -> None:
-    """Colourised PNG for display. Unclassified pixels stay transparent."""
-    import matplotlib.image
+def _confidence_rgba(confidence: np.ndarray, classes: np.ndarray) -> np.ndarray:
+    """Colourise confidence, transparent wherever nothing was classified.
+
+    Masked to the classified pixels rather than the whole tile so the confidence
+    overlay covers exactly what the prediction overlay covers — flipping between
+    them then compares like with like instead of shifting shape.
+    """
+    import matplotlib
+
+    span = CONFIDENCE_VMAX - CONFIDENCE_VMIN
+    scaled = np.clip(
+        np.nan_to_num((confidence - CONFIDENCE_VMIN) / span, nan=0.0), 0, 1
+    )
+    rgba = (matplotlib.colormaps[CONFIDENCE_CMAP](scaled) * 255).round().astype(np.uint8)
+    rgba[..., 3] = np.where((classes > 0) & np.isfinite(confidence), 255, 0)
+    return rgba
+
+
+def _rgb_rgba(tile) -> np.ndarray:
+    """True colour on the prediction grid, transparent where unobserved.
+
+    The same fixed stretch as the labelling PNGs and the notebook plots, so what
+    the dashboard shows is what the labels were drawn on.
+    """
+    import wh_plots
+
+    rgb = wh_plots.rgb_composite(tile)
+    rgba = np.zeros(tuple(tile.shape) + (4,), dtype=np.uint8)
+    rgba[..., :3] = (np.nan_to_num(rgb, nan=0.0) * 255).round().astype(np.uint8)
+    rgba[..., 3] = np.where(tile.valid, 255, 0)
+    return rgba
+
+
+def _save_image(path: Path, rgba: np.ndarray, lossy: bool = False) -> None:
+    """Write an RGBA array, encoded from the path's own extension.
+
+    Only the true-colour layer passes lossy=True. Encoding a class or confidence
+    image lossily would invent colours between the discrete ones, which decode
+    back to the wrong class or the wrong confidence.
+    """
+    from PIL import Image
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    matplotlib.image.imsave(path, _class_rgba(classes, cfg))
+    image = Image.fromarray(np.ascontiguousarray(rgba.astype(np.uint8)))
+
+    if path.suffix == ".webp":
+        if lossy:
+            # alpha_quality=100 keeps the transparency mask crisp even though
+            # the colour channels are lossy.
+            image.save(path, "WEBP", quality=WEBP_RGB_QUALITY, alpha_quality=100)
+        else:
+            image.save(path, "WEBP", lossless=True)
+    else:
+        image.save(path, "PNG", optimize=True)
 
 
-def write_bounds(cfg: Config, site_id: str, tile) -> Path:
+def write_class_png(path: Path, classes: np.ndarray, cfg: Config) -> None:
+    """Colourised class image for display. Unclassified pixels stay transparent."""
+    _save_image(path, _class_rgba(classes, cfg))
+
+
+def write_rgb_png(path: Path, tile) -> None:
+    """True-colour image, so a viewer can see what a classification was made from."""
+    _save_image(path, _rgb_rgba(tile), lossy=True)
+
+
+def write_confidence_png(path: Path, confidence: np.ndarray, classes: np.ndarray) -> None:
+    """Confidence image, so a viewer can see how much to trust it."""
+    _save_image(path, _confidence_rgba(confidence, classes))
+
+
+def write_bounds(
+    cfg: Config,
+    site_id: str,
+    tile,
+    png_layers: tuple[str, ...] = PNG_LAYERS,
+    image_format: str = "png",
+) -> Path:
     """WGS84 bounds for the site, written once — every month shares one grid.
 
     This is what lets a web map place the PNGs as image overlays without a tile
-    server, which is the whole reason the dashboard can be a static site.
+    server, which is the whole reason the dashboard can be a static site. All
+    layers share these bounds, so they can be stacked or swapped without
+    recomputing anything.
     """
     with rasterio.open(tile.path) as dataset:
         bounds = dataset.bounds
@@ -218,6 +370,10 @@ def write_bounds(cfg: Config, site_id: str, tile) -> Path:
         # Leaflet imageOverlay wants [[south, west], [north, east]].
         "bounds_wgs84": {"west": west, "south": south, "east": east, "north": north},
         "leaflet_bounds": [[south, west], [north, east]],
+        # Which overlays this site actually has, and their extension, so the UI
+        # offers only what exists and can derive every filename.
+        "png_layers": list(png_layers),
+        "image_format": image_format,
     }, indent=1))
     return path
 
@@ -330,19 +486,38 @@ def predict_site(
         if params.majority_filter_px > 1:
             classes = majority_filter(classes, params.majority_filter_px)
 
-        if params.overwrite or not target.exists():
+        # Each artefact is gated on its own existence, not on the class raster's.
+        # Otherwise adding a display layer to an already-predicted archive would
+        # write nothing, because the .tif it used to be gated on is already there.
+        def needed(path: Path) -> bool:
+            return params.overwrite or not path.exists()
+
+        if needed(target):
             _write_uint8(target, classes, tile, "class_id")
-            if params.write_confidence and confidence is not None:
+        if params.write_confidence and confidence is not None:
+            conf_target = raster_path(cfg, site_id, stem, "conf")
+            if needed(conf_target):
                 _write_uint8(
-                    raster_path(cfg, site_id, stem, "conf"),
+                    conf_target,
                     np.nan_to_num(confidence * 100, nan=0).round(),
                     tile, "confidence_pct",
                 )
-            if params.write_png:
-                write_png(raster_path(cfg, site_id, stem, "png"), classes, cfg)
+
+        for layer in params.png_layers:
+            png_target = raster_path(
+                cfg, site_id, stem, f"{layer}_png", params.image_format
+            )
+            if not needed(png_target):
+                continue
+            if layer == "pred":
+                write_class_png(png_target, classes, cfg)
+            elif layer == "rgb":
+                write_rgb_png(png_target, tile)
+            elif layer == "conf" and confidence is not None:
+                write_confidence_png(png_target, confidence, classes)
 
         if not wrote_bounds:
-            write_bounds(cfg, site_id, tile)
+            write_bounds(cfg, site_id, tile, params.png_layers, params.image_format)
             pixel_area = abs(tile.transform.a * tile.transform.e)
             wrote_bounds = True
 
@@ -387,18 +562,103 @@ def predict_site(
     return records
 
 
-def site_is_done(cfg: Config, site_id: str, manifest: pd.DataFrame) -> bool:
-    """Whether every month of a site already has a class raster."""
+def site_is_done(
+    cfg: Config,
+    site_id: str,
+    manifest: pd.DataFrame,
+    params: PredictParams | None = None,
+) -> bool:
+    """Whether a site already has every artefact the params ask for.
+
+    Counts each layer, not just the class raster: a site predicted before a
+    display layer was added is not done under the new params, and reporting it
+    as done is how the dashboard ends up missing overlays for half the sites.
+    """
+    params = params or PredictParams()
     expected = len(manifest[manifest["site_id"] == site_id])
-    return len(list(site_dir(cfg, site_id).glob("*_pred.tif"))) >= expected
+    directory = site_dir(cfg, site_id)
+
+    patterns = ["*_pred.tif"]
+    if params.write_confidence:
+        patterns.append("*_conf.tif")
+    patterns.extend(
+        f"*_{layer}.{params.image_format}" for layer in params.png_layers
+    )
+
+    return all(len(list(directory.glob(p))) >= expected for p in patterns)
 
 
-def _report_progress(position: int, total: int, started: datetime) -> None:
-    elapsed = (datetime.now(timezone.utc) - started).total_seconds()
-    rate = position / elapsed if elapsed else 0.0
-    remaining = (total - position) / rate / 60 if rate else float("nan")
-    print(f"  {position}/{total} sites  ({elapsed / 60:.1f} min elapsed, "
-          f"~{remaining:.0f} min left)", flush=True)
+class _Progress:
+    """Incremental progress for a run that takes tens of minutes.
+
+    A bar via tqdm when it is importable, and a throttled plain-text line when it
+    is not — the fallback matters because this is the only window onto an hour of
+    work, and it should never be the thing that fails.
+
+    `write` exists so a failure can be reported the moment it happens without
+    corrupting the bar. Holding failures until the end of an hour-long run means
+    watching a progress bar advance while already-broken work accumulates behind
+    it.
+    """
+
+    def __init__(self, total: int, description: str, verbose: bool = True):
+        self.total = total
+        self.verbose = verbose
+        self.started = datetime.now(timezone.utc)
+        self.position = 0
+        self._last_print = 0.0
+        self._bar = None
+
+        if not verbose:
+            return
+
+        try:
+            from tqdm.auto import tqdm
+
+            self._bar = tqdm(total=total, desc=description, unit="site",
+                             smoothing=0.1, dynamic_ncols=True)
+        except Exception:  # noqa: BLE001 — progress must never break the run
+            print(f"{description}: {total} sites", flush=True)
+
+    def update(self, count: int = 1, **postfix) -> None:
+        self.position += count
+        if not self.verbose:
+            return
+
+        if self._bar is not None:
+            if postfix:
+                self._bar.set_postfix(postfix, refresh=False)
+            self._bar.update(count)
+            return
+
+        # Plain text: at most one line every 15 s, plus the last one, so an
+        # hour-long run leaves a readable trail rather than 187 lines.
+        elapsed = (datetime.now(timezone.utc) - self.started).total_seconds()
+        if elapsed - self._last_print < 15 and self.position < self.total:
+            return
+        self._last_print = elapsed
+
+        rate = self.position / elapsed if elapsed else 0.0
+        remaining = (self.total - self.position) / rate / 60 if rate else float("nan")
+        extra = "  " + "  ".join(f"{k}={v}" for k, v in postfix.items()) if postfix else ""
+        print(f"  {self.position}/{self.total} sites  {elapsed / 60:5.1f} min elapsed  "
+              f"~{remaining:4.0f} min left{extra}", flush=True)
+
+    def write(self, text: str) -> None:
+        if not self.verbose:
+            return
+        if self._bar is not None:
+            self._bar.write(text)
+        else:
+            print(text, flush=True)
+
+    def close(self) -> None:
+        if self._bar is not None:
+            self._bar.close()
+
+    @property
+    def elapsed_minutes(self) -> float:
+        return (datetime.now(timezone.utc) - self.started).total_seconds() / 60
 
 
 # --- the whole archive -----------------------------------------------------
@@ -473,10 +733,12 @@ def run(
 ) -> pd.DataFrame:
     """Predict every site, write rasters, and return the composition table.
 
-    Resumable: a site whose rasters all exist is skipped unless overwrite is set,
-    so an interrupted run picks up where it stopped. Note the composition record
-    is still recomputed for skipped sites — it is derived from the rasters and
-    costs seconds, whereas re-predicting would cost minutes.
+    Restartable rather than resumable: every site is predicted again, but a file
+    that already exists is not rewritten unless overwrite is set. So an
+    interrupted run finishes correctly, and a re-run after adding a display layer
+    writes only that layer — at the cost of the prediction itself, which is where
+    the time goes. Every site must be visited regardless, since the composition
+    record is built from the prediction rather than read back from disk.
     """
     model, meta = wh_train.load_model(cfg, params.model_name)
     check_scheme(meta, cfg)
@@ -487,41 +749,77 @@ def run(
     failures: list[tuple[str, str]] = []
 
     started = datetime.now(timezone.utc)
+    todo = [site for site in sites if not site_is_done(cfg, site, manifest, params)]
+
+    if verbose:
+        print(f"{len(sites)} sites, {len(manifest[manifest['site_id'].isin(sites)]):,} "
+              f"site-months", flush=True)
+        if todo:
+            print(f"{len(todo)} site(s) still need files written; "
+                  f"{len(sites) - len(todo)} already complete", flush=True)
+        else:
+            print("every requested file already exists — this pass recomputes the "
+                  "composition table only", flush=True)
+        if params.workers > 1 and len(sites) > 1:
+            # The first result takes noticeably longer than the rest: each worker
+            # loads the config, manifest and model before its first site. Saying
+            # so up front stops that looking like a hang.
+            print(f"starting {params.workers} workers (each loads the model once, "
+                  f"so the first sites take longer)", flush=True)
+
+    progress = _Progress(len(sites), "predicting", verbose)
+
+    def absorb(site_id: str, site_records: list, error: str) -> None:
+        records.extend(site_records)
+        if error:
+            failures.append((site_id, error))
+            # Reported as it happens: watching a bar advance for another 40
+            # minutes while failures pile up invisibly helps nobody.
+            progress.write(f"  site {site_id} FAILED: {error[:100]}")
+        progress.update(months=len(records), failed=len(failures))
 
     if params.workers > 1 and len(sites) > 1:
         # joblib/loky rather than ProcessPoolExecutor: loky does not need
         # __main__ to be an importable file, which it is not inside a Jupyter
         # kernel, so this works from a notebook cell as well as a script.
+        #
+        # generator_unordered yields each site the moment it finishes rather than
+        # returning a list at the end, which is what makes progress advance
+        # during the run instead of all at once when it is over.
         from joblib import Parallel, delayed
 
-        if verbose:
-            print(f"predicting {len(sites)} sites on {params.workers} workers", flush=True)
-
-        results = Parallel(n_jobs=params.workers, backend="loky", verbose=0)(
+        results = Parallel(
+            n_jobs=params.workers, backend="loky", verbose=0,
+            return_as="generator_unordered",
+        )(
             delayed(_predict_one)(str(cfg.source_path), params, site_id)
             for site_id in sites
         )
         for site_id, site_records, error in results:
-            records.extend(site_records)
-            if error:
-                failures.append((site_id, error))
-        if verbose:
-            _report_progress(len(sites), len(sites), started)
+            absorb(site_id, site_records, error)
     else:
-        for position, site_id in enumerate(sites, start=1):
+        for site_id in sites:
             try:
-                records.extend(
-                    predict_site(manifest, cfg, model, meta, params, site_id, boxes)
+                absorb(
+                    site_id,
+                    predict_site(manifest, cfg, model, meta, params, site_id, boxes),
+                    "",
                 )
             except Exception as error:  # noqa: BLE001
-                failures.append((site_id, f"{type(error).__name__}: {error}"))
-            if verbose and position % 10 == 0:
-                _report_progress(position, len(sites), started)
+                absorb(site_id, [], f"{type(error).__name__}: {error}")
+
+    progress.close()
+
+    if verbose:
+        print(f"\n{len(records):,} site-months from {len(sites) - len(failures)} sites "
+              f"in {progress.elapsed_minutes:.1f} min", flush=True)
 
     if failures:
         print(f"\n{len(failures)} site(s) failed:")
         for site_id, message in failures[:10]:
             print(f"  {site_id}: {message[:110]}")
+        if len(failures) > 10:
+            print(f"  ... and {len(failures) - 10} more")
 
     table = pd.DataFrame(records)
     if table.empty:
@@ -534,6 +832,168 @@ def run(
 
     table = add_quality_flags(table, cfg, params)
     return table.sort_values(["site_id", "year", "month"]).reset_index(drop=True)
+
+
+# --- adding display layers to an archive already predicted -----------------
+
+
+def backfill_site(
+    manifest: pd.DataFrame, cfg: Config, params: PredictParams, site_id: str
+) -> dict[str, int]:
+    """Write one site's missing display PNGs from rasters that already exist.
+
+    Every display layer is derivable from files on disk — the class raster, the
+    confidence raster, and the source chip — so adding a layer to an archive that
+    has already been predicted does not need the model, the features or the
+    temporal stack. That is the difference between minutes and an hour, and it is
+    why this exists separately from `run`.
+
+    A month whose class raster is missing is counted and skipped, never invented.
+    """
+    rows = manifest[manifest["site_id"] == site_id]
+    written = {layer: 0 for layer in params.png_layers}
+    written["missing_pred"] = 0
+    written["missing_conf"] = 0
+    wrote_bounds = False
+
+    for _, row in rows.iterrows():
+        stem = Path(row["tif_path"]).stem
+        pred_path = raster_path(cfg, site_id, stem, "pred")
+        if not pred_path.exists():
+            written["missing_pred"] += 1
+            continue
+
+        wanted = {
+            layer: raster_path(
+                cfg, site_id, stem, f"{layer}_png", params.image_format
+            )
+            for layer in params.png_layers
+        }
+        wanted = {
+            layer: path for layer, path in wanted.items()
+            if params.overwrite or not path.exists()
+        }
+        if not wanted and wrote_bounds:
+            continue
+
+        classes = None
+        if {"pred", "conf"} & set(wanted):
+            with rasterio.open(pred_path) as dataset:
+                classes = dataset.read(1)
+
+        if "pred" in wanted:
+            write_class_png(wanted["pred"], classes, cfg)
+            written["pred"] += 1
+
+        # The chip is read only when something actually needs it.
+        if "rgb" in wanted or not wrote_bounds:
+            tile = wh_tiles.read_tile(row["tif_path"], cfg)
+            if "rgb" in wanted:
+                write_rgb_png(wanted["rgb"], tile)
+                written["rgb"] += 1
+            if not wrote_bounds:
+                write_bounds(
+                    cfg, site_id, tile, params.png_layers, params.image_format
+                )
+                wrote_bounds = True
+
+        if "conf" in wanted:
+            conf_path = raster_path(cfg, site_id, stem, "conf")
+            if not conf_path.exists():
+                written["missing_conf"] += 1
+            else:
+                with rasterio.open(conf_path) as dataset:
+                    confidence = dataset.read(1).astype(np.float32) / 100.0
+                write_confidence_png(wanted["conf"], confidence, classes)
+                written["conf"] += 1
+
+    return written
+
+
+def _backfill_one(
+    config_path: str, params: PredictParams, site_id: str
+) -> tuple[str, dict[str, int], str]:
+    """Worker entry point for backfill_pngs."""
+    try:
+        import wh_config as config_module
+        import wh_inventory as inventory_module
+
+        cfg = config_module.load(config_path)
+        manifest = inventory_module.load_manifest(cfg)
+        return site_id, backfill_site(manifest, cfg, params, site_id), ""
+    except Exception as error:  # noqa: BLE001 — one bad site must not stop the run
+        return site_id, {}, f"{type(error).__name__}: {error}"
+
+
+def backfill_pngs(
+    manifest: pd.DataFrame,
+    cfg: Config,
+    params: PredictParams,
+    verbose: bool = True,
+) -> dict[str, int]:
+    """Add the display PNGs to an archive that has already been predicted.
+
+    Use this after adding a layer to `png_layers`; use `run` when the class
+    rasters themselves need to change. Returns totals per layer.
+    """
+    sites = sorted(params.sites or manifest["site_id"].unique())
+    totals: dict[str, int] = {}
+    failures: list[tuple[str, str]] = []
+
+    if verbose:
+        print(f"backfilling {list(params.png_layers)} as {params.image_format} "
+              f"for {len(sites)} sites", flush=True)
+
+    progress = _Progress(len(sites), "backfilling", verbose)
+
+    def absorb(site_id: str, counts: dict[str, int], error: str) -> None:
+        if error:
+            failures.append((site_id, error))
+            progress.write(f"  site {site_id} FAILED: {error[:100]}")
+        for layer, count in counts.items():
+            totals[layer] = totals.get(layer, 0) + count
+        written = sum(v for k, v in totals.items() if not k.startswith("missing_"))
+        progress.update(images=written)
+
+    if params.workers > 1 and len(sites) > 1:
+        from joblib import Parallel, delayed
+
+        results = Parallel(
+            n_jobs=params.workers, backend="loky", verbose=0,
+            return_as="generator_unordered",
+        )(
+            delayed(_backfill_one)(str(cfg.source_path), params, site_id)
+            for site_id in sites
+        )
+        for site_id, counts, error in results:
+            absorb(site_id, counts, error)
+    else:
+        for site_id in sites:
+            absorb(site_id, backfill_site(manifest, cfg, params, site_id), "")
+
+    progress.close()
+
+    if failures:
+        print(f"\n{len(failures)} site(s) failed:")
+        for site_id, message in failures[:10]:
+            print(f"  {site_id}: {message[:110]}")
+
+    if verbose:
+        wrote = {k: v for k, v in totals.items() if not k.startswith("missing_")}
+        print(f"\nwrote {wrote} in {progress.elapsed_minutes:.1f} min", flush=True)
+
+        if totals.get("missing_pred"):
+            print(f"\n{totals['missing_pred']} month(s) have no class raster — "
+                  f"run() has not covered those sites yet.")
+        if totals.get("missing_conf"):
+            # The likely cause, and the one that matters: an archive predicted
+            # with write_confidence=False has no confidence to draw, and no
+            # amount of backfilling can invent it.
+            print(f"\n{totals['missing_conf']} month(s) have no confidence raster, "
+                  f"so they have no confidence overlay.\nConfidence cannot be "
+                  f"backfilled — it comes from predict_proba, not from the class\n"
+                  f"raster. To get it, re-run run() with write_confidence=True.")
+    return totals
 
 
 def add_quality_flags(
@@ -633,8 +1093,72 @@ def export_boxes_geojson(cfg: Config, boxes: pd.DataFrame) -> Path:
     return path
 
 
+def export_footprints_geojson(cfg: Config, sites: list[str] | None = None) -> Path:
+    """Every derived basin footprint as one WGS84 GeoJSON — a second map layer.
+
+    The per-site files `wh_footprint` writes are already WGS84, but there are 176
+    of them and each carries the full parameter set that derived it. This
+    combines them and keeps only what a map needs, so the dashboard fetches one
+    file the size of the boxes layer rather than 176.
+
+    Outlines belong here, as vectors, rather than drawn into the overlay images:
+    a site's box and footprint are the same for all 84 of its months, so baking
+    them into 15,708 images would repeat them needlessly, destroy the pixels
+    underneath, and leave them impossible to toggle off.
+    """
+    features = []
+    missing = []
+
+    for path in sorted(cfg.paths["derived"].glob("footprints/*_footprint.geojson")):
+        collection = json.loads(path.read_text())
+        for feature in collection.get("features", []):
+            source = feature.get("properties", {})
+            site_id = source.get("site_id")
+            if sites is not None and site_id not in sites:
+                continue
+            area_m2 = float(source.get("area_m2", 0.0))
+            features.append({
+                "type": "Feature",
+                "geometry": feature["geometry"],
+                "properties": {
+                    "site_id": site_id,
+                    "n_pixels": source.get("n_pixels"),
+                    "area_m2": area_m2,
+                    "area_ha": round(area_m2 / 1e4, 3),
+                    "succeeded": source.get("succeeded"),
+                    "notes": source.get("notes", ""),
+                },
+            })
+
+    found = {feature["properties"]["site_id"] for feature in features}
+    if sites is not None:
+        missing = sorted(set(sites) - found)
+
+    out = cfg.paths["predictions"] / "waterhole_footprints.geojson"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({
+        "type": "FeatureCollection",
+        # Named so the dashboard can say which sites have no footprint rather
+        # than silently drawing 176 outlines over 187 boxes.
+        "sites_without_footprint": missing,
+        "features": features,
+    }))
+    return out
+
+
 def export_class_colours(cfg: Config) -> Path:
-    """The class scheme as JSON, so the dashboard legend cannot drift from it."""
+    """The class scheme as JSON, so the dashboard legend cannot drift from it.
+
+    Carries the confidence ramp too: the confidence PNGs are already colourised,
+    so the dashboard needs the stops to draw a colourbar but has no way to
+    recompute them.
+    """
+    import matplotlib
+    import matplotlib.colors as mcolors
+
+    colour_map = matplotlib.colormaps[CONFIDENCE_CMAP]
+    stops = [mcolors.to_hex(colour_map(value)) for value in np.linspace(0, 1, 9)]
+
     path = cfg.paths["predictions"] / "class_colours.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({
@@ -643,5 +1167,12 @@ def export_class_colours(cfg: Config) -> Path:
             {"id": d.id, "name": d.name, "colour": d.colour, "ignore": d.ignore}
             for d in cfg.classes
         ],
+        "confidence": {
+            "cmap": CONFIDENCE_CMAP,
+            "vmin": CONFIDENCE_VMIN,
+            "vmax": CONFIDENCE_VMAX,
+            "stops": stops,
+            "note": "max class probability; values are clipped to [vmin, vmax]",
+        },
     }, indent=1))
     return path
