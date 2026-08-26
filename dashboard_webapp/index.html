@@ -1,0 +1,104 @@
+<!doctype html>
+<!--
+  The whole application is this one page. A static host serves it as a file;
+  everything interactive happens in the browser afterwards, driven by js/main.js.
+
+  Note that every src/href below is *relative* — "vendor/...", never "/vendor/...".
+  A leading slash means "from the root of the domain", which is correct on
+  localhost but wrong on GitHub Pages, where the site lives under
+  /counting_waterholes/. Relative paths work in both places.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waterhole predictions — central Arnhem Land</title>
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div id="app" class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <h1>Waterhole predictions</h1>
+      <p class="sub">Central Arnhem Land &middot; pixel segmentation of Sentinel-2</p>
+    </div>
+
+    <div class="timeline">
+      <button id="play" class="icon-button" title="Play through months (space)"
+              aria-label="Play through months">&#9654;</button>
+      <input id="month-slider" type="range" min="0" max="0" value="0" step="1"
+             aria-label="Month">
+      <output id="month-label" class="month-label">&mdash;</output>
+    </div>
+
+    <div class="topbar-controls">
+      <label class="field">
+        <span>Colour boxes by</span>
+        <select id="colour-by">
+          <option value="dominant">Dominant class</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Counted within</span>
+        <select id="denominator">
+          <option value="bbox">Bounding box</option>
+          <option value="footprint">Basin footprint</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <main class="workspace">
+
+    <section class="map-pane">
+      <div id="map"></div>
+
+      <div id="map-legend" class="legend panel-card" aria-live="polite"></div>
+
+      <div class="map-toggles panel-card">
+        <label><input type="checkbox" id="show-boxes" checked> Bounding boxes</label>
+        <label><input type="checkbox" id="show-footprints" checked> Basin footprints</label>
+        <label><input type="checkbox" id="dim-basemap"> Dim basemap</label>
+      </div>
+
+      <div id="overlay-controls" class="overlay-controls panel-card" hidden>
+        <div class="layer-switch" role="group" aria-label="Overlay layer">
+          <button data-layer="pred" class="layer-button">Prediction <kbd>1</kbd></button>
+          <button data-layer="rgb"  class="layer-button">True colour <kbd>2</kbd></button>
+          <button data-layer="conf" class="layer-button">Confidence <kbd>3</kbd></button>
+        </div>
+        <label class="field opacity">
+          <span>Overlay opacity</span>
+          <input id="opacity" type="range" min="0" max="100" value="85">
+        </label>
+        <div id="overlay-note" class="note"></div>
+      </div>
+    </section>
+
+    <aside id="panel" class="site-panel" aria-live="polite">
+      <div class="placeholder">
+        <h2>Pick a waterhole</h2>
+        <p>
+          Click a box on the map to see its per-pixel predictions month by month,
+          and how its surface composition has changed across the record.
+        </p>
+        <p class="note" id="boot-note"></p>
+      </div>
+    </aside>
+
+  </main>
+</div>
+
+<!--
+  Leaflet ships as a classic script that defines a global `L`. It must load
+  before the module below, which uses it. `type="module"` scripts are deferred
+  automatically, so ordering here is guaranteed.
+-->
+<script src="vendor/leaflet/leaflet.js"></script>
+<script type="module" src="js/main.js"></script>
+
+</body>
+</html>

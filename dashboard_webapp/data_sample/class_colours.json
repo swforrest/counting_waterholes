@@ -1,0 +1,64 @@
+{
+ "scheme_version": 1,
+ "classes": [
+  {
+   "id": 0,
+   "name": "unlabelled",
+   "colour": "#00000000",
+   "ignore": true
+  },
+  {
+   "id": 1,
+   "name": "open_water",
+   "colour": "#1f4ea1",
+   "ignore": false
+  },
+  {
+   "id": 2,
+   "name": "turbid_water",
+   "colour": "#8c6d3f",
+   "ignore": false
+  },
+  {
+   "id": 3,
+   "name": "aquatic_vegetation",
+   "colour": "#2e8b57",
+   "ignore": false
+  },
+  {
+   "id": 4,
+   "name": "mud",
+   "colour": "#a0522d",
+   "ignore": false
+  },
+  {
+   "id": 5,
+   "name": "dry_bare",
+   "colour": "#d9b382",
+   "ignore": false
+  },
+  {
+   "id": 6,
+   "name": "surrounding_vegetation",
+   "colour": "#7f9f5a",
+   "ignore": false
+  }
+ ],
+ "confidence": {
+  "cmap": "cividis",
+  "vmin": 0.4,
+  "vmax": 1.0,
+  "stops": [
+   "#00224e",
+   "#1a386f",
+   "#434e6c",
+   "#61656f",
+   "#7d7c78",
+   "#9b9476",
+   "#bcae6c",
+   "#dec958",
+   "#fee838"
+  ],
+  "note": "max class probability; values are clipped to [vmin, vmax]"
+ }
+}

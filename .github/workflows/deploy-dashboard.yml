@@ -1,0 +1,117 @@
+# Publish dashboard_webapp/ to GitHub Pages.
+#
+# GitHub Pages has two modes. The older one, "deploy from a branch", can only
+# serve the repository root or a folder called /docs — so it cannot publish a
+# subdirectory like dashboard_webapp/, and /docs is already taken by the pdoc
+# API documentation. This is the other mode: a workflow builds whatever it likes
+# and uploads it, and `path:` below decides what becomes the website.
+#
+# The published site is https://swforrest.github.io/counting_waterholes/ and
+# contains ONLY the contents of dashboard_webapp/. The rest of the repository is
+# not published by this workflow.
+#
+# One manual step is needed once, and cannot be done from here:
+#   Settings -> Pages -> Build and deployment -> Source: GitHub Actions
+
+name: Deploy dashboard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dashboard_webapp/**"
+      - ".github/workflows/deploy-dashboard.yml"
+  # Lets you redeploy by hand after uploading a new data release, without
+  # having to push a commit.
+  workflow_dispatch:
+    inputs:
+      data_tag:
+        description: "Release tag holding dashboard-data.zip (blank = use the committed sample)"
+        required: false
+        default: "dashboard-data-v1"
+
+# The permissions Pages deployment requires. `id-token` is what lets the deploy
+# step prove to GitHub that it is this workflow talking.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys run at once, but do not cancel one halfway through:
+# a half-uploaded site is worse than a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The full dataset (~220 MB, ~47,000 files) is not in git. It lives as a
+      # release asset so that regenerating it never grows the repository. If the
+      # asset is missing the deploy still succeeds, using the committed sample —
+      # a stale-but-working site beats a failed deploy.
+      - name: Fetch data bundle
+        id: fetch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DATA_TAG: ${{ github.event.inputs.data_tag || 'dashboard-data-v1' }}
+        run: |
+          set -uo pipefail
+          if gh release download "$DATA_TAG" \
+               --pattern 'dashboard-data*.zip' --dir /tmp/bundle; then
+            unzip -q /tmp/bundle/dashboard-data*.zip -d dashboard_webapp/
+            echo "source=release:$DATA_TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::no data release '$DATA_TAG' — falling back to data_sample/"
+            echo "source=sample" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A sanity check worth having: the app is useless without a manifest, and
+      # finding that out from a blank page in the browser is a slow way to learn.
+      - name: Verify the site has data
+        run: |
+          if [ ! -f dashboard_webapp/data/manifest.json ] && \
+             [ ! -f dashboard_webapp/data_sample/manifest.json ]; then
+            echo "::error::neither data/ nor data_sample/ has a manifest.json"
+            exit 1
+          fi
+          echo "data source: ${{ steps.fetch.outputs.source }}"
+          du -sh dashboard_webapp
+
+      # Catches an overlay the app will request and not find, a composition row
+      # whose fractions do not sum, or a box with no record behind it — all of
+      # which look like a blank panel rather than an error in the browser.
+      - name: Check the data
+        working-directory: dashboard_webapp
+        run: |
+          if [ -f data/manifest.json ]; then
+            python3 tools/check_data.py --data data --sample-overlays 12
+          else
+            python3 tools/check_data.py --data data_sample
+          fi
+
+      # Absolute paths ("/css/app.css") work on localhost and break under
+      # /counting_waterholes/. Catching that here is cheaper than noticing it as
+      # an unstyled live page.
+      - name: Check for root-absolute asset paths
+        run: |
+          if grep -rnE '(src|href)="/[^/]' dashboard_webapp/index.html dashboard_webapp/js dashboard_webapp/css; then
+            echo "::error::root-absolute paths break under the /counting_waterholes/ subpath"
+            exit 1
+          fi
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dashboard_webapp
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

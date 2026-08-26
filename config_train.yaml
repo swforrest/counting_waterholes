@@ -70,11 +70,11 @@ raw_images: ./training/raw_images
 tif_dir: ./training/raw_images
 
 # Padded PNGs, LabelMe .json, and the segmentation output
-output_dir: ./training/output/waterhole_river
+output_dir: ./training/Temp_attempt_AF
 
 # Where segment() leaves its output, consumed by cull_AF()/reorganize_folders()
-segmented_images: ./training/output/images/train
-segmented_labels: ./training/output/labels/train
+segmented_images: ./training/Temp_attempt_AF
+segmented_labels: ./training/Temp_attempt_AF
 
 # Final YOLO-structured dataset built by reorganize_folders()
 training_path: ./training/train
