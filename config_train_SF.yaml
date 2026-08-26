@@ -1,0 +1,135 @@
+# =============================================================================
+#  TRAINING CONFIG  --  counting_waterholes
+# =============================================================================
+#  Replaces the per-user config_train_* variants. Everything here is relative to
+#  the REPOSITORY ROOT, so the same file works for everyone on macOS, Windows
+#  and Linux. Run the notebooks / CLI from the repo root and nothing needs
+#  editing except the two paths in "Machine-specific" below.
+#
+#  Path rules:
+#    - Always use forward slashes (/). Python accepts them on Windows too;
+#      backslashes break on macOS and Linux.
+#    - Keep paths relative (./something). Only yolo_dir may need an absolute
+#      path, and only if you did not clone yolov5 next to this repo.
+#
+#  This file is ALSO the YOLOv5 dataset yaml: train.py hands it to
+#  yolov5/train.py via --data. Before doing so it writes
+#  <output_dir>/_yolo_dataset.resolved.yaml with the dataset paths made
+#  absolute, because YOLOv5 resolves a relative "path:" against its own install
+#  directory rather than this repo. You never edit that generated file.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Machine-specific -- the only entries you may need to change
+# -----------------------------------------------------------------------------
+
+# Where the repo lives. "." means "the directory you run from" (the repo root).
+proj_root: .
+
+# Your yolov5 clone. The default assumes it sits NEXT TO this repo:
+#     parent/
+#       counting_waterholes/   <- this repo
+#       yolov5/                <- git clone https://github.com/ultralytics/yolov5
+# If yours is elsewhere, put an absolute path here, e.g.
+#   Windows: C:/Users/you/Documents/yolov5
+#   macOS:   /Users/you/Documents/yolov5
+yolo_dir: ../yolov5
+
+# Interpreter used to launch YOLOv5. "python" is correct inside the activated
+# conda env on every OS. If macOS cannot find it, use "python3".
+python: python
+
+# Compute device. "auto" picks the best available on this machine:
+#   NVIDIA GPU -> cuda:0   |   Apple Silicon -> mps   |   otherwise -> cpu
+# Override only to pin a specific device, e.g. "cuda:1" or "cpu".
+device: auto
+
+# Starting checkpoint for training. "yolov5s.pt" is downloaded automatically by
+# YOLOv5 if it is not already present, so it needs no path and works anywhere.
+# To fine-tune from your own model instead, point at it: ./data/NN_weights.pt
+weights: yolov5s.pt
+
+
+# -----------------------------------------------------------------------------
+# Training data layout (relative to the repo root)
+# -----------------------------------------------------------------------------
+#  training/
+#    raw_images/                 <- YOU put the .tif files here
+#    output/                     <- created by prepare() and segment()
+#      images/{train,val}/
+#      labels/{train,val}/
+#    train/                      <- created by reorganize_folders()
+#      train/{images,labels}/
+#      val/{images,labels}/
+# -----------------------------------------------------------------------------
+
+# Source .tif files for training
+raw_images: ./training/raw_images 
+# Used by extract_zip(); same folder keeps the workflow uniform
+tif_dir: ./training/raw_images
+
+# Padded PNGs, LabelMe .json, and the segmentation output
+output_dir: ./training/Temp_attempt_AF
+
+# Where segment() leaves its output, consumed by cull_AF()/reorganize_folders()
+segmented_images: ./training/Temp_attempt_AF
+segmented_labels: ./training/Temp_attempt_AF
+
+# Final YOLO-structured dataset built by reorganize_folders()
+training_path: ./training/train
+
+
+# -----------------------------------------------------------------------------
+# YOLOv5 dataset definition
+# -----------------------------------------------------------------------------
+# 'path' is the dataset root; 'train'/'val' are the image folders inside it.
+# They are written here relative to the repo root so the describe/cull commands
+# can read them directly; train.py absolutises them for YOLOv5 automatically.
+path: ./training/Temp_attempt_AF/train
+train: ./training/Temp_attempt_AF/train/images
+val: ./training/Temp_attempt_AF/val/images
+
+
+# -----------------------------------------------------------------------------
+# Class definitions -- REQUIRED, drives the entire pipeline
+# -----------------------------------------------------------------------------
+# No class list is hardcoded in the Python code: the number and names of classes
+# here can be anything. Add, remove or rename freely for a new model.
+#
+#   - Keys MUST be contiguous integers starting at 0 (0, 1, 2, ... N-1).
+#     YOLOv5 reads this block too and infers nc = len(names).
+#   - Names must exactly match the LabelMe "label" strings used when annotating.
+#   - Keep the 'names:' block IDENTICAL (same names, same ids) in the test and
+#     deploy configs used with the resulting weights -- class ids are baked into
+#     the trained model and are not recorded anywhere else.
+names:
+  # 0: Dry_WH
+  # 1: WH_swamp
+  # 2: WH_wet
+  # 3: WH_sink
+  # 4: U
+
+  0: waterhole
+  1: waterhole(in river)
+
+
+# -----------------------------------------------------------------------------
+# Tiling and training hyperparameters
+# -----------------------------------------------------------------------------
+# Tile size and stride must match between training, testing and deployment.
+# STRIDE is the step between tiles (104 = 25% overlap of a 416px tile), which
+# keeps waterholes on a tile edge detectable in the neighbouring tile.
+TILE_SIZE: 416
+STRIDE: 104
+img_size: 416
+img_stride: 104
+
+BATCH_SIZE: 8      # lower this if you run out of GPU memory
+EPOCHS: 100
+workers: 6         # dataloader workers; on Windows try 0 if you hit issues
+cache: False       # cache images in RAM for speed (needs plenty of memory)
+
+# Comet experiment tracking. If True, comet must be configured
+# (env vars or a .comet.config file).
+use_comet: False
