@@ -219,7 +219,44 @@ def load_manifest(cfg: Config, filename: str = "manifest.csv") -> pd.DataFrame:
     path = cfg.paths["derived"] / filename
     if not path.exists():
         raise FileNotFoundError(f"no manifest at {path}; run build_manifest first")
-    return pd.read_csv(path, dtype={"site_id": str})
+    manifest = pd.read_csv(path, dtype={"site_id": str})
+    return _reroot_paths(manifest, cfg)
+
+
+def _reroot_paths(manifest: pd.DataFrame, cfg: Config) -> pd.DataFrame:
+    """Re-anchor stored paths whose directory no longer exists.
+
+    The manifest records absolute paths, but the OneDrive mount root is not
+    stable: re-linking the shared library remounts it under a new name (the
+    original comes back as '...QueenslandUniversityofTechnology 2'), which
+    strands every path in a manifest built before the rename. The failure then
+    surfaces as a per-chip 'No such file or directory', which reads like missing
+    data rather than a moved mount point.
+
+    Only paths whose parent directory has genuinely disappeared are rewritten,
+    and only onto a directory of the same name from the config, so a truly
+    missing chip still fails against the path it was recorded under.
+    """
+    known = {directory.name: directory for directory in cfg.paths.values()}
+    parent_exists: dict[str, bool] = {}
+
+    def reroot(value: object) -> str:
+        if not isinstance(value, str) or not value:
+            return ""
+        old = Path(value)
+        parent = str(old.parent)
+        if parent not in parent_exists:
+            parent_exists[parent] = old.parent.exists()
+        if parent_exists[parent]:
+            return value
+        replacement = known.get(old.parent.name)
+        return str(replacement / old.name) if replacement else value
+
+    for column in ("tif_path", "png_path"):
+        if column in manifest.columns:
+            manifest[column] = manifest[column].map(reroot)
+
+    return manifest
 
 
 def summarise(manifest: pd.DataFrame, cfg: Config) -> None:

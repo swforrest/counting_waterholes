@@ -1,6 +1,6 @@
 {
- "built_at": "2026-08-25T23:46:10+00:00",
- "source": "/Users/scottforrest/Library/CloudStorage/OneDrive-SharedLibraries-QueenslandUniversityofTechnology/Aiden Price - Waterhole_WVS/counting_waterholes/cookie-cutting/predictions",
+ "built_at": "2026-08-27T03:25:58+00:00",
+ "source": "/Users/scottforrest/Library/CloudStorage/OneDrive-SharedLibraries-QueenslandUniversityofTechnology 2/Aiden Price - Waterhole_WVS/counting_waterholes/cookie-cutting/predictions",
  "subset": true,
  "months": [
   "2019-01",
@@ -89,8 +89,14 @@
   "2025-12"
  ],
  "sites": [
-  "026",
-  "027"
+  "000",
+  "001",
+  "002",
+  "003",
+  "004",
+  "005",
+  "006",
+  "008"
  ],
  "classes": [
   {
@@ -186,17 +192,17 @@
  ],
  "layer_counts": {
   "pred": {
-   "webp": 168,
+   "webp": 672,
    "png": 0,
    "missing": 0
   },
   "rgb": {
-   "webp": 168,
+   "webp": 672,
    "png": 0,
    "missing": 0
   },
   "conf": {
-   "webp": 168,
+   "webp": 672,
    "png": 0,
    "missing": 0
   }
