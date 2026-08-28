@@ -1,0 +1,21 @@
+{
+ "source_tile": "/Users/scottforrest/Library/CloudStorage/OneDrive-SharedLibraries-QueenslandUniversityofTechnology/Aiden Price - Waterhole_WVS/counting_waterholes/cookie-cutting/images_tif_v2/2024-06_mimal_test_S2_022_S13p51_E134p48_2020-01.tif",
+ "label_mask": "/Users/scottforrest/Library/CloudStorage/OneDrive-SharedLibraries-QueenslandUniversityofTechnology/Aiden Price - Waterhole_WVS/counting_waterholes/cookie-cutting/labels/2024-06_mimal_test_S2_022_S13p51_E134p48_2020-01_labels.tif",
+ "site_id": "022",
+ "year_month": "2020-01",
+ "class_scheme_version": 1,
+ "config_hash": "1e18fa14b822",
+ "labeller": "scott",
+ "source": "manual",
+ "timestamp": "2026-08-19T23:16:11+00:00",
+ "pixel_counts": {
+  "unlabelled": 22592,
+  "open_water": 0,
+  "turbid_water": 0,
+  "aquatic_vegetation": 0,
+  "mud": 0,
+  "dry_bare": 209,
+  "surrounding_vegetation": 0
+ },
+ "n_labelled": 209
+}

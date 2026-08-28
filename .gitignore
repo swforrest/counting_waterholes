@@ -36,7 +36,7 @@ cookie-cutting/full_images
 cooking-cutting/test
 cookie-cutting/AlphaEarth_tif
 cookie-cutting/AlphaEarth_png
-cookie-cutting/labels 
+# cookie-cutting/labels             # track the hand-painted label masks
 cookie-cutting/labels_pseudo
 alphaearth_images
 
