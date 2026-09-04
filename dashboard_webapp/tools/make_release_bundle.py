@@ -16,22 +16,32 @@ Usage
 -----
     python3 tools/make_release_bundle.py                 # zips data/
     python3 tools/make_release_bundle.py --data data_sample --out sample.zip
+    python3 tools/make_release_bundle.py --publish       # zip, then upload it
 
-Then, from the repository root:
-
-    gh release create dashboard-data-v1 dashboard_webapp/dist/dashboard-data.zip \\
-        --title "Dashboard data v1" --notes "187 sites, 2019-01 to 2025-12"
-
-To replace the data for an existing tag:
-
-    gh release upload dashboard-data-v1 dashboard_webapp/dist/dashboard-data.zip --clobber
+`--publish` creates the release on first use and clobbers the asset on the tag
+thereafter, so the same command works for the first upload and every rebuild.
+It always passes an explicit `--repo`; see resolve_repo below for why that is
+not optional here.
 """
 
 from __future__ import annotations
 
 import argparse
+import re
+import shutil
+import subprocess
 import zipfile
 from pathlib import Path
+
+# The tag the deploy workflow fetches by default (see .github/workflows/
+# deploy-dashboard.yml, input `data_tag`). Changing this means changing both.
+DEFAULT_TAG = "dashboard-data-v1"
+
+# GitHub publishes a Pages site of at most 1 GB, and the workflow unzips this
+# asset *into* the site, so the uncompressed total is what counts against it —
+# not the zip. Warn well before the wall rather than failing in Actions.
+PAGES_LIMIT = 1024 ** 3
+PAGES_WARN_AT = 0.85 * PAGES_LIMIT
 
 
 def human(n_bytes: float) -> str:
@@ -42,6 +52,56 @@ def human(n_bytes: float) -> str:
     return f"{n_bytes:.1f} GB"
 
 
+def resolve_repo(explicit: str | None) -> str:
+    """The `owner/name` to publish to, never left for `gh` to infer.
+
+    This checkout is a fork (`swforrest/counting_waterholes`) and also carries an
+    `upstream` remote pointing at the project it was adapted from. Given a fork,
+    `gh` resolves an unqualified command to the *parent*, so a bare
+    `gh release create` uploads to the upstream repository instead of this one.
+    Deriving the target from `origin` and passing it explicitly removes the
+    guess entirely.
+    """
+    if explicit:
+        return explicit
+
+    result = subprocess.run(["git", "remote", "get-url", "origin"],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        raise SystemExit("no `origin` remote — pass --repo owner/name")
+
+    # https://github.com/owner/name.git  |  git@github.com:owner/name.git
+    match = re.search(r"[:/]([^/:]+)/([^/]+?)(?:\.git)?/?$", result.stdout.strip())
+    if not match:
+        raise SystemExit(f"cannot parse owner/name from origin: {result.stdout.strip()}"
+                         "\npass --repo owner/name")
+    return f"{match.group(1)}/{match.group(2)}"
+
+
+def publish(zip_path: Path, tag: str, repo: str, notes: str) -> None:
+    """Create the release, or replace the asset if the tag already exists."""
+    if shutil.which("gh") is None:
+        raise SystemExit("gh is not installed — see https://cli.github.com")
+
+    exists = subprocess.run(["gh", "release", "view", tag, "--repo", repo],
+                            capture_output=True).returncode == 0
+
+    if exists:
+        print(f"\nreplacing the asset on {repo} tag {tag} ...")
+        command = ["gh", "release", "upload", tag, str(zip_path),
+                   "--clobber", "--repo", repo]
+    else:
+        print(f"\ncreating release {tag} on {repo} ...")
+        command = ["gh", "release", "create", tag, str(zip_path), "--repo", repo,
+                   "--title", "Dashboard data", "--notes", notes]
+
+    if subprocess.run(command).returncode != 0:
+        raise SystemExit("upload failed")
+
+    print(f"\nuploaded. Deploy the site with:\n"
+          f"  gh workflow run deploy-dashboard.yml --repo {repo}")
+
+
 def main(argv=None):
     app_root = Path(__file__).resolve().parent.parent
 
@@ -50,7 +110,17 @@ def main(argv=None):
                         help="the built data directory to bundle")
     parser.add_argument("--out", type=Path,
                         default=app_root / "dist" / "dashboard-data.zip")
+    parser.add_argument("--publish", action="store_true",
+                        help="upload the zip to the GitHub release after building it")
+    parser.add_argument("--tag", default=DEFAULT_TAG,
+                        help=f"release tag to publish to (default: {DEFAULT_TAG})")
+    parser.add_argument("--repo", default=None,
+                        help="owner/name to publish to (default: derived from origin)")
     arguments = parser.parse_args(argv)
+
+    # Resolved before the zip is built: a bad --repo should fail in a second,
+    # not after several minutes of archiving.
+    repo = resolve_repo(arguments.repo) if arguments.publish else None
 
     data_dir = (arguments.data if arguments.data.is_absolute()
                 else app_root / arguments.data).resolve()
@@ -87,9 +157,19 @@ def main(argv=None):
     print(f"\nwrote {out_path}  ({human(size)})")
     if size > 2 * 1024 ** 3:
         print("  WARNING: over GitHub's 2 GB per-asset limit.")
-    print("\nUpload with:\n"
-          f"  gh release create dashboard-data-v1 {out_path} \\\n"
-          f"      --title 'Dashboard data v1' --notes 'built from predictions/'")
+    if raw > PAGES_WARN_AT:
+        print(f"  WARNING: {human(raw)} unpacks into the Pages site, which is capped\n"
+              f"           at {human(PAGES_LIMIT)}. Converting the remaining PNG overlays\n"
+              f"           to WebP is what brings this down.")
+
+    notes = (f"{len(files)} files, {human(raw)} unpacked. "
+             f"Built from {data_dir.name} by tools/make_release_bundle.py.")
+    if arguments.publish:
+        publish(out_path, arguments.tag, repo, notes)
+    else:
+        print(f"\nPublish with:\n"
+              f"  python3 tools/make_release_bundle.py --data {arguments.data} "
+              f"--out {out_path} --publish")
     return 0
 
 

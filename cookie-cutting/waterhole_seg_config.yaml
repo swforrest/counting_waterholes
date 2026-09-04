@@ -19,7 +19,7 @@ paths:
   alphaearth: cookie-cutting/AlphaEarth_tif  # annual 64-band embeddings, S2 grid
   derived: cookie-cutting/derived          # manifests, temporal caches, models
   # predictions: cookie-cutting/predictions  # per-tile class + probability rasters
-  predictions: /Users/scottforrest/waterhole_predictions # absolute local path to save the predictions and prevent OneDrive from being a spud
+  predictions: /Users/scottforrest/waterholes/waterhole_predictions # absolute local path to save the predictions and prevent OneDrive from being a spud
 
 
 

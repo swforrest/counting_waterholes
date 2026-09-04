@@ -50,30 +50,47 @@ The view is in the address bar, so any state can be bookmarked or sent to someon
 ## Rebuild the data
 
 The app reads `data/` if it exists and falls back to `data_sample/`. Neither is
-committed except the sample; both are generated from `cookie-cutting/predictions/`.
+committed except the sample.
+
+**Always pass `--predictions`.** This script is deliberately stdlib-only so it
+runs under the system Python, which means it cannot read
+`cookie-cutting/waterhole_seg_config.yaml` and does not know where the pipeline
+is writing. Its default is the in-repo `cookie-cutting/predictions/`, which is
+now a stale OneDrive copy — building from it silently produces a dashboard of
+old PNG overlays roughly 8x larger than it should be. Point it at the same
+directory as the config's `predictions:` key.
 
 ```bash
+PRED=~/waterholes/waterhole_predictions        # run this first - must match waterhole_seg_config.yaml
+
 # the committed sample (fast, a few seconds)
-python3 tools/build_dashboard_data.py \
+python3 tools/build_dashboard_data.py --predictions "$PRED" \
     --sites 000,001,002,003,004,005,006,008 --out data_sample
 
-# everything (~220 MB, a few minutes — OneDrive may need to hydrate files first)
-python3 tools/build_dashboard_data.py --sites all --out data
+# everything (~120 MB all-WebP, about 20 seconds from local disk)
+python3 tools/build_dashboard_data.py --predictions "$PRED" --sites all --out data
 
 # everything, without copying 47,000 files: symlinks instead. Local use only —
 # these cannot be zipped into a release bundle.
-python3 tools/build_dashboard_data.py --sites all --out data --symlink
+python3 tools/build_dashboard_data.py --predictions "$PRED" --sites all --out data --symlink
 
 # rebuild only the JSON, leaving existing images alone
-python3 tools/build_dashboard_data.py --sites all --out data --no-overlays
+python3 tools/build_dashboard_data.py --predictions "$PRED" --sites all --out data --no-overlays
 ```
+
+To check which source a build came from, `manifest.json` records it under
+`source`, and `tools/check_data.py` reports the webp/png split — an all-WebP
+build is the current pipeline, a mostly-PNG one is the stale copy.
 
 Standard library only, so the system Python is fine — no conda environment needed.
 
 Then check what was built:
 
 ```bash
+# To check the subset
 python3 tools/check_data.py --data data_sample
+# To check the full set of predictions
+python3 tools/check_data.py --data data
 ```
 
 It verifies that every overlay the app can construct a URL for exists on disk,
@@ -98,19 +115,41 @@ or `/docs`, so it cannot serve this subdirectory.)
 Then, whenever the data changes:
 
 ```bash
-python3 tools/build_dashboard_data.py --sites all --out data
-python3 tools/make_release_bundle.py                    # -> dist/dashboard-data.zip
+python3 tools/build_dashboard_data.py \
+    --predictions ~/waterholes/waterhole_predictions --sites all --out data
+python3 tools/make_release_bundle.py --publish          # zip -> release asset
+```
 
-cd ..
-gh release create dashboard-data-v1 dashboard_webapp/dist/dashboard-data.zip \
-    --title "Dashboard data v1" --notes "187 sites, 2019-01 to 2025-12"
-# or, replacing the data on an existing tag:
-gh release upload dashboard-data-v1 dashboard_webapp/dist/dashboard-data.zip --clobber
+`--publish` creates the release the first time and replaces the asset on the tag
+after that, so the one command covers both cases. Omit it to build the zip and
+stop, which prints the publish command to run later.
+
+**Do not run a bare `gh release create` here.** This repository is a fork and
+also has an `upstream` remote, and `gh` resolves an unqualified command to the
+*parent* repository — so the bare form uploads to the upstream project rather
+than this one. `--publish` derives the target from `origin` and always passes an
+explicit `--repo`. By hand, do the same:
+
+```bash
+gh release upload dashboard-data-v1 dashboard_webapp/dist/dashboard-data.zip \
+    --clobber --repo swforrest/counting_waterholes
 ```
 
 Pushing any change under `dashboard_webapp/` deploys automatically. To redeploy
 without a commit — after uploading new data, say — run the **Deploy dashboard**
-workflow from the Actions tab.
+workflow from the Actions tab, or:
+
+```bash
+gh workflow run deploy-dashboard.yml --repo swforrest/counting_waterholes
+```
+
+**Watch the size.** A Pages site is capped at 1 GB, and the workflow unzips the
+asset *into* the site, so the uncompressed total counts, not the zip. An
+all-WebP build is ~120 MB, about 12% of the cap, and the bundler warns past 85%.
+A build from the stale PNG copy is ~907 MB — 89% of the cap — which is the
+loudest signal that `--predictions` was wrong. Note `du` overstates both figures
+by 4 KB-per-file slack across ~47,000 files; it is not the number Pages
+measures.
 
 Live at <https://swforrest.github.io/counting_waterholes/>.
 
