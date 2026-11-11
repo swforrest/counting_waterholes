@@ -7,15 +7,15 @@
  "config_hash": "8186914b5768",
  "labeller": "scott",
  "source": "manual",
- "timestamp": "2026-09-02T05:59:57+00:00",
+ "timestamp": "2026-09-08T22:14:49+00:00",
  "pixel_counts": {
-  "unlabelled": 22499,
+  "unlabelled": 22263,
   "open_water": 151,
   "turbid_water": 0,
   "aquatic_vegetation": 0,
   "mud": 0,
-  "dry_bare": 0,
+  "dry_bare": 236,
   "surrounding_vegetation": 0
  },
- "n_labelled": 151
+ "n_labelled": 387
 }
