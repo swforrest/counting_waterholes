@@ -176,6 +176,8 @@ def segment(
         else:
             os.rename(im, os.path.join(image_out, "val", os.path.basename(im)))
             os.rename(lab, os.path.join(label_out, "val", os.path.basename(lab)))
+    
+    print(f'\nSaved segmented images to: {image_out} and labels to: {label_out}')
 
 
 @app.command()
